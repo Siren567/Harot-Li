@@ -1,4 +1,15 @@
 {
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Permissions-Policy",
+          "value": "bluetooth=(), camera=(), geolocation=(), hid=(), microphone=(), midi=(), payment=(), serial=(), usb=()"
+        }
+      ]
+    }
+  ],
   "experimentalServices": {
     "frontend": {
       "routePrefix": "/",
