@@ -1,5 +1,6 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import type { StudioCategoryId, StudioSubcategory } from "../constants/studioData";
+import { getApiBaseUrl } from "../lib/apiBase";
 import {
   studioCategories,
   studioFonts,
@@ -73,7 +74,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const effectiveShippingFee = appliedCoupon?.freeShipping ? 0 : shipping.fee;
   const total = Math.max(0, subtotal + effectiveShippingFee - discount);
 
-  const apiBase = ((import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined)?.trim()?.replace(/\/$/, "") || "http://localhost:4000";
+  const apiBase = getApiBaseUrl();
 
   async function applyCoupon() {
     const code = couponCode.trim();

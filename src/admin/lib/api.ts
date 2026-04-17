@@ -1,14 +1,11 @@
+import { getApiBaseUrl } from "../../lib/apiBase";
+
 type ApiError = {
   status: number;
   error?: string;
   message?: string;
   details?: any;
 };
-
-function getApiBaseUrl() {
-  const v = (import.meta as any)?.env?.VITE_API_BASE_URL as string | undefined;
-  return v?.trim() ? v.trim().replace(/\/$/, "") : "";
-}
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${getApiBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;

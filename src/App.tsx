@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import Icon from "./components/Icon";
 import { benefits, examples, featuredProducts, steps } from "./constants/mockData";
+import { getApiBaseUrl } from "./lib/apiBase";
 
 type ModalType = "terms" | "privacy" | "usage" | "contact" | null;
 const navLinks = [
@@ -16,7 +17,7 @@ const App = () => {
   const [bootstrap, setBootstrap] = useState<any>(null);
 
   useEffect(() => {
-    const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:4000";
+    const apiBase = getApiBaseUrl();
     const startKey = "harotli_visit_started_at";
     const tabKey = "harotli_visit_tracked";
     const now = Date.now();
@@ -61,7 +62,7 @@ const App = () => {
 
   useEffect(() => {
     let mounted = true;
-    const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "http://localhost:4000";
+    const apiBase = getApiBaseUrl();
     fetch(`${apiBase}/api/content/bootstrap`)
       .then(async (res) => {
         if (!res.ok) throw new Error("bootstrap");
