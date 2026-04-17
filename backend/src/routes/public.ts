@@ -130,6 +130,8 @@ publicRouter.get("/products", async (_req, res) => {
         price: Number((effectivePriceAgorot / 100).toFixed(2)),
         image,
         images,
+        mainCategoryId: effectiveMain?.id ?? p.main_category_id ?? legacyCategoryId ?? null,
+        subcategoryIds: p.subcategory_ids ?? [],
         studioCategory: effectiveMain
           ? mapMainCategoryToStudioByText(effectiveMain.slug, effectiveMain.name)
           : mapMainCategoryToStudio(p.main_category_id),

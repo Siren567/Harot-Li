@@ -162,16 +162,13 @@ async function loadProductsFromDatabase() {
         const fromApi = mains
           .filter((c) => !c?.parentId && !c?.parent_id)
           .map((c) => ({
-            id: toStudioCategoryId(c.slug || "", c.name || ""),
+            id: String(c.id || "").trim() || toStudioCategoryId(c.slug || "", c.name || ""),
             title: String(c.name || "").trim(),
-            useSubcategories: String(c.slug || "").toLowerCase().includes("necklace") || String(c.slug || "").toLowerCase().includes("bracelet"),
+            useSubcategories: Array.isArray(c.subcategories) ? c.subcategories.length > 0 : false,
+            studioCategoryKey: toStudioCategoryId(c.slug || "", c.name || ""),
           }))
           .filter((c) => c.title);
-        if (fromApi.length) {
-          const dedup = new Map();
-          for (const c of fromApi) if (!dedup.has(c.id)) dedup.set(c.id, c);
-          return [...dedup.values()];
-        }
+        if (fromApi.length) return fromApi;
       } catch {
         // try next base
       }
@@ -207,7 +204,8 @@ async function loadProductsFromDatabase() {
   const mapped = rows
     .filter((p) => p?.id && p?.name)
     .map((p) => {
-      const category = p.studioCategory || toStudioCategoryId(p.categorySlug || "", p.categoryName || "");
+      const studioCategoryKey = p.studioCategory || toStudioCategoryId(p.categorySlug || "", p.categoryName || "");
+      const category = String(p.mainCategoryId || "").trim() || studioCategoryKey;
       const explicitSubcategories = Array.isArray(p.subcategoryLabels)
         ? p.subcategoryLabels.map((x) => String(x || "").trim()).filter(Boolean)
         : [];
@@ -228,6 +226,7 @@ async function loadProductsFromDatabase() {
       return {
         id: p.id,
         category,
+        studioCategoryKey,
         subcategory: normalizedSubcategories[0] || null,
         subcategories: normalizedSubcategories,
         pendantShape: p.pendantShape || p.pendant_shape || p.studioPendantShape || null,
@@ -455,7 +454,7 @@ const currentProduct = () => runtimeItems.find((p) => p.id === state.selectedPro
 function previewTypeForProduct(product) {
   if (!product) return "other";
   const rawType = String(product.productType || product.typeId || "").toLowerCase();
-  const rawCategory = String(product.category || product.categoryId || "").toLowerCase();
+  const rawCategory = String(product.studioCategoryKey || product.category || product.categoryId || "").toLowerCase();
   if (rawType.includes("ring") || rawCategory.includes("ring")) return "ring";
   if (rawType.includes("necklace") || rawCategory.includes("necklace")) return "necklace";
   if (rawType.includes("bracelet") || rawCategory.includes("bracelet")) return "bracelet";
@@ -1338,6 +1337,22 @@ function renderNav() {
 
 function renderCategoryChips() {
   const activeCategory = runtimeCategories.find((c) => c.id === state.activeCategoryId) || runtimeCategories[0];
+  const activeItems = runtimeItems.filter((p) => p.category === activeCategory?.id);
+  const subcategories = [
+    ...new Set(
+      activeItems
+        .flatMap((p) => (Array.isArray(p.subcategories) && p.subcategories.length ? p.subcategories : [p.subcategory]))
+        .map((x) => String(x || "").trim())
+        .filter(Boolean)
+    ),
+  ];
+  if (activeCategory?.useSubcategories && subcategories.length) {
+    if (!state.activeSubcategory || !subcategories.includes(state.activeSubcategory)) {
+      state.activeSubcategory = subcategories[0];
+    }
+  } else {
+    state.activeSubcategory = "";
+  }
   categoryChipsEl.innerHTML = `
     <div class="chip-row chip-row--primary">
       ${runtimeCategories
@@ -1347,6 +1362,18 @@ function renderCategoryChips() {
         )
         .join("")}
     </div>
+    ${
+      activeCategory?.useSubcategories && subcategories.length
+        ? `<div class="chip-row chip-row--secondary">
+            ${subcategories
+              .map(
+                (sub) =>
+                  `<button class="subcategory-tab ${state.activeSubcategory === sub ? "active" : ""}" data-subcategory-chip="${escHtml(sub)}">${escHtml(sub)}</button>`
+              )
+              .join("")}
+          </div>`
+        : ""
+    }
   `;
   requestAnimationFrame(() => {
     const active = categoryChipsEl.querySelector(".subcategory-tab.active") || categoryChipsEl.querySelector(".chip.active");
@@ -1379,8 +1406,6 @@ function renderCatalogSections() {
     renderCategoryChips();
   }
   let subcategories = [];
-  let menSubcategory = "";
-  let womenSubcategory = "";
   if (category.useSubcategories) {
     subcategories = [
       ...new Set(
@@ -1391,26 +1416,14 @@ function renderCatalogSections() {
       ),
     ];
     if (subcategories.length) {
-      menSubcategory =
-        subcategories.find((s) => {
-          const normalized = String(s).toLowerCase();
-          return normalized.includes("גבר") || normalized.includes("men");
-        }) || subcategories[0];
-      womenSubcategory =
-        subcategories.find((s) => {
-          const normalized = String(s).toLowerCase();
-          return normalized.includes("אישה") || normalized.includes("נשים") || normalized.includes("woman") || normalized.includes("women");
-        }) || "";
-      if (!state.activeSubcategory || !subcategories.includes(state.activeSubcategory) || state.activeSubcategory !== menSubcategory) {
-        state.activeSubcategory = menSubcategory;
+      if (!state.activeSubcategory || !subcategories.includes(state.activeSubcategory)) {
+        state.activeSubcategory = subcategories[0];
         renderCategoryChips();
       }
-      if (category.id !== "necklaces") {
-        items = items.filter((p) => {
-          const labels = Array.isArray(p.subcategories) && p.subcategories.length ? p.subcategories : [p.subcategory];
-          return labels.map((x) => String(x || "").trim()).includes(state.activeSubcategory);
-        });
-      }
+      items = items.filter((p) => {
+        const labels = Array.isArray(p.subcategories) && p.subcategories.length ? p.subcategories : [p.subcategory];
+        return labels.map((x) => String(x || "").trim()).includes(state.activeSubcategory);
+      });
     } else if (state.activeSubcategory) {
       state.activeSubcategory = "";
       renderCategoryChips();
@@ -1438,7 +1451,7 @@ function renderCatalogSections() {
                             currentVariant(p).image
                               ? `<img class="product-image" src="${currentVariant(p).image}" alt="${escHtml(p.title)}" loading="lazy" />`
                               : `<div class="product-image product-icon-stage" style="--product-bg:${currentVariant(p).swatch || "#f3eee7"}">
-                                   ${productIconByCategory[p.category] || productIconByCategory.other}
+                                   ${productIconByCategory[p.studioCategoryKey || p.category] || productIconByCategory.other}
                                  </div>`
                           }
                           ${socialProofBadgeMarkup(p)}
@@ -1473,7 +1486,7 @@ function renderCatalogSections() {
                           currentVariant(p).image
                             ? `<img class="product-image" src="${currentVariant(p).image}" alt="${escHtml(p.title)}" loading="lazy" />`
                             : `<div class="product-image product-icon-stage" style="--product-bg:${currentVariant(p).swatch || "#f3eee7"}">
-                                 ${productIconByCategory[p.category] || productIconByCategory.other}
+                                 ${productIconByCategory[p.studioCategoryKey || p.category] || productIconByCategory.other}
                                </div>`
                         }
                         ${socialProofBadgeMarkup(p)}
@@ -1500,31 +1513,15 @@ function renderCatalogSections() {
 
     let rowsMarkup = "";
     if (category.useSubcategories) {
-      if (category.id === "necklaces" && subcategories.length) {
-        const orderedSubcategories = [
-          ...(menSubcategory ? [menSubcategory] : []),
-          ...(womenSubcategory && womenSubcategory !== menSubcategory ? [womenSubcategory] : []),
-          ...subcategories.filter((sub) => sub !== menSubcategory && sub !== womenSubcategory),
-        ];
-        rowsMarkup = orderedSubcategories
-          .map((sub) => {
-            const rowItemsByAnyLabel = items.filter((p) => {
-              const labels = Array.isArray(p.subcategories) && p.subcategories.length ? p.subcategories : [p.subcategory];
-              return labels.map((x) => String(x || "").trim()).includes(sub);
-            });
-            if (!rowItemsByAnyLabel.length) return "";
-            return rowRenderer(rowItemsByAnyLabel, sub, true);
-          })
-          .join("");
-      } else {
-        rowsMarkup = rowRenderer(items, state.activeSubcategory || "", true);
-      }
+      rowsMarkup = rowRenderer(items, state.activeSubcategory || "", true);
     } else {
-      const shouldBeStaticGrid = category.id === "keychains" || category.id === "other";
+      const categoryKey = String(category.studioCategoryKey || category.id || "").toLowerCase();
+      const shouldBeStaticGrid = categoryKey === "keychains" || categoryKey === "other";
       rowsMarkup = rowRenderer(items, "", !shouldBeStaticGrid);
     }
 
-  const shouldHideCategoryTitle = category.id === "necklaces";
+  const categoryKey = String(category.studioCategoryKey || category.id || "").toLowerCase();
+  const shouldHideCategoryTitle = categoryKey === "necklaces";
   catalogSectionsEl.innerHTML = `
     <section class="catalog-section" id="catalog-${category.id}">
       ${shouldHideCategoryTitle ? "" : `<h3 class="catalog-title">${category.title}</h3>`}
@@ -1653,7 +1650,7 @@ function updatePricingUI() {
           selectedVariant.image
             ? `<img class="selected-product-image" src="${selectedVariant.image}" alt="${escHtml(selectedProduct.title)}" />`
             : `<div class="selected-product-image product-icon-stage" style="--product-bg:${selectedVariant.swatch || "#f3eee7"}">
-                 ${productIconByCategory[selectedProduct.category] || productIconByCategory.other}
+                 ${productIconByCategory[selectedProduct.studioCategoryKey || selectedProduct.category] || productIconByCategory.other}
                </div>`
         }
       </div>
