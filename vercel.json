@@ -1,4 +1,10 @@
 {
+  "rewrites": [
+    {
+      "source": "/studio",
+      "destination": "/design.html"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

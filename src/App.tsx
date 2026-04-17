@@ -113,7 +113,7 @@ const App = () => {
 
   const openStudio = (event?: MouseEvent<HTMLElement>) => {
     if (event) event.preventDefault();
-    window.location.href = "/design.html";
+    window.location.href = "/studio";
   };
 
   const sectionsByKey = useMemo(() => {

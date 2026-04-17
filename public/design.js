@@ -51,7 +51,12 @@ function enrichMockCatalogItem(p) {
 function buildApiBases() {
   const host = window.location.hostname || "localhost";
   const origin = window.location.origin || "";
-  return [origin, "", "http://localhost:4444", `http://${host}:4444`, `http://${host}:3000`];
+  const isLocal = host === "localhost" || host === "127.0.0.1";
+  if (isLocal) {
+    return ["", origin, "http://localhost:4000", "http://localhost:4444", `http://${host}:4444`, `http://${host}:3000`];
+  }
+  // Vercel multi-service backend prefix (avoid localhost calls in production).
+  return ["/_/backend", `${origin}/_/backend`];
 }
 
 /** +972 55-943-3968 — ברירת מחדל לסטודיו; ה־API יכול לדרוס אם מוגדר בפאנל */
@@ -2320,7 +2325,7 @@ function setupEvents() {
             if (orderStatusLookupInput && state.placedOrderNumber) {
               orderStatusLookupInput.value = state.placedOrderNumber;
             }
-            const returnUrl = `${window.location.origin}/design.html?status=1&order=${encodeURIComponent(
+            const returnUrl = `${window.location.origin}/studio?status=1&order=${encodeURIComponent(
               state.placedOrderNumber || ""
             )}`;
             const payRes = await postJsonBases("/api/payments/grow/create-link", {
