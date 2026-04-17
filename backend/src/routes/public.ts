@@ -45,6 +45,16 @@ function pickSubcategoryLabel(inputs: Array<string | null | undefined>, productT
   return labels[0];
 }
 
+function pickSubcategoryLabels(inputs: Array<string | null | undefined>) {
+  const out: string[] = [];
+  for (const value of inputs) {
+    const label = mapSubcategoryLabel(value);
+    if (!label) continue;
+    if (!out.includes(label)) out.push(label);
+  }
+  return out;
+}
+
 function mapStudioColors(colors?: string[]) {
   const inColors = Array.isArray(colors) ? colors : [];
   return inColors
@@ -106,6 +116,13 @@ publicRouter.get("/products", async (_req, res) => {
       const images = Array.from(new Set([image, ...gallery].filter(Boolean))) as string[];
       const effectivePriceAgorot = p.sale_price && p.sale_price > 0 && p.sale_price < p.price ? p.sale_price : p.price;
       const pAny = p as any;
+      const subcategoryLabels = pickSubcategoryLabels([
+        ...subRows.map((s) => s?.name),
+        ...subRows.map((s) => s?.slug),
+        ...(p.subcategory_ids ?? []),
+        pAny.subcategoryName,
+        pAny.subcategoryLabel,
+      ]);
       return {
         id: p.id,
         name: p.title,
@@ -126,6 +143,7 @@ publicRouter.get("/products", async (_req, res) => {
           ],
           p.title
         ),
+        subcategoryLabels,
         categoryName: effectiveMain?.name ?? null,
         subcategoryName: subRawFirst?.name ?? null,
         studioColors: mapStudioColors(p.available_colors),

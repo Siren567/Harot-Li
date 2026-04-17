@@ -208,10 +208,18 @@ async function loadProductsFromDatabase() {
     .filter((p) => p?.id && p?.name)
     .map((p) => {
       const category = p.studioCategory || toStudioCategoryId(p.categorySlug || "", p.categoryName || "");
+      const explicitSubcategories = Array.isArray(p.subcategoryLabels)
+        ? p.subcategoryLabels.map((x) => String(x || "").trim()).filter(Boolean)
+        : [];
       const forcedSubcategory =
         String(p?.name || "").includes("פרח")
           ? "נשים"
           : p.subcategoryLabel ?? p.subcategoryName ?? p.categoryName ?? null;
+      const normalizedSubcategories = explicitSubcategories.length
+        ? explicitSubcategories
+        : forcedSubcategory
+          ? [String(forcedSubcategory).trim()]
+          : [];
       const imgs = Array.isArray(p.images) && p.images.length ? p.images : p.image ? [p.image] : [];
       const fallback =
         p.image ||
@@ -220,7 +228,8 @@ async function loadProductsFromDatabase() {
       return {
         id: p.id,
         category,
-        subcategory: forcedSubcategory,
+        subcategory: normalizedSubcategories[0] || null,
+        subcategories: normalizedSubcategories,
         pendantShape: p.pendantShape || p.pendant_shape || p.studioPendantShape || null,
         title: p.name,
         description: p.description || "",
@@ -1095,6 +1104,8 @@ function openCustomerUploadPicker() {
 
 function setCustomerUploadFile(file) {
   if (!file) return;
+  const product = currentProduct();
+  if (!product?.allowCustomerImageUpload) return;
   const safeName = String(file.name || "image").slice(0, 120);
   const reader = new FileReader();
   reader.onload = () => {
@@ -1111,6 +1122,11 @@ function setCustomerUploadFile(file) {
 
 function renderCustomerUploadBox() {
   if (!customerUploadBoxEl) return;
+  const product = currentProduct();
+  if (!product?.allowCustomerImageUpload) {
+    customerUploadBoxEl.hidden = true;
+    return;
+  }
   customerUploadBoxEl.hidden = false;
   const up = state.customization.customerUpload;
   customerUploadBoxEl.innerHTML = `
@@ -1366,7 +1382,14 @@ function renderCatalogSections() {
   let menSubcategory = "";
   let womenSubcategory = "";
   if (category.useSubcategories) {
-    subcategories = [...new Set(items.map((p) => String(p.subcategory || "").trim()).filter(Boolean))];
+    subcategories = [
+      ...new Set(
+        items
+          .flatMap((p) => (Array.isArray(p.subcategories) && p.subcategories.length ? p.subcategories : [p.subcategory]))
+          .map((x) => String(x || "").trim())
+          .filter(Boolean)
+      ),
+    ];
     if (subcategories.length) {
       menSubcategory =
         subcategories.find((s) => {
@@ -1383,7 +1406,10 @@ function renderCatalogSections() {
         renderCategoryChips();
       }
       if (category.id !== "necklaces") {
-        items = items.filter((p) => String(p.subcategory || "").trim() === state.activeSubcategory);
+        items = items.filter((p) => {
+          const labels = Array.isArray(p.subcategories) && p.subcategories.length ? p.subcategories : [p.subcategory];
+          return labels.map((x) => String(x || "").trim()).includes(state.activeSubcategory);
+        });
       }
     } else if (state.activeSubcategory) {
       state.activeSubcategory = "";
@@ -1482,9 +1508,12 @@ function renderCatalogSections() {
         ];
         rowsMarkup = orderedSubcategories
           .map((sub) => {
-            const rowItems = items.filter((p) => String(p.subcategory || "").trim() === sub);
-            if (!rowItems.length) return "";
-            return rowRenderer(rowItems, sub, true);
+            const rowItemsByAnyLabel = items.filter((p) => {
+              const labels = Array.isArray(p.subcategories) && p.subcategories.length ? p.subcategories : [p.subcategory];
+              return labels.map((x) => String(x || "").trim()).includes(sub);
+            });
+            if (!rowItemsByAnyLabel.length) return "";
+            return rowRenderer(rowItemsByAnyLabel, sub, true);
           })
           .join("");
       } else {

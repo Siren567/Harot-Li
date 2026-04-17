@@ -1098,14 +1098,28 @@ export function ProductEditorPage() {
             </InputGroup>
           </div>
 
-          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13, color: "var(--foreground-secondary)" }}>
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginTop: 12,
+              fontSize: 13,
+              color: "var(--foreground-secondary)",
+              border: "1px solid var(--border)",
+              background: "var(--input)",
+              borderRadius: 12,
+              padding: "10px 12px",
+              minHeight: 44,
+            }}
+          >
             <input
               type="checkbox"
               checked={form.allow_customer_image_upload}
               onChange={(e) => setForm((p) => ({ ...p, allow_customer_image_upload: e.target.checked }))}
-              style={{ accentColor: "var(--primary)" }}
+              style={{ accentColor: "var(--primary)", width: 16, height: 16, flexShrink: 0 }}
             />
-            לאפשר ללקוח להעלות תמונה אישית
+            <span style={{ lineHeight: 1.3, fontWeight: 700 }}>לאפשר ללקוח להעלות תמונה אישית</span>
           </label>
 
           <InputGroup label="תמונות מוצר">

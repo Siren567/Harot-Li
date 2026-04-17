@@ -6,10 +6,11 @@ import { useToast } from "../ui/toast";
 import { apiFetch } from "../lib/api";
 import { Card, PageHeader, PrimaryButton, SearchField, SecondaryButton, SelectInput } from "../ui/primitives";
 import {
-  CheckCircle2,
+  Layers3,
+  ListTree,
+  PauseCircle,
   FolderTree,
   Plus,
-  Trash2,
   X,
   Pencil,
 } from "lucide-react";
@@ -51,10 +52,6 @@ const cardStyle: React.CSSProperties = {
   border: "1px solid var(--border)",
   borderRadius: "14px",
 };
-
-function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
 
 function typeLabel(c: Category) {
   return c.parentId ? "תת קטגוריה" : "ראשית";
@@ -580,19 +577,6 @@ export function CategoriesPage() {
     }
   }
 
-  async function remove(c: Category) {
-    if (!confirm(`למחוק את הקטגוריה “${c.name}”?`)) return;
-    try {
-      await apiFetch<void>(`/api/categories/${c.id}`, { method: "DELETE" });
-      toast("הקטגוריה נמחקה", "success");
-      await refresh();
-    } catch (e: any) {
-      if (e?.error === "HAS_SUBCATEGORIES") toast("לא ניתן למחוק קטגוריה עם תתי-קטגוריות", "error");
-      else if (e?.error === "HAS_PRODUCTS") toast("לא ניתן למחוק קטגוריה עם שיוכי מוצרים", "error");
-      else toast("מחיקה נכשלה", "error");
-    }
-  }
-
   const drawerInitial = useMemo(() => {
     if (drawerMode === "edit") return editing;
     if (prefillParentId) {
@@ -614,16 +598,6 @@ export function CategoriesPage() {
   }, [tree]);
 
   const selectedCategory = useMemo(() => flat.find((item) => item.id === selectedId) ?? null, [flat, selectedId]);
-  const selectedMain = useMemo(() => {
-    if (!selectedCategory) return null;
-    if (!selectedCategory.parentId) return selectedCategory;
-    return tree.find((main) => main.id === selectedCategory.parentId) ?? null;
-  }, [selectedCategory, tree]);
-  const selectedChildren = useMemo(() => {
-    if (!selectedMain) return [];
-    return (selectedMain.subcategories ?? []).slice();
-  }, [selectedMain]);
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingBottom: 20 }}>
       <PageHeader
@@ -644,10 +618,10 @@ export function CategoriesPage() {
       />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-        <SummaryCard title="סך כל הקטגוריות" value={String(stats?.total ?? "—")} tone="muted" icon={FolderTree} />
-        <SummaryCard title="קטגוריות ראשיות" value={String(stats?.main ?? "—")} tone="primary" icon={FolderTree} />
+        <SummaryCard title="סך כל הקטגוריות" value={String(stats?.total ?? "—")} tone="primary" icon={Layers3} />
+        <SummaryCard title="קטגוריות ראשיות" value={String(stats?.main ?? "—")} tone="muted" icon={ListTree} />
         <SummaryCard title="תת קטגוריות" value={String(stats?.sub ?? "—")} tone="info" icon={FolderTree} />
-        <SummaryCard title="קטגוריות פעילות" value={String(stats?.active ?? "—")} tone="success" icon={CheckCircle2} />
+        <SummaryCard title="קטגוריות לא פעילות" value={String(stats?.inactive ?? "—")} tone="warning" icon={PauseCircle} />
       </div>
 
       <Card padding={12}>
@@ -669,7 +643,7 @@ export function CategoriesPage() {
         </div>
       </Card>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.8fr) minmax(290px, 1fr)", gap: 14, alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14, alignItems: "start" }}>
         <Card padding={12}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 900, color: "var(--foreground)" }}>עץ קטגוריות</div>
@@ -766,50 +740,6 @@ export function CategoriesPage() {
               })
             )}
           </div>
-        </Card>
-
-        <Card padding={12}>
-          <div style={{ fontSize: 13, fontWeight: 900, color: "var(--foreground)" }}>פרטים ופעולות מהירות</div>
-          {!selectedCategory ? (
-            <div style={{ marginTop: 12, color: "var(--muted-foreground)", fontSize: 12 }}>בחר קטגוריה מהרשימה כדי לראות פרטים.</div>
-          ) : (
-            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ ...cardStyle, padding: 12 }}>
-                <div style={{ fontSize: 14, fontWeight: 900, color: "var(--foreground)" }}>{selectedCategory.name}</div>
-                <div style={{ marginTop: 4, fontSize: 12, color: "var(--muted-foreground)" }}>{selectedCategory.slug}</div>
-                <div style={{ marginTop: 10, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                  <Badge variant="muted">{typeLabel(selectedCategory)}</Badge>
-                  {statusBadge(selectedCategory.isActive)}
-                </div>
-              </div>
-              <div style={{ ...cardStyle, padding: 12, fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.6 }}>
-                <div>קטגוריית אב: {selectedCategory.parentId ? parentMap.get(selectedCategory.parentId) ?? "—" : "—"}</div>
-                <div>תתי קטגוריות: {selectedCategory.parentId ? 0 : selectedChildren.length}</div>
-                <div>מספר מוצרים: 0</div>
-                <div>עודכן לאחרונה: {fmtDateTime(selectedCategory.updatedAt)}</div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
-                <PrimaryButton type="button" onClick={() => openEdit(selectedCategory)}>
-                  <Pencil size={16} />
-                  עריכה
-                </PrimaryButton>
-                {!selectedCategory.parentId ? (
-                  <SecondaryButton type="button" onClick={() => openCreateSub(selectedCategory.id)}>
-                    <Plus size={16} />
-                    תת קטגוריה חדשה
-                  </SecondaryButton>
-                ) : null}
-                <SecondaryButton type="button" onClick={() => toggle(selectedCategory)}>
-                  <CheckCircle2 size={16} />
-                  {selectedCategory.isActive ? "השבת קטגוריה" : "הפעל קטגוריה"}
-                </SecondaryButton>
-                <SmallButton tone="danger" onClick={() => remove(selectedCategory)}>
-                  <Trash2 size={14} />
-                  מחיקה
-                </SmallButton>
-              </div>
-            </div>
-          )}
         </Card>
       </div>
 
