@@ -170,7 +170,7 @@ function Drawer({
 }: {
   open: boolean;
   mode: "create" | "edit";
-  initial: Partial<Category> | null;
+  initial: (Partial<Category> & { parentName?: string; parentSlug?: string }) | null;
   mains: Category[];
   onClose: () => void;
   onSave: (payload: any) => Promise<void>;
@@ -212,6 +212,7 @@ function Drawer({
   const nameOk = form.name.trim().length > 0;
   const kindOk = form.kind === "main" || (form.kind === "sub" && Boolean(form.parentId));
   const valid = nameOk && kindOk;
+  const selectedParentMeta = form.kind === "sub" ? mains.find((m) => m.id === form.parentId) : null;
 
   async function submit() {
     if (!valid) {
@@ -325,6 +326,23 @@ function Drawer({
                     </option>
                   ))}
                 </select>
+                {form.kind === "sub" && selectedParentMeta ? (
+                  <div
+                    style={{
+                      marginTop: 6,
+                      fontSize: 11,
+                      color: "var(--muted-foreground)",
+                      background: "var(--input)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 8,
+                      padding: "6px 8px",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    קטגוריית אב נבחרה: <strong style={{ color: "var(--foreground)" }}>{selectedParentMeta.name}</strong> · slug:{" "}
+                    <span style={{ color: "var(--foreground)" }}>{selectedParentMeta.slug}</span>
+                  </div>
+                ) : null}
               </Field>
               <Field label="סדר תצוגה">
                 <input type="number" value={form.sortOrder} onChange={(e) => setForm((p) => ({ ...p, sortOrder: Number(e.target.value) }))} style={inputStyle(false)} />
@@ -581,7 +599,19 @@ export function CategoriesPage() {
     if (drawerMode === "edit") return editing;
     if (prefillParentId) {
       const parent = mains.find((m) => m.id === prefillParentId);
-      return { parentId: prefillParentId, name: "", slug: "", isActive: true, sortOrder: 0, description: "", seoTitle: "", seoDescription: "", imageUrl: "", parentName: parent?.name };
+      return {
+        parentId: prefillParentId,
+        name: "",
+        slug: "",
+        isActive: true,
+        sortOrder: 0,
+        description: "",
+        seoTitle: "",
+        seoDescription: "",
+        imageUrl: "",
+        parentName: parent?.name,
+        parentSlug: parent?.slug,
+      };
     }
     return null;
   }, [drawerMode, editing, mains, prefillParentId]);

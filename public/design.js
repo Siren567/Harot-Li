@@ -29,6 +29,24 @@ function toStudioCategoryId(rawSlug = "", rawName = "") {
   return "other";
 }
 
+function isGenderSubcategoryLabel(rawValue = "") {
+  const v = String(rawValue).trim().toLowerCase();
+  if (!v) return false;
+  return (
+    v === "גברים" ||
+    v === "גבר" ||
+    v === "men" ||
+    v === "man" ||
+    v === "male" ||
+    v === "נשים" ||
+    v === "אישה" ||
+    v === "אשה" ||
+    v === "woman" ||
+    v === "women" ||
+    v === "female"
+  );
+}
+
 function buildVariantsFromColors(colorKeys, imageUrls, fallbackImage) {
   const keys =
     colorKeys?.length > 0
@@ -167,7 +185,8 @@ async function loadProductsFromDatabase() {
             useSubcategories: Array.isArray(c.subcategories) ? c.subcategories.length > 0 : false,
             studioCategoryKey: toStudioCategoryId(c.slug || "", c.name || ""),
           }))
-          .filter((c) => c.title);
+          .filter((c) => c.title)
+          .filter((c) => !isGenderSubcategoryLabel(c.title));
         if (fromApi.length) return fromApi;
       } catch {
         // try next base
@@ -1338,20 +1357,64 @@ function renderNav() {
 
 function renderCategoryChips() {
   const activeCategory = runtimeCategories.find((c) => c.id === state.activeCategoryId) || runtimeCategories[0];
-  const activeItems = runtimeItems.filter((p) => p.category === activeCategory?.id);
-  const subcategories = [
-    ...new Set(
-      activeItems
-        .flatMap((p) => (Array.isArray(p.subcategories) && p.subcategories.length ? p.subcategories : [p.subcategory]))
-        .map((x) => String(x || "").trim())
-        .filter(Boolean)
-    ),
-  ];
-  if (activeCategory?.useSubcategories && subcategories.length) {
-    if (!state.activeSubcategory || !subcategories.includes(state.activeSubcategory)) {
-      state.activeSubcategory = subcategories[0];
+  let subTabsMarkup = "";
+  if (activeCategory?.useSubcategories) {
+    const activeItems = runtimeItems.filter((p) => p.category === activeCategory.id);
+    const subcategories = [
+      ...new Set(
+        activeItems
+          .flatMap((p) => (Array.isArray(p.subcategories) && p.subcategories.length ? p.subcategories : [p.subcategory]))
+          .map((x) => String(x || "").trim())
+          .filter(Boolean)
+      ),
+    ];
+    if (subcategories.length) {
+      const menSubcategory =
+        subcategories.find((s) => {
+          const normalized = String(s).toLowerCase();
+          return normalized.includes("גבר") || normalized.includes("men");
+        }) || subcategories[0];
+      if (!state.activeSubcategory || !subcategories.includes(state.activeSubcategory)) {
+        state.activeSubcategory = menSubcategory;
+      }
+      const orderedSubcategories = [
+        ...subcategories.filter((s) => {
+          const normalized = String(s).toLowerCase();
+          return normalized.includes("גבר") || normalized.includes("men");
+        }),
+        ...subcategories.filter((s) => {
+          const normalized = String(s).toLowerCase();
+          return normalized.includes("אישה") || normalized.includes("נשים") || normalized.includes("woman") || normalized.includes("women");
+        }),
+        ...subcategories.filter((s) => {
+          const normalized = String(s).toLowerCase();
+          return !(
+            normalized.includes("גבר") ||
+            normalized.includes("men") ||
+            normalized.includes("אישה") ||
+            normalized.includes("נשים") ||
+            normalized.includes("woman") ||
+            normalized.includes("women")
+          );
+        }),
+      ];
+      const uniqueOrderedSubcategories = [...new Set(orderedSubcategories)];
+      subTabsMarkup = `
+        <div class="subcategory-tabs">
+          ${uniqueOrderedSubcategories
+            .map(
+              (sub) =>
+                `<button class="subcategory-tab ${state.activeSubcategory === sub ? "active" : ""}" data-subcategory-chip="${escHtml(sub)}">${escHtml(
+                  sub
+                )}</button>`
+            )
+            .join("")}
+        </div>
+      `;
+    } else if (state.activeSubcategory) {
+      state.activeSubcategory = "";
     }
-  } else {
+  } else if (state.activeSubcategory) {
     state.activeSubcategory = "";
   }
   categoryChipsEl.innerHTML = `
@@ -1363,18 +1426,7 @@ function renderCategoryChips() {
         )
         .join("")}
     </div>
-    ${
-      activeCategory?.useSubcategories && subcategories.length
-        ? `<div class="chip-row chip-row--secondary">
-            ${subcategories
-              .map(
-                (sub) =>
-                  `<button class="subcategory-tab ${state.activeSubcategory === sub ? "active" : ""}" data-subcategory-chip="${escHtml(sub)}">${escHtml(sub)}</button>`
-              )
-              .join("")}
-          </div>`
-        : ""
-    }
+    ${subTabsMarkup}
   `;
   requestAnimationFrame(() => {
     const active = categoryChipsEl.querySelector(".subcategory-tab.active") || categoryChipsEl.querySelector(".chip.active");
@@ -1417,8 +1469,13 @@ function renderCatalogSections() {
       ),
     ];
     if (subcategories.length) {
+      const preferredSubcategory =
+        subcategories.find((s) => {
+          const normalized = String(s).toLowerCase();
+          return normalized.includes("גבר") || normalized.includes("men");
+        }) || subcategories[0];
       if (!state.activeSubcategory || !subcategories.includes(state.activeSubcategory)) {
-        state.activeSubcategory = subcategories[0];
+        state.activeSubcategory = preferredSubcategory;
         renderCategoryChips();
       }
       items = items.filter((p) => {

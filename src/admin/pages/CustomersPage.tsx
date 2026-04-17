@@ -662,12 +662,9 @@ export function CustomersPage() {
   }, [joinedPreset, ordersPreset, query, segment, sortBy, spendRange, statusFilter]);
 
   const insights = useMemo(() => {
-    const inactiveLong = customers.filter((c) => (c.lastOrderAt ? new Date(c.lastOrderAt).getTime() : 0) < now - 1000 * 60 * 60 * 24 * 120 && c.ordersCount > 0).slice(0, 3);
-    const recentRepeat = customers.filter((c) => c.ordersCount >= 2 && c.lastOrderAt && new Date(c.lastOrderAt).getTime() >= monthAgo).slice(0, 3);
-    const highSpend = customers.filter((c) => c.totalSpend >= 1500).slice(0, 3);
-    const newNoOrder = customers.filter((c) => c.status === "no_orders" && new Date(c.joinedAt).getTime() >= monthAgo).slice(0, 3);
-    return { inactiveLong, recentRepeat, highSpend, newNoOrder };
-  }, [customers, monthAgo, now]);
+    const recentRepeat = customers.filter((c) => c.ordersCount >= 2 && c.lastOrderAt && new Date(c.lastOrderAt).getTime() >= monthAgo).slice(0, 6);
+    return { recentRepeat };
+  }, [customers, monthAgo]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px", paddingBottom: "18px" }}>
@@ -1208,54 +1205,43 @@ export function CustomersPage() {
             </div>
 
             <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
-              {[
-                { title: "לקוחות שלא הזמינו זמן רב", items: insights.inactiveLong, tone: "warning" as const },
-                { title: "לקוחות עם הזמנה חוזרת לאחרונה", items: insights.recentRepeat, tone: "success" as const },
-                { title: "לקוחות עם הוצאה גבוהה", items: insights.highSpend, tone: "primary" as const },
-                { title: "חדשים שעדיין לא השלימו הזמנה", items: insights.newNoOrder, tone: "info" as const },
-              ].map((block) => (
-                <div key={block.title} style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 14, padding: 12 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, color: "var(--foreground)" }}>{block.title}</div>
-                    <Badge variant={block.tone === "success" ? "success" : block.tone === "warning" ? "warning" : block.tone === "info" ? "info" : "default"}>
-                      {block.items.length}
-                    </Badge>
-                  </div>
-                  <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-                    {block.items.length ? (
-                      block.items.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => setSelected(c)}
-                          style={{
-                            background: "transparent",
-                            border: "1px solid var(--border)",
-                            borderRadius: 12,
-                            padding: "10px 10px",
-                            textAlign: "right",
-                            cursor: "pointer",
-                            color: "var(--foreground-secondary)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            gap: 10,
-                          }}
-                        >
-                          <span style={{ fontSize: 12, fontWeight: 900, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {c.fullName}
-                          </span>
-                          <span style={{ fontSize: 11, color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>
-                            {fmtMoney(c.totalSpend)}
-                          </span>
-                        </button>
-                      ))
-                    ) : (
-                      <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>אין פריטים להצגה.</div>
-                    )}
-                  </div>
+              <div style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 14, padding: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: "var(--foreground)" }}>לקוחות עם הזמנה חוזרת לאחרונה</div>
+                  <Badge variant="success">{insights.recentRepeat.length}</Badge>
                 </div>
-              ))}
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {insights.recentRepeat.length ? (
+                    insights.recentRepeat.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setSelected(c)}
+                        style={{
+                          background: "transparent",
+                          border: "1px solid var(--border)",
+                          borderRadius: 12,
+                          padding: "10px 10px",
+                          textAlign: "right",
+                          cursor: "pointer",
+                          color: "var(--foreground-secondary)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 10,
+                        }}
+                      >
+                        <span style={{ fontSize: 12, fontWeight: 900, color: "var(--foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {c.fullName}
+                        </span>
+                        <span style={{ fontSize: 11, color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>{fmtMoney(c.totalSpend)}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>אין פריטים להצגה.</div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
