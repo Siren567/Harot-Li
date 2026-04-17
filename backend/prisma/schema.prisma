@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CouponDiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum OrderStatus {
+  NEW
+  PAID
+  CANCELLED
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  fullName  String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders       Order[]
+  redemptions  CouponRedemption[]
+}
+
+model Order {
+  id             String   @id @default(uuid())
+  orderNumber    String   @unique
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  subtotal       Int
+  shippingFee    Int
+  discountAmount Int
+  total          Int
+
+  couponId       String?
+  coupon         Coupon?  @relation(fields: [couponId], references: [id], onDelete: SetNull)
+
+  status         OrderStatus @default(NEW)
+  items          Json
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  redemptions    CouponRedemption[]
+
+  @@index([customerId])
+  @@index([couponId])
+}
+
+model Coupon {
+  id                     String   @id @default(uuid())
+  code                   String   @unique
+  name                   String
+  description            String?
+
+  discountType           CouponDiscountType
+  discountValue          Int
+
+  isActive               Boolean  @default(true)
+  startsAt               DateTime?
+  endsAt                 DateTime?
+  hasNoExpiry            Boolean  @default(false)
+
+  minCartAmount          Int?
+  maxCartAmount          Int?
+  minItemsQuantity       Int?
+
+  appliesToAllProducts   Boolean  @default(true)
+  includedProductIds     Json?
+  includedCategoryIds    Json?
+  excludedProductIds     Json?
+  excludeSaleItems       Boolean  @default(false)
+
+  newCustomersOnly       Boolean  @default(false)
+
+  usageLimitTotal        Int?
+  usageLimitPerCustomer  Int?
+  usageCount             Int      @default(0)
+
+  allowCombining         Boolean  @default(false)
+  freeShipping           Boolean  @default(false)
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  orders                 Order[]
+  redemptions            CouponRedemption[]
+}
+
+model CouponRedemption {
+  id             String   @id @default(uuid())
+  couponId       String
+  coupon         Coupon   @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  orderId        String
+  order          Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  usedAt         DateTime  @default(now())
+  discountAmount Int
+
+  @@index([couponId])
+  @@index([customerId])
+  @@index([orderId])
+}
+
+model Category {
+  id             String   @id @default(uuid())
+  name           String
+  slug           String   @unique
+  description    String?
+  imageUrl       String?
+  parentId       String?
+  parent         Category? @relation("CategoryToSubcategories", fields: [parentId], references: [id], onDelete: Restrict)
+  subcategories  Category[] @relation("CategoryToSubcategories")
+
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  seoTitle       String?
+  seoDescription String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  products       CategoryProduct[]
+
+  @@index([parentId])
+  @@index([isActive])
+  @@index([sortOrder])
+}
+
+model CategoryProduct {
+  id         String   @id @default(uuid())
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  productId  String
+  createdAt  DateTime @default(now())
+
+  @@unique([categoryId, productId])
+  @@index([categoryId])
+  @@index([productId])
+}
+

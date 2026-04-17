@@ -1,0 +1,25 @@
+export const adminThemeVars: React.CSSProperties = {
+  // Copied from reference-harotli/src/app/globals.css
+  ["--background" as any]: "#09090b",
+  ["--surface" as any]: "#111113",
+  ["--card" as any]: "#18181b",
+  ["--card-hover" as any]: "#1e1e22",
+  ["--border" as any]: "#27272a",
+  ["--border-subtle" as any]: "#1f1f23",
+  ["--input" as any]: "#1c1c1f",
+  ["--primary" as any]: "#c9a96e",
+  ["--primary-hover" as any]: "#d4b87e",
+  ["--primary-foreground" as any]: "#09090b",
+  ["--secondary" as any]: "#3f3f46",
+  ["--muted" as any]: "#71717a",
+  ["--muted-foreground" as any]: "#a1a1aa",
+  ["--foreground" as any]: "#fafafa",
+  ["--foreground-secondary" as any]: "#d4d4d8",
+  ["--destructive" as any]: "#ef4444",
+  ["--success" as any]: "#22c55e",
+  ["--warning" as any]: "#f59e0b",
+  ["--info" as any]: "#3b82f6",
+  ["--sidebar-width" as any]: "240px",
+  ["--topbar-height" as any]: "60px",
+};
+

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>סטודיו לעיצוב מתנה | חרוטלי</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&family=Heebo:wght@300;400;500;600;700;800&family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./design.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="studio-topbar">
+      <div class="topbar-row">
+        <button type="button" class="btn secondary topbar-prev" data-action="back">חזרה לשלב הקודם</button>
+        <button type="button" class="btn primary topbar-next" data-action="next">המשך לשלב הבא</button>
+      </div>
+      <div class="progress" id="progress"></div>
+    </header>
+
+    <section class="step active" data-step="0">
+      <h2>בחירת קטגוריית מוצר</h2>
+      <p class="step-sub">בחרו קטגוריה וצפו בקטלוג המוצרים שלנו.</p>
+      <div class="chip-row" id="categoryChips"></div>
+      <div id="catalogSections"></div>
+    </section>
+
+    <section class="step" data-step="1">
+      <div class="custom-layout">
+        <div class="viewer">
+          <h3>תצוגת סטודיו</h3>
+          <p class="save-status" id="saveStatusText" aria-live="polite"></p>
+          <div class="viewer-stage-stack">
+            <div class="stage">
+              <div class="stage-top-controls">
+                <label class="engrave-switch" id="beforeAfterToggle" aria-label="הפעלת חריטה">
+                  <input type="checkbox" id="previewModeSwitch" checked />
+                  <span class="engrave-switch-track">
+                    <span class="engrave-switch-knob" id="previewModeKnob">עם חריטה</span>
+                  </span>
+                </label>
+                <div class="viewer-actions">
+                  <button type="button" class="icon-action-btn is-primary" id="saveDesignBtn" aria-label="שמור עיצוב" title="שמור עיצוב">
+                    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                      <path d="M17 21v-8H7v8"/>
+                      <path d="M7 3v5h8"/>
+                    </svg>
+                  </button>
+                  <button type="button" class="icon-action-btn" id="restoreDesignBtn" aria-label="טען עיצוב שמור" title="טען שמור">
+                    <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div class="mock-product" id="mockProduct">
+                <div class="mock-engrave-surface" id="mockEngraveSurface"></div>
+              </div>
+            </div>
+            <div class="preview-gallery" id="previewGallery" hidden aria-label="גלריית תמונות מוצר"></div>
+          </div>
+        </div>
+        <aside class="panel">
+          <button type="button" class="assist-fab" id="designAssistFab" aria-label="עזרה בעיצוב">?</button>
+          <div class="panel-title-row">
+            <h4>עמוד עיצוב</h4>
+          </div>
+          <div class="engrave-header">
+            <label class="engrave-main-label">טקסט לחריטה</label>
+            <button class="add-text-btn" type="button" id="addTextBlock" aria-label="הוספת שורת טקסט">+</button>
+            <button type="button" class="rotate-btn rotate-btn--inline" id="rotateEngraveBtn" aria-label="סיבוב טקסט ב-90 מעלות" title="סיבוב 90°">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12a9 9 0 1 1-3-6.7"/>
+                <polyline points="21 3 21 9 15 9"/>
+              </svg>
+              <span class="rotate-btn-label" id="rotateEngraveLabel">90°</span>
+            </button>
+          </div>
+          <div id="textBlocks"></div>
+          <p class="field-hint" id="engraveCharHint"></p>
+          <p class="field-error" id="engraveFitError" hidden></p>
+          <div class="form-grid form-grid-studio">
+            <label>פונט<select id="fontSelect"></select></label>
+            <label>גודל<input id="textSize" type="range" min="8" max="50" /></label>
+          </div>
+          <div class="field-group">
+            <div class="engrave-header">
+              <span class="field-title engrave-inline-title">אימוג׳ים וסימנים</span>
+              <button class="add-text-btn" type="button" id="addEmojiBlock" aria-label="הוספת סימן">+</button>
+            </div>
+            <div id="emojiBlocks"></div>
+            <div id="emojiPicker" class="emoji-picker"></div>
+            <p class="field-hint">בחרו סימן לכל שורה או פתחו את בוחר האימוג׳י; בתצוגה אפשר לגרור כל סימן בנפרד.</p>
+          </div>
+          <div class="field-group">
+            <span class="field-title">בחירת צבעים</span>
+            <div class="opt-row colors-row" id="materials"></div>
+          </div>
+          <div class="field-group field-group-qty">
+            <label>כמות<input id="qtyInput" type="number" min="1" /></label>
+          </div>
+          <div class="field-group gift-mode-box">
+            <label class="gift-toggle-row">
+              <input id="giftModeToggle" type="checkbox" />
+              <span>זה מארז מתנה
+                <svg class="gift-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 9h17v11h-17z"/><path d="M12 9v11"/><path d="M3.5 13.5h17"/><path d="M12 9c-1.7 0-3-1.2-3-2.6 0-1 .7-1.8 1.7-1.8 1.1 0 1.8.9 1.8 2.1V9Z"/><path d="M12 9c1.7 0 3-1.2 3-2.6 0-1-.7-1.8-1.7-1.8-1.1 0-1.8.9-1.8 2.1V9Z"/></svg>
+              </span>
+            </label>
+            <div class="gift-mode-fields" id="giftModeFields" hidden>
+              <label>ברכה למתנה
+                <textarea id="giftNoteInput" rows="2" maxlength="140" placeholder="כתבו ברכה קצרה למקבל/ת המתנה"></textarea>
+              </label>
+              <div class="gift-card-style-row" id="giftCardStyleRow" role="group" aria-label="סגנון כרטיס">
+                <button type="button" class="chip active" data-gift-card-style="classic">קלאסי</button>
+                <button type="button" class="chip" data-gift-card-style="romantic">רומנטי</button>
+                <button type="button" class="chip" data-gift-card-style="minimal">מינימל</button>
+              </div>
+            </div>
+          </div>
+          <div class="field-group" id="customerUploadBox" hidden></div>
+          <label>הערות מיוחדות<textarea id="notesInput" rows="2"></textarea></label>
+        </aside>
+      </div>
+    </section>
+
+    <section class="step" data-step="2">
+      <div class="checkout-layout">
+        <div class="panel">
+          <h3>משלוח ותשלום</h3>
+          <div class="form-grid" id="checkoutFields"></div>
+          <h4>קופון</h4>
+          <div id="couponBox" class="coupon-box"></div>
+          <h4>שיטת משלוח</h4>
+          <div class="ship-row" id="shippingMethods"></div>
+          <h4>תשלום (דמה)</h4>
+          <div class="wallet-menu-wrap">
+            <button type="button" class="wallet-menu-trigger" id="walletMenuTrigger" aria-haspopup="listbox" aria-expanded="false">
+              <span class="wallet-trigger-inner" id="walletTriggerInner"></span>
+              <span class="wallet-chevron" aria-hidden="true">▾</span>
+            </button>
+            <div class="wallet-menu" id="walletMenu" role="listbox" hidden></div>
+          </div>
+          <p class="wallet-mock-hint" id="walletMockHint" hidden>בדמו: ההמשך יתבצע דרך הארנק שנבחר.</p>
+          <div class="form-grid" id="cardFieldsGrid">
+            <label>שם בעל הכרטיס<input data-checkout="cardName" /></label>
+            <label>מספר כרטיס<input data-checkout="cardNumber" placeholder="4580 0000 0000 0000" /></label>
+            <label>תוקף<input data-checkout="expiry" placeholder="12/29" /></label>
+            <label>CVV<input data-checkout="cvv" /></label>
+          </div>
+        </div>
+        <aside class="panel" id="orderSummary"></aside>
+      </div>
+    </section>
+
+    <section class="step" data-step="3">
+      <div class="success">
+        <div class="success-icon">✓</div>
+        <h2>התשלום התקבל בהצלחה</h2>
+        <p>הזמנתך נקלטה ותעבור לייצור בקרוב.</p>
+        <div class="summary-card" id="finalSummary"></div>
+        <div class="status-lookup-box">
+          <div class="status-lookup-panel" id="orderStatusLookupPanel" hidden>
+            <h3 class="order-status-title">בדיקת סטטוס הזמנה</h3>
+            <p class="order-status-sub">מקלידים מספר הזמנה ומקבלים סיכום מלא ומצב הזמנה עדכני.</p>
+            <div class="order-status-row">
+              <input id="orderStatusLookupInput" type="text" inputmode="numeric" maxlength="20" placeholder="מספר הזמנה (למשל 15448)" />
+              <button class="btn primary" type="button" id="orderStatusLookupBtn">בדיקה</button>
+            </div>
+            <p class="order-status-msg" id="orderStatusLookupMsg"></p>
+
+            <section id="orderStatusLookupResult" hidden>
+              <div class="order-status-card">
+                <div class="order-status-grid" id="orderStatusSummaryGrid"></div>
+              </div>
+              <div class="order-status-card">
+                <div class="order-status-k">שלבי הזמנה</div>
+                <div class="order-status-timeline" id="orderStatusTimeline"></div>
+              </div>
+              <div class="order-status-card">
+                <div class="order-status-k">פריטים</div>
+                <div class="order-status-items" id="orderStatusItems"></div>
+              </div>
+            </section>
+          </div>
+        </div>
+        <ul class="timeline timeline-stepper" role="list" aria-label="סטטוס הזמנה">
+          <li class="timeline-step timeline-step--done">
+            <div class="timeline-track">
+              <span class="timeline-marker timeline-marker--check" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 2h8l4 4v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/>
+                  <path d="M16 2v4h4"/>
+                  <path d="m9 14 2 2 4-4"/>
+                </svg>
+              </span>
+            </div>
+            <span class="timeline-label">הזמנה התקבלה</span>
+          </li>
+          <li class="timeline-step">
+            <div class="timeline-track">
+              <span class="timeline-marker timeline-marker--dot" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.2 2.2-2.8-2.8 2-2.4z"/>
+                </svg>
+              </span>
+            </div>
+            <span class="timeline-label">בהכנה</span>
+          </li>
+          <li class="timeline-step">
+            <div class="timeline-track">
+              <span class="timeline-marker timeline-marker--dot" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M1 3h13v13H1z"/>
+                  <path d="M14 8h5l3 3v5h-8z"/>
+                  <circle cx="6" cy="18" r="2"/>
+                  <circle cx="18" cy="18" r="2"/>
+                </svg>
+              </span>
+            </div>
+            <span class="timeline-label">נשלחה</span>
+          </li>
+        </ul>
+        <div class="nav-actions">
+          <button class="btn secondary" data-action="restart">עצב מוצר נוסף</button>
+          <a class="back-link back-link--footer" href="./index.html">
+            <span class="back-link-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/></svg>
+            </span>
+            <span class="back-link-text">חזרה לאתר</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <footer class="nav-footer" id="flowNav">
+      <a class="back-link nav-footer-site" href="./index.html">
+        <span class="back-link-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"/></svg>
+        </span>
+        <span class="back-link-text">חזרה לאתר</span>
+      </a>
+      <a
+        class="studio-whatsapp-nav"
+        id="studioWhatsappBtn"
+        href="https://wa.me/972559433968"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="שליחת הודעה בווצאפ"
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.435 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+        <span>WhatsApp</span>
+      </a>
+    </footer>
+  </main>
+  <div class="studio-modal" id="designAssistModal" hidden>
+    <div class="studio-modal-backdrop" data-modal-close="design-assist"></div>
+    <div class="studio-modal-card" role="dialog" aria-modal="true" aria-labelledby="designAssistTitle">
+      <div class="assist-modal-head">
+        <h3 id="designAssistTitle">עזרה בעיצוב</h3>
+        <div class="assist-modal-head-actions">
+          <button type="button" class="icon-btn" data-modal-close="design-assist" aria-label="סגור" title="סגור">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M18.3 5.7L12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3z"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="form-grid">
+        <label>למי המתנה?
+          <input id="assistRecipientInput" placeholder="לדוגמה: לבת הזוג / לחבר טוב" />
+        </label>
+        <label>סגנון
+          <select id="assistStyleSelect">
+            <option value="romantic">רומנטי</option>
+            <option value="minimal">מינימל</option>
+            <option value="bold">נועז</option>
+            <option value="classic">קלאסי</option>
+            <option value="luxury">יוקרתי</option>
+            <option value="playful">קליל</option>
+          </select>
+        </label>
+      </div>
+      <div class="studio-modal-actions">
+        <button type="button" class="btn primary btn-assist-generate" id="designAssistGenerateBtn">הצע טקסט חריטה</button>
+      </div>
+      <p class="assist-suggestion" id="assistSuggestionText" aria-live="polite"></p>
+    </div>
+  </div>
+  <div class="studio-modal" id="saveDesignModal" hidden>
+    <div class="studio-modal-backdrop" data-modal-close="save-design"></div>
+    <div class="studio-modal-card" role="dialog" aria-modal="true" aria-labelledby="saveDesignTitle">
+      <button type="button" class="icon-btn modal-close-btn" data-modal-close="save-design" aria-label="סגור" title="סגור">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M18.3 5.7L12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3z"/></svg>
+      </button>
+      <h3 id="saveDesignTitle">העיצוב נשמר</h3>
+      <p>מזהה עיצוב: <strong id="savedDesignIdText">---</strong></p>
+      <label>קישור שיתוף
+        <div class="copy-field">
+          <input id="savedDesignLinkInput" readonly dir="ltr" />
+          <button type="button" class="copy-field-btn" id="copySavedDesignLinkBtn" aria-label="העתק קישור" title="העתק קישור">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="9" y="9" width="10" height="10" rx="2"></rect>
+              <path d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+        </div>
+      </label>
+      <div class="studio-modal-actions">
+        <button type="button" class="btn secondary" data-modal-close="save-design">סיום</button>
+      </div>
+    </div>
+  </div>
+  <div class="studio-modal" id="restoreDesignModal" hidden>
+    <div class="studio-modal-backdrop" data-modal-close="restore-design"></div>
+    <div class="studio-modal-card" role="dialog" aria-modal="true" aria-labelledby="restoreDesignTitle">
+      <button type="button" class="icon-btn modal-close-btn" data-modal-close="restore-design" aria-label="סגור" title="סגור">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M18.3 5.7L12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3z"/></svg>
+      </button>
+      <h3 id="restoreDesignTitle">טעינת עיצוב שמור</h3>
+      <label>הכנס מזהה עיצוב
+        <input id="restoreDesignIdInput" placeholder="לדוגמה: D-428173" dir="ltr" />
+      </label>
+      <div class="studio-modal-actions">
+        <button type="button" class="btn secondary" data-modal-close="restore-design">ביטול</button>
+        <button type="button" class="btn primary" id="restoreDesignConfirmBtn">טען עיצוב</button>
+      </div>
+      <p class="assist-suggestion" id="restoreDesignMsg" aria-live="polite"></p>
+    </div>
+  </div>
+  <script type="module" src="./design.js"></script>
+</body>
+</html>
