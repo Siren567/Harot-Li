@@ -492,25 +492,30 @@ export function CategoriesPage() {
   }, [flat, q, status, type]);
   const filteredTree = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return tree
-      .map((main) => {
-        const mainMatchesQuery = !needle || main.name.toLowerCase().includes(needle) || main.slug.toLowerCase().includes(needle);
-        const mainMatchesStatus = status === "all" ? true : status === "active" ? main.isActive : !main.isActive;
-        const subcategories = (main.subcategories ?? []).filter((sub) => {
-          const subMatchesQuery = !needle || sub.name.toLowerCase().includes(needle) || sub.slug.toLowerCase().includes(needle);
-          const subMatchesStatus = status === "all" ? true : status === "active" ? sub.isActive : !sub.isActive;
-          return subMatchesQuery && subMatchesStatus;
-        });
-        if (type === "main") {
-          return mainMatchesQuery && mainMatchesStatus ? { ...main, subcategories: [] } : null;
-        }
-        if (type === "sub") {
-          return subcategories.length > 0 ? { ...main, subcategories } : null;
-        }
-        if (mainMatchesQuery && mainMatchesStatus) return { ...main, subcategories };
-        return subcategories.length > 0 ? { ...main, subcategories } : null;
-      })
-      .filter((x): x is Category => Boolean(x));
+    const out: Category[] = [];
+    for (const main of tree) {
+      const mainMatchesQuery = !needle || main.name.toLowerCase().includes(needle) || main.slug.toLowerCase().includes(needle);
+      const mainMatchesStatus = status === "all" ? true : status === "active" ? main.isActive : !main.isActive;
+      const subcategories = (main.subcategories ?? []).filter((sub) => {
+        const subMatchesQuery = !needle || sub.name.toLowerCase().includes(needle) || sub.slug.toLowerCase().includes(needle);
+        const subMatchesStatus = status === "all" ? true : status === "active" ? sub.isActive : !sub.isActive;
+        return subMatchesQuery && subMatchesStatus;
+      });
+      if (type === "main") {
+        if (mainMatchesQuery && mainMatchesStatus) out.push({ ...main, subcategories: [] });
+        continue;
+      }
+      if (type === "sub") {
+        if (subcategories.length > 0) out.push({ ...main, subcategories });
+        continue;
+      }
+      if (mainMatchesQuery && mainMatchesStatus) {
+        out.push({ ...main, subcategories });
+        continue;
+      }
+      if (subcategories.length > 0) out.push({ ...main, subcategories });
+    }
+    return out;
   }, [q, status, tree, type]);
 
   useEffect(() => {
@@ -609,8 +614,11 @@ export function CategoriesPage() {
   }, [tree]);
 
   const selectedCategory = useMemo(() => flat.find((item) => item.id === selectedId) ?? null, [flat, selectedId]);
-  const selectedMain =
-    selectedCategory && selectedCategory.parentId ? tree.find((main) => main.id === selectedCategory.parentId) : selectedCategory;
+  const selectedMain = useMemo(() => {
+    if (!selectedCategory) return null;
+    if (!selectedCategory.parentId) return selectedCategory;
+    return tree.find((main) => main.id === selectedCategory.parentId) ?? null;
+  }, [selectedCategory, tree]);
   const selectedChildren = useMemo(() => {
     if (!selectedMain) return [];
     return (selectedMain.subcategories ?? []).slice();
