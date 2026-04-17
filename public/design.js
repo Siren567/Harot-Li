@@ -322,6 +322,8 @@ const state = {
     cvv: "",
     paymentMethod: "card",
   },
+  checkoutErrors: {},
+  checkoutGlobalError: "",
   selectedVariantByProduct: Object.fromEntries(runtimeItems.map((p) => [p.id, 0])),
 };
 
@@ -1352,71 +1354,10 @@ function renderNav() {
     backBtn.style.display = state.step === 3 ? "none" : "";
     backBtn.disabled = state.step === 0;
   }
-  if (nextBtn) nextBtn.textContent = state.step === 2 ? "תשלום מאובטח" : "המשך לשלב הבא";
+  if (nextBtn) nextBtn.textContent = state.step === 2 ? "סיום הזמנה" : "המשך לשלב הבא";
 }
 
 function renderCategoryChips() {
-  const activeCategory = runtimeCategories.find((c) => c.id === state.activeCategoryId) || runtimeCategories[0];
-  let subTabsMarkup = "";
-  if (activeCategory?.useSubcategories) {
-    const activeItems = runtimeItems.filter((p) => p.category === activeCategory.id);
-    const subcategories = [
-      ...new Set(
-        activeItems
-          .flatMap((p) => (Array.isArray(p.subcategories) && p.subcategories.length ? p.subcategories : [p.subcategory]))
-          .map((x) => String(x || "").trim())
-          .filter(Boolean)
-      ),
-    ];
-    if (subcategories.length) {
-      const menSubcategory =
-        subcategories.find((s) => {
-          const normalized = String(s).toLowerCase();
-          return normalized.includes("גבר") || normalized.includes("men");
-        }) || subcategories[0];
-      if (!state.activeSubcategory || !subcategories.includes(state.activeSubcategory)) {
-        state.activeSubcategory = menSubcategory;
-      }
-      const orderedSubcategories = [
-        ...subcategories.filter((s) => {
-          const normalized = String(s).toLowerCase();
-          return normalized.includes("גבר") || normalized.includes("men");
-        }),
-        ...subcategories.filter((s) => {
-          const normalized = String(s).toLowerCase();
-          return normalized.includes("אישה") || normalized.includes("נשים") || normalized.includes("woman") || normalized.includes("women");
-        }),
-        ...subcategories.filter((s) => {
-          const normalized = String(s).toLowerCase();
-          return !(
-            normalized.includes("גבר") ||
-            normalized.includes("men") ||
-            normalized.includes("אישה") ||
-            normalized.includes("נשים") ||
-            normalized.includes("woman") ||
-            normalized.includes("women")
-          );
-        }),
-      ];
-      const uniqueOrderedSubcategories = [...new Set(orderedSubcategories)];
-      subTabsMarkup = `
-        <div class="subcategory-tabs">
-          ${uniqueOrderedSubcategories
-            .map(
-              (sub) =>
-                `<button class="subcategory-tab ${state.activeSubcategory === sub ? "active" : ""}" data-subcategory-chip="${escHtml(sub)}">${escHtml(
-                  sub
-                )}</button>`
-            )
-            .join("")}
-        </div>
-      `;
-    } else if (state.activeSubcategory) {
-      state.activeSubcategory = "";
-    }
-  } else if (state.activeSubcategory) {
-    state.activeSubcategory = "";
-  }
   categoryChipsEl.innerHTML = `
     <div class="chip-row chip-row--primary">
       ${runtimeCategories
@@ -1426,7 +1367,6 @@ function renderCategoryChips() {
         )
         .join("")}
     </div>
-    ${subTabsMarkup}
   `;
   requestAnimationFrame(() => {
     const active = categoryChipsEl.querySelector(".subcategory-tab.active") || categoryChipsEl.querySelector(".chip.active");
@@ -1459,6 +1399,8 @@ function renderCatalogSections() {
     renderCategoryChips();
   }
   let subcategories = [];
+  let menSubcategory = "";
+  let womenSubcategory = "";
   if (category.useSubcategories) {
     subcategories = [
       ...new Set(
@@ -1469,19 +1411,27 @@ function renderCatalogSections() {
       ),
     ];
     if (subcategories.length) {
-      const preferredSubcategory =
+      menSubcategory =
         subcategories.find((s) => {
           const normalized = String(s).toLowerCase();
           return normalized.includes("גבר") || normalized.includes("men");
         }) || subcategories[0];
+      womenSubcategory =
+        subcategories.find((s) => {
+          const normalized = String(s).toLowerCase();
+          return normalized.includes("אישה") || normalized.includes("נשים") || normalized.includes("woman") || normalized.includes("women");
+        }) || "";
+      const categoryKey = String(category.studioCategoryKey || category.id || "").toLowerCase();
       if (!state.activeSubcategory || !subcategories.includes(state.activeSubcategory)) {
-        state.activeSubcategory = preferredSubcategory;
+        state.activeSubcategory = menSubcategory;
         renderCategoryChips();
       }
-      items = items.filter((p) => {
-        const labels = Array.isArray(p.subcategories) && p.subcategories.length ? p.subcategories : [p.subcategory];
-        return labels.map((x) => String(x || "").trim()).includes(state.activeSubcategory);
-      });
+      if (categoryKey !== "necklaces") {
+        items = items.filter((p) => {
+          const labels = Array.isArray(p.subcategories) && p.subcategories.length ? p.subcategories : [p.subcategory];
+          return labels.map((x) => String(x || "").trim()).includes(state.activeSubcategory);
+        });
+      }
     } else if (state.activeSubcategory) {
       state.activeSubcategory = "";
       renderCategoryChips();
@@ -1571,7 +1521,26 @@ function renderCatalogSections() {
 
     let rowsMarkup = "";
     if (category.useSubcategories) {
-      rowsMarkup = rowRenderer(items, state.activeSubcategory || "", true);
+      const categoryKey = String(category.studioCategoryKey || category.id || "").toLowerCase();
+      if (categoryKey === "necklaces" && subcategories.length) {
+        const orderedSubcategories = [
+          ...(menSubcategory ? [menSubcategory] : []),
+          ...(womenSubcategory && womenSubcategory !== menSubcategory ? [womenSubcategory] : []),
+          ...subcategories.filter((sub) => sub !== menSubcategory && sub !== womenSubcategory),
+        ];
+        rowsMarkup = orderedSubcategories
+          .map((sub) => {
+            const rowItemsByAnyLabel = items.filter((p) => {
+              const labels = Array.isArray(p.subcategories) && p.subcategories.length ? p.subcategories : [p.subcategory];
+              return labels.map((x) => String(x || "").trim()).includes(sub);
+            });
+            if (!rowItemsByAnyLabel.length) return "";
+            return rowRenderer(rowItemsByAnyLabel, sub, true);
+          })
+          .join("");
+      } else {
+        rowsMarkup = rowRenderer(items, state.activeSubcategory || "", true);
+      }
     } else {
       const categoryKey = String(category.studioCategoryKey || category.id || "").toLowerCase();
       const shouldBeStaticGrid = categoryKey === "keychains" || categoryKey === "other";
@@ -2033,9 +2002,43 @@ function renderCheckoutFields() {
     ["fullName", "שם מלא"], ["phone", "טלפון"], ["email", "אימייל"], ["city", "עיר"],
     ["address", "רחוב"], ["house", "מספר בית"], ["aptFloor", "קומה / דירה"], ["zip", "מיקוד"], ["deliveryNotes", "הערות לשליח"],
   ];
+  const requiredFields = new Set(["fullName", "phone", "email", "city", "address", "house"]);
   $("#checkoutFields").innerHTML = fields
-    .map(([k, l]) => `<label>${l}${k === "deliveryNotes" ? `<textarea data-checkout="${k}">${state.checkout[k]}</textarea>` : `<input data-checkout="${k}" value="${state.checkout[k]}" />`}</label>`)
-    .join("");
+    .map(([k, l]) => {
+      const key = String(k);
+      const hasError = Boolean(state.checkoutErrors?.[key]);
+      const requiredMark = requiredFields.has(key) ? '<span class="required-mark">*</span>' : "";
+      return `<label class="${hasError ? "checkout-field-invalid" : ""}">${l}${requiredMark}${
+        key === "deliveryNotes"
+          ? `<textarea data-checkout="${key}">${state.checkout[key]}</textarea>`
+          : `<input data-checkout="${key}" value="${state.checkout[key]}" />`
+      }${hasError ? `<div class="field-error">${state.checkoutErrors[key]}</div>` : ""}</label>`;
+    })
+    .join("") +
+    (state.checkoutGlobalError ? `<div class="checkout-form-error">${state.checkoutGlobalError}</div>` : "");
+}
+
+function validateCheckoutBeforePayment() {
+  const errors = {};
+  const required = {
+    fullName: "יש להזין שם מלא",
+    phone: "יש להזין טלפון",
+    email: "יש להזין אימייל",
+    city: "יש להזין עיר",
+    address: "יש להזין רחוב",
+    house: "יש להזין מספר בית",
+  };
+  Object.entries(required).forEach(([field, msg]) => {
+    if (!String(state.checkout[field] || "").trim()) errors[field] = msg;
+  });
+  const email = String(state.checkout.email || "").trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.email = "יש להזין אימייל תקין";
+  }
+  state.checkoutErrors = errors;
+  state.checkoutGlobalError = Object.keys(errors).length ? "נדרש למלא את כל שדות החובה לפני מעבר לתשלום." : "";
+  renderCheckoutFields();
+  return Object.keys(errors).length === 0;
 }
 
 function renderShippingMethods() {
@@ -2390,41 +2393,30 @@ function setupEvents() {
     if (e.target.matches('[data-action="back"]')) goToStep(state.step - 1);
     if (e.target.matches('[data-action="next"]')) {
       if (state.step === 2) {
-        const orderPayload = buildStudioOrderCreatePayload();
-        const email = String(state.checkout.email || "").trim();
-        if (!orderPayload || !email) {
-          alert("יש להזין אימייל תקין לפני מעבר לתשלום.");
+        const demoOrder = buildStudioDemoOrderPayload();
+        const isCheckoutValid = validateCheckoutBeforePayment();
+        if (!demoOrder || !isCheckoutValid) {
           return;
         }
         state.processing = true;
         nextBtn.disabled = true;
-        nextBtn.textContent = "מעביר לתשלום...";
+        nextBtn.textContent = "מסיים הזמנה...";
         (async () => {
           try {
-            const orderRes = await postJsonBases("/api/orders", orderPayload);
-            if (!orderRes?.ok || !orderRes?.order?.id) {
-              throw new Error(orderRes?.message || "לא ניתן ליצור הזמנה לתשלום");
-            }
-            state.placedOrderNumber = orderRes.order.orderNumber || null;
+            appendStudioDemoOrder(demoOrder);
+            state.placedOrderNumber = demoOrder.orderNumber || null;
             if (orderStatusLookupInput && state.placedOrderNumber) {
               orderStatusLookupInput.value = state.placedOrderNumber;
             }
-            const returnUrl = `${window.location.origin}/studio?status=1&order=${encodeURIComponent(
-              state.placedOrderNumber || ""
-            )}`;
-            const payRes = await postJsonBases("/api/payments/grow/create-link", {
-              orderId: orderRes.order.id,
-              returnUrl,
-            });
-            if (!payRes?.ok || !payRes?.paymentUrl) {
-              throw new Error(payRes?.message || "לא התקבל קישור תשלום");
-            }
-            window.location.href = payRes.paymentUrl;
+            goToStep(3);
+            updatePricingUI();
           } catch (err) {
-            alert("לא ניתן להתחיל תשלום כרגע. בדוק שהסליקה הוגדרה בשרת ונסה שוב.");
+            state.checkoutGlobalError = "לא ניתן לסיים הזמנה כרגע. נסה שוב בעוד רגע.";
+            renderCheckoutFields();
+          } finally {
             state.processing = false;
             nextBtn.disabled = false;
-            nextBtn.textContent = "תשלום מאובטח";
+            renderNav();
           }
         })();
       } else {
@@ -2587,7 +2579,14 @@ function setupEvents() {
 
   document.body.addEventListener("input", (e) => {
     const field = e.target.dataset.checkout;
-    if (field) state.checkout[field] = e.target.value;
+    if (field) {
+      state.checkout[field] = e.target.value;
+      if (state.checkoutErrors?.[field]) {
+        delete state.checkoutErrors[field];
+      }
+      if (state.checkoutGlobalError) state.checkoutGlobalError = "";
+      renderCheckoutFields();
+    }
   });
 }
 

@@ -1,6 +1,8 @@
 import { Router } from "express";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
+import { getSupabaseAdminClient } from "../supabase/client.js";
 
 export const categoriesRouter = Router();
 
@@ -125,6 +127,92 @@ const FALLBACK_TREE = [
   },
 ];
 
+const CATEGORIES_FALLBACK_KEY = "categories_fallback_tree_v1";
+
+type FlatCategory = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  imageUrl: string | null;
+  parentId: string | null;
+  isActive: boolean;
+  sortOrder: number;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function flattenTree(tree: any[]): FlatCategory[] {
+  const flat: FlatCategory[] = [];
+  for (const main of tree || []) {
+    const mainNode: FlatCategory = {
+      id: String(main.id),
+      name: String(main.name || ""),
+      slug: String(main.slug || ""),
+      description: main.description ?? null,
+      imageUrl: main.imageUrl ?? null,
+      parentId: null,
+      isActive: Boolean(main.isActive ?? true),
+      sortOrder: Number(main.sortOrder ?? 0),
+      seoTitle: main.seoTitle ?? null,
+      seoDescription: main.seoDescription ?? null,
+      createdAt: String(main.createdAt || new Date().toISOString()),
+      updatedAt: String(main.updatedAt || new Date().toISOString()),
+    };
+    flat.push(mainNode);
+    const subs = Array.isArray(main.subcategories) ? main.subcategories : [];
+    for (const sub of subs) {
+      flat.push({
+        id: String(sub.id),
+        name: String(sub.name || ""),
+        slug: String(sub.slug || ""),
+        description: sub.description ?? null,
+        imageUrl: sub.imageUrl ?? null,
+        parentId: String(sub.parentId || main.id),
+        isActive: Boolean(sub.isActive ?? true),
+        sortOrder: Number(sub.sortOrder ?? 0),
+        seoTitle: sub.seoTitle ?? null,
+        seoDescription: sub.seoDescription ?? null,
+        createdAt: String(sub.createdAt || new Date().toISOString()),
+        updatedAt: String(sub.updatedAt || new Date().toISOString()),
+      });
+    }
+  }
+  return flat;
+}
+
+function toTree(rows: FlatCategory[]) {
+  const mains = rows
+    .filter((r) => !r.parentId)
+    .sort((a, b) => a.sortOrder - b.sortOrder || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .map((main) => ({
+      ...main,
+      subcategories: rows
+        .filter((r) => r.parentId === main.id)
+        .sort((a, b) => a.sortOrder - b.sortOrder || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    }));
+  return mains;
+}
+
+async function loadFallbackRows(): Promise<FlatCategory[]> {
+  try {
+    const sb = getSupabaseAdminClient();
+    const { data } = await sb.from("site_settings").select("value").eq("key", CATEGORIES_FALLBACK_KEY).maybeSingle();
+    const value = data?.value;
+    if (Array.isArray(value)) return value as FlatCategory[];
+  } catch {
+    // ignore and use seeded fallback
+  }
+  return flattenTree(FALLBACK_TREE as any[]);
+}
+
+async function saveFallbackRows(rows: FlatCategory[]) {
+  const sb = getSupabaseAdminClient();
+  await sb.from("site_settings").upsert({ key: CATEGORIES_FALLBACK_KEY, value: rows }, { onConflict: "key" });
+}
+
 function slugify(input: string) {
   return input
     .trim()
@@ -196,12 +284,26 @@ categoriesRouter.get("/", async (req, res) => {
   if (type === "sub") where.parentId = { not: null };
   if (parentId) where.parentId = parentId;
 
-  const categories = await prisma.category.findMany({
-    where,
-    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-  });
-
-  res.json({ categories });
+  try {
+    const categories = await prisma.category.findMany({
+      where,
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    });
+    return res.json({ categories });
+  } catch {
+    const rows = await loadFallbackRows();
+    let categories = [...rows];
+    if (q) {
+      const qq = q.toLowerCase();
+      categories = categories.filter((c) => String(c.name || "").toLowerCase().includes(qq));
+    }
+    if (status === "active") categories = categories.filter((c) => c.isActive);
+    if (status === "inactive") categories = categories.filter((c) => !c.isActive);
+    if (type === "main") categories = categories.filter((c) => !c.parentId);
+    if (type === "sub") categories = categories.filter((c) => !!c.parentId);
+    if (parentId) categories = categories.filter((c) => c.parentId === parentId);
+    return res.json({ categories });
+  }
 });
 
 categoriesRouter.get("/tree", async (_req, res) => {
@@ -219,7 +321,8 @@ categoriesRouter.get("/tree", async (_req, res) => {
     res.json({ categories: mains });
   } catch {
     // Fallback categories so product/category UIs keep working if Prisma DB is unavailable.
-    res.json({ categories: FALLBACK_TREE });
+    const rows = await loadFallbackRows();
+    res.json({ categories: toTree(rows) });
   }
 });
 
@@ -234,10 +337,13 @@ categoriesRouter.get("/stats", async (_req, res) => {
     // Product counts are future-ready; we still expose the shape.
     res.json({ stats: { total, main, sub, active, inactive } });
   } catch {
-    const main = FALLBACK_TREE.length;
-    const sub = FALLBACK_TREE.reduce((acc, c: any) => acc + (Array.isArray(c.subcategories) ? c.subcategories.length : 0), 0);
+    const rows = await loadFallbackRows();
+    const main = rows.filter((r) => !r.parentId).length;
+    const sub = rows.filter((r) => !!r.parentId).length;
     const total = main + sub;
-    res.json({ stats: { total, main, sub, active: total, inactive: 0 } });
+    const active = rows.filter((r) => r.isActive).length;
+    const inactive = rows.length - active;
+    res.json({ stats: { total, main, sub, active, inactive } });
   }
 });
 
@@ -250,7 +356,17 @@ categoriesRouter.get("/:id", async (req, res) => {
       _count: { select: { products: true } },
     },
   });
-  if (!category) return res.status(404).json({ error: "NOT_FOUND" });
+  if (!category) {
+    try {
+      const rows = await loadFallbackRows();
+      const current = rows.find((r) => r.id === id);
+      if (!current) return res.status(404).json({ error: "NOT_FOUND" });
+      const subcategories = rows.filter((r) => r.parentId === id);
+      return res.json({ category: { ...current, subcategories, productCount: 0 } });
+    } catch {
+      return res.status(404).json({ error: "NOT_FOUND" });
+    }
+  }
 
   res.json({ category: { ...category, productCount: 0 } });
 });
@@ -284,7 +400,36 @@ categoriesRouter.post("/", async (req, res) => {
     res.status(201).json({ category });
   } catch (e: any) {
     if (String(e?.code) === "P2002") return res.status(409).json({ error: "SLUG_EXISTS" });
-    res.status(500).json({ error: "SERVER_ERROR" });
+    try {
+      const rows = await loadFallbackRows();
+      const duplicate = rows.find((r) => r.slug === slug);
+      if (duplicate) return res.status(409).json({ error: "SLUG_EXISTS" });
+      if (data.parentId) {
+        const parent = rows.find((r) => r.id === data.parentId);
+        if (!parent) return res.status(400).json({ error: "PARENT_NOT_FOUND" });
+        if (parent.parentId) return res.status(400).json({ error: "PARENT_NOT_MAIN" });
+      }
+      const now = new Date().toISOString();
+      const category: FlatCategory = {
+        id: randomUUID(),
+        name: data.name.trim(),
+        slug,
+        description: data.description ?? null,
+        imageUrl: data.imageUrl ?? null,
+        parentId: data.parentId ?? null,
+        isActive: data.isActive ?? true,
+        sortOrder: data.sortOrder ?? 0,
+        seoTitle: data.seoTitle ?? null,
+        seoDescription: data.seoDescription ?? null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      rows.push(category);
+      await saveFallbackRows(rows);
+      return res.status(201).json({ category });
+    } catch {
+      return res.status(500).json({ error: "SERVER_ERROR" });
+    }
   }
 });
 
@@ -327,7 +472,32 @@ categoriesRouter.patch("/:id", async (req, res) => {
     res.json({ category });
   } catch (e: any) {
     if (String(e?.code) === "P2002") return res.status(409).json({ error: "SLUG_EXISTS" });
-    res.status(500).json({ error: "SERVER_ERROR" });
+    try {
+      const rows = await loadFallbackRows();
+      const idx = rows.findIndex((r) => r.id === id);
+      if (idx < 0) return res.status(404).json({ error: "NOT_FOUND" });
+      const duplicate = rows.find((r) => r.slug === nextSlug && r.id !== id);
+      if (duplicate) return res.status(409).json({ error: "SLUG_EXISTS" });
+      const current = rows[idx];
+      const updated: FlatCategory = {
+        ...current,
+        ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+        ...(data.slug !== undefined || data.name !== undefined ? { slug: nextSlug } : {}),
+        ...(data.description !== undefined ? { description: data.description ?? null } : {}),
+        ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl ?? null } : {}),
+        ...(data.parentId !== undefined ? { parentId: nextParentId } : {}),
+        ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+        ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
+        ...(data.seoTitle !== undefined ? { seoTitle: data.seoTitle ?? null } : {}),
+        ...(data.seoDescription !== undefined ? { seoDescription: data.seoDescription ?? null } : {}),
+        updatedAt: new Date().toISOString(),
+      };
+      rows[idx] = updated;
+      await saveFallbackRows(rows);
+      return res.json({ category: updated });
+    } catch {
+      return res.status(500).json({ error: "SERVER_ERROR" });
+    }
   }
 });
 
@@ -351,7 +521,21 @@ categoriesRouter.post("/:id/toggle", async (req, res) => {
     });
     res.json({ category: result });
   } catch {
-    res.status(500).json({ error: "SERVER_ERROR" });
+    try {
+      const rows = await loadFallbackRows();
+      const idx = rows.findIndex((r) => r.id === id);
+      if (idx < 0) return res.status(404).json({ error: "NOT_FOUND" });
+      rows[idx] = { ...rows[idx], isActive, updatedAt: new Date().toISOString() };
+      if (!isActive && !rows[idx].parentId) {
+        for (let i = 0; i < rows.length; i += 1) {
+          if (rows[i].parentId === id) rows[i] = { ...rows[i], isActive: false, updatedAt: new Date().toISOString() };
+        }
+      }
+      await saveFallbackRows(rows);
+      return res.json({ category: rows[idx] });
+    } catch {
+      return res.status(500).json({ error: "SERVER_ERROR" });
+    }
   }
 });
 
@@ -371,7 +555,18 @@ categoriesRouter.delete("/:id", async (req, res) => {
     await prisma.category.delete({ where: { id } });
     res.status(204).send();
   } catch {
-    res.status(500).json({ error: "SERVER_ERROR" });
+    try {
+      const rows = await loadFallbackRows();
+      const exists = rows.some((r) => r.id === id);
+      if (!exists) return res.status(404).json({ error: "NOT_FOUND" });
+      const childrenFallback = rows.some((r) => r.parentId === id);
+      if (childrenFallback) return res.status(409).json({ error: "HAS_SUBCATEGORIES" });
+      const next = rows.filter((r) => r.id !== id);
+      await saveFallbackRows(next);
+      return res.status(204).send();
+    } catch {
+      return res.status(500).json({ error: "SERVER_ERROR" });
+    }
   }
 });
 
