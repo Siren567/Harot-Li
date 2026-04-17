@@ -1219,6 +1219,7 @@ function buildStudioOrderCreatePayload() {
     },
     items: [
       {
+        productId: product.id,
         name: noteParts.length ? `${itemName} (${noteParts.join(" | ")})` : itemName,
         qty,
         unitPrice: unitPriceAgorot,

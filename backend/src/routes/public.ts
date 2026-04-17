@@ -150,6 +150,8 @@ publicRouter.get("/products", async (_req, res) => {
         subcategoryName: subRawFirst?.name ?? null,
         studioColors: mapStudioColors(p.available_colors),
         allowCustomerImageUpload: Boolean(p.allow_customer_image_upload),
+        stock: typeof p.stock === "number" ? p.stock : 0,
+        lowThreshold: typeof p.low_threshold === "number" ? p.low_threshold : 5,
       };
     });
     res.json({ products });

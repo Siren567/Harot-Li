@@ -17,6 +17,8 @@ export type ProductRow = {
   gallery_images?: string[];
   main_category_id?: string | null;
   subcategory_ids?: string[];
+  stock?: number;
+  low_threshold?: number;
 };
 
 const ProductCreateSchema = z.object({
@@ -45,6 +47,8 @@ const ProductCreateSchema = z.object({
     .optional(),
   main_category_id: z.string().min(1).max(120).optional().nullable(),
   subcategory_ids: z.array(z.string().min(1).max(120)).max(30).optional(),
+  stock: z.number().int().min(0).max(1_000_000).optional(),
+  low_threshold: z.number().int().min(0).max(1_000_000).optional(),
 });
 
 const ProductUpdateSchema = ProductCreateSchema.partial();
@@ -63,6 +67,9 @@ function normalizeExtraRow(row: any) {
     gallery_images: Array.isArray(v.gallery_images) ? v.gallery_images.filter((x: any) => typeof x === "string") : [],
     main_category_id: typeof v.main_category_id === "string" && v.main_category_id.trim() ? v.main_category_id : null,
     subcategory_ids: Array.isArray(v.subcategory_ids) ? v.subcategory_ids.filter((x: any) => typeof x === "string") : [],
+    stock: typeof v.stock === "number" && Number.isFinite(v.stock) ? Math.max(0, Math.round(v.stock)) : 0,
+    low_threshold:
+      typeof v.low_threshold === "number" && Number.isFinite(v.low_threshold) ? Math.max(0, Math.round(v.low_threshold)) : 5,
   };
 }
 
@@ -94,7 +101,9 @@ async function saveProductExtras(productId: string, input: z.infer<typeof Produc
     input.allow_customer_image_upload !== undefined ||
     input.gallery_images !== undefined ||
     input.main_category_id !== undefined ||
-    input.subcategory_ids !== undefined;
+    input.subcategory_ids !== undefined ||
+    input.stock !== undefined ||
+    input.low_threshold !== undefined;
   if (!hasExtraFields) return;
   const sb = getSupabaseAdminClient();
   const { data: existingRow, error: existingErr } = await sb
@@ -112,6 +121,8 @@ async function saveProductExtras(productId: string, input: z.infer<typeof Produc
     gallery_images: input.gallery_images ?? prev.gallery_images,
     main_category_id: input.main_category_id ?? prev.main_category_id,
     subcategory_ids: input.subcategory_ids ?? prev.subcategory_ids,
+    stock: input.stock ?? prev.stock,
+    low_threshold: input.low_threshold ?? prev.low_threshold,
   };
   const { error } = await sb
     .from("site_settings")

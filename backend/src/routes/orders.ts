@@ -3,10 +3,12 @@ import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { reasonToHebrew, validateCoupon } from "../logic/coupons/validateCoupon.js";
 import { getAnalyticsForRange } from "../services/analytics.service.js";
+import { getSupabaseAdminClient } from "../supabase/client.js";
 
 export const ordersRouter = Router();
 
 const OrderItemSchema = z.object({
+  productId: z.string().min(1).max(120).optional().nullable(),
   name: z.string().min(1).max(200),
   qty: z.number().int().min(1).max(999),
   unitPrice: z.number().int().min(0),
@@ -27,6 +29,10 @@ const CreateOrderSchema = z.object({
 
 function normalizeCode(code: string) {
   return code.trim().toUpperCase();
+}
+
+function productExtraKey(productId: string) {
+  return `product_extra:${productId}`;
 }
 
 ordersRouter.get("/", async (req, res) => {
@@ -320,6 +326,30 @@ ordersRouter.post("/", async (req, res) => {
     if (!result.ok) {
       const reason = result.reason;
       return res.status(400).json({ ok: false, reason, message: reasonToHebrew(reason) });
+    }
+
+    const productQtyMap = new Map<string, number>();
+    for (const item of items) {
+      const productId = String(item.productId || "").trim();
+      if (!productId) continue;
+      productQtyMap.set(productId, (productQtyMap.get(productId) ?? 0) + item.qty);
+    }
+    if (productQtyMap.size > 0) {
+      try {
+        const sb = getSupabaseAdminClient();
+        for (const [productId, qty] of productQtyMap.entries()) {
+          const key = productExtraKey(productId);
+          const { data: row } = await sb.from("site_settings").select("value").eq("key", key).maybeSingle();
+          const value = row?.value && typeof row.value === "object" && !Array.isArray(row.value) ? { ...row.value } : {};
+          const stockRaw = Number((value as any).stock ?? 0);
+          const nextStock = Math.max(0, (Number.isFinite(stockRaw) ? Math.round(stockRaw) : 0) - qty);
+          (value as any).stock = nextStock;
+          if (!Number.isFinite(Number((value as any).low_threshold))) (value as any).low_threshold = 5;
+          await sb.from("site_settings").upsert({ key, value }, { onConflict: "key" });
+        }
+      } catch {
+        // Keep order creation successful even if stock sync failed.
+      }
     }
 
     return res.status(201).json({ ok: true, order: result.order });

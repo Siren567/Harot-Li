@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "../ui/badge";
+import { apiFetch } from "../lib/api";
 import {
   ArrowUpRight,
   Calendar,
@@ -334,8 +335,53 @@ function Drawer({
 }
 
 export function OrdersPage() {
-  const orders = useMemo<Order[]>(() => {
-    return [];
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const out = await apiFetch<{ orders: any[] }>("/api/orders?limit=500");
+        if (!mounted) return;
+        const rows = Array.isArray(out?.orders) ? out.orders : [];
+        const mapped: Order[] = rows.map((o: any) => {
+          const items = Array.isArray(o.items) ? o.items : [];
+          return {
+            id: String(o.id ?? ""),
+            orderNumber: String(o.orderNumber ?? ""),
+            customerName: String(o.customer?.fullName ?? o.customer?.email ?? "לקוח"),
+            customerPhone: String(o.customer?.phone ?? "—"),
+            customerEmail: String(o.customer?.email ?? "—"),
+            createdAt: String(o.createdAt ?? new Date().toISOString()),
+            total: Number(o.total ?? 0),
+            paymentStatus: o.status === "PAID" ? "paid" : o.status === "CANCELLED" ? "failed" : "pending",
+            orderStatus:
+              o.status === "PAID" ? "completed" : o.status === "CANCELLED" ? "cancelled" : "new",
+            designNumber: "—",
+            items: items.map((it: any, idx: number) => ({
+              id: `${o.id}-${idx}`,
+              name: String(it?.name ?? "מוצר"),
+              qty: Number(it?.qty ?? 1),
+              price: Number(it?.unitPrice ?? 0),
+            })),
+            engravingText: "",
+            pendantShape: "",
+            material: "",
+            color: "",
+            notes: "",
+          };
+        });
+        setOrders(mapped);
+      } catch {
+        setOrders([]);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const [query, setQuery] = useState("");
@@ -625,7 +671,9 @@ export function OrdersPage() {
           </button>
         </div>
 
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div style={{ padding: 16, color: "var(--muted-foreground)", fontSize: 12 }}>טוען הזמנות...</div>
+        ) : filtered.length === 0 ? (
           <div style={{ padding: "24px" }}>
             <div style={{ ...cardStyle, padding: "20px", background: "var(--card)" }}>
               <div style={{ fontSize: "14px", fontWeight: 800, color: "var(--foreground)" }}>אין הזמנות כרגע</div>

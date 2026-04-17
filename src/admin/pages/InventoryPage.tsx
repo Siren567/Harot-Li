@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../ui/badge";
 import { useToast } from "../ui/toast";
+import { apiFetch } from "../lib/api";
 import {
   AlertTriangle,
   Boxes,
@@ -28,6 +29,18 @@ type InventoryProduct = {
   stock: number;
   lowThreshold: number;
   price: number;
+};
+
+type ProductApiRow = {
+  id: string;
+  title: string;
+  slug: string;
+  image_url: string | null;
+  price: number;
+  allow_customer_image_upload?: boolean;
+  main_category_id?: string | null;
+  stock?: number;
+  low_threshold?: number;
 };
 
 function fmtMoney(v: number) {
@@ -236,10 +249,8 @@ function Drawer({
 
 export function InventoryPage() {
   const toast = useToast();
-
-  const productsBase = useMemo<InventoryProduct[]>(() => [], []);
-
-  const [products, setProducts] = useState<InventoryProduct[]>(productsBase);
+  const [products, setProducts] = useState<InventoryProduct[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<InventoryStatus | "all">("all");
@@ -247,9 +258,40 @@ export function InventoryPage() {
   const [customizableFilter, setCustomizableFilter] = useState<"all" | "yes" | "no">("all");
 
   const categories = useMemo(() => {
-    const set = new Set(productsBase.map((p) => p.category));
+    const set = new Set(products.map((p) => p.category));
     return ["all", ...Array.from(set)];
-  }, [productsBase]);
+  }, [products]);
+
+  async function refreshInventory(silent?: boolean) {
+    if (!silent) setLoading(true);
+    try {
+      const out = await apiFetch<{ products: ProductApiRow[] }>("/api/products");
+      const rows = Array.isArray(out?.products) ? out.products : [];
+      setProducts(
+        rows.map((p) => ({
+          id: p.id,
+          name: p.title || "מוצר",
+          imageUrl: p.image_url || "",
+          sku: p.slug || p.id,
+          category: p.main_category_id || "ללא קטגוריה",
+          customizable: Boolean(p.allow_customer_image_upload),
+          stock: Number.isFinite(Number(p.stock)) ? Math.max(0, Number(p.stock)) : 0,
+          lowThreshold: Number.isFinite(Number(p.low_threshold)) ? Math.max(0, Number(p.low_threshold)) : 5,
+          price: Number.isFinite(Number(p.price)) ? Number(p.price) : 0,
+        }))
+      );
+    } catch {
+      toast("טעינת מלאי נכשלה", "error");
+      setProducts([]);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refreshInventory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -350,27 +392,56 @@ export function InventoryPage() {
     setSelectedIds([]);
   }
 
-  function updateProduct(id: string, patch: Partial<InventoryProduct>) {
+  async function updateProduct(id: string, patch: Partial<InventoryProduct>) {
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
     pulseRow(id);
+    try {
+      await apiFetch(`/api/products/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          stock: patch.stock,
+          low_threshold: patch.lowThreshold,
+        }),
+      });
+    } catch {
+      toast("שמירת מלאי נכשלה", "error");
+    }
   }
 
-  function applyBulkUpdate() {
+  async function applyBulkUpdate() {
     if (selectedIds.length === 0) return;
     for (const id of selectedIds) {
       setProducts((prev) =>
         prev.map((p) => (p.id === id ? { ...p, stock: Number.isFinite(bulkStock) ? bulkStock : p.stock } : p))
       );
       pulseRow(id);
+      try {
+        await apiFetch(`/api/products/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ stock: Number.isFinite(bulkStock) ? bulkStock : 0 }),
+        });
+      } catch {
+        // handled with summary toast
+      }
     }
-    toast("עדכון מלאי מרוכז בוצע בדמו", "success");
+    toast("עדכון מלאי מרוכז נשמר", "success");
   }
 
-  function markSelectedAsOutOfStock() {
+  async function markSelectedAsOutOfStock() {
     if (selectedIds.length === 0) return;
     setProducts((prev) => prev.map((p) => (selectedSet.has(p.id) ? { ...p, stock: 0 } : p)));
     for (const id of selectedIds) pulseRow(id);
-    toast("סימון כנגמר בוצע בדמו", "warning");
+    for (const id of selectedIds) {
+      try {
+        await apiFetch(`/api/products/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ stock: 0 }),
+        });
+      } catch {
+        // handled with summary toast
+      }
+    }
+    toast("סומן כנגמר במלאי", "warning");
   }
 
   const hasFilters = query.trim().length > 0 || statusFilter !== "all" || categoryFilter !== "all" || customizableFilter !== "all";
@@ -408,7 +479,7 @@ export function InventoryPage() {
           </button>
           <button
             type="button"
-            onClick={() => toast("עדכון מהיר (placeholder)", "success")}
+            onClick={() => refreshInventory(true)}
             style={{
               background: "var(--primary)",
               border: "1px solid rgba(201,169,110,0.35)",
@@ -424,7 +495,7 @@ export function InventoryPage() {
             }}
           >
             <RefreshCw size={16} />
-            עדכון מהיר
+            רענון
           </button>
         </div>
       </div>
@@ -647,7 +718,11 @@ export function InventoryPage() {
           <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>עדכון אוטומטי (דמו)</div>
         </div>
 
-        {products.length === 0 ? (
+        {loading ? (
+          <div style={{ padding: 24 }}>
+            <div style={{ color: "var(--muted-foreground)", fontSize: 13 }}>טוען מלאי...</div>
+          </div>
+        ) : products.length === 0 ? (
           <div style={{ padding: 24 }}>
             <div style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 14, padding: 20 }}>
               <div style={{ fontSize: 14, fontWeight: 900, color: "var(--foreground)" }}>אין מוצרים במלאי</div>

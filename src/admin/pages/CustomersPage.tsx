@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "../ui/badge";
 import { useToast } from "../ui/toast";
+import { apiFetch } from "../lib/api";
 import {
   Calendar,
   ChevronLeft,
@@ -470,10 +471,89 @@ function Drawer({
 
 export function CustomersPage() {
   const toast = useToast();
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const customers = useMemo<Customer[]>(() => {
-    return [];
-  }, []);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const out = await apiFetch<{ orders: any[] }>("/api/orders?limit=1000");
+        if (!mounted) return;
+        const rows = Array.isArray(out?.orders) ? out.orders : [];
+        const byCustomer = new Map<string, Customer>();
+        for (const o of rows) {
+          const customer = o?.customer ?? {};
+          const email = String(customer.email ?? "").trim();
+          if (!email) continue;
+          const id = String(customer.id ?? email);
+          const createdAt = String(customer.createdAt ?? o.createdAt ?? new Date().toISOString());
+          const fullName = String(customer.fullName ?? email.split("@")[0] ?? "לקוח");
+          const phone = String(customer.phone ?? "—");
+          const total = Number(o.total ?? 0);
+          const orderDate = String(o.createdAt ?? createdAt);
+          const existing = byCustomer.get(id);
+          const orderItems = Array.isArray(o.items) ? o.items : [];
+          const previewName = String(orderItems[0]?.name ?? "מוצר");
+          const orderEntry: CustomerOrder = {
+            id: String(o.id ?? `${id}-${orderDate}`),
+            orderNumber: String(o.orderNumber ?? "—"),
+            createdAt: orderDate,
+            total,
+            productPreview: previewName,
+            designNumber: "—",
+          };
+          if (!existing) {
+            byCustomer.set(id, {
+              id,
+              fullName,
+              email,
+              phone,
+              joinedAt: createdAt,
+              ordersCount: 1,
+              totalSpend: total,
+              lastOrderAt: orderDate,
+              lastOrderProduct: previewName,
+              status: "new",
+              tags: [],
+              savedDesigns: [],
+              internalNote: "",
+              addressPlaceholder: "—",
+              recentOrders: [orderEntry],
+              recentlyPurchased: [previewName],
+            });
+          } else {
+            existing.ordersCount += 1;
+            existing.totalSpend += total;
+            if (!existing.lastOrderAt || new Date(orderDate).getTime() > new Date(existing.lastOrderAt).getTime()) {
+              existing.lastOrderAt = orderDate;
+              existing.lastOrderProduct = previewName;
+            }
+            existing.recentOrders.push(orderEntry);
+            if (!existing.recentlyPurchased.includes(previewName)) existing.recentlyPurchased.push(previewName);
+          }
+        }
+        const mapped = Array.from(byCustomer.values()).map((c) => {
+          c.recentOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          if (c.ordersCount === 0) c.status = "no_orders";
+          else if (c.ordersCount >= 2) c.status = "repeat";
+          else c.status = "new";
+          return c;
+        });
+        setCustomers(mapped);
+      } catch {
+        if (mounted) {
+          setCustomers([]);
+          toast("טעינת לקוחות נכשלה", "error");
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [toast]);
 
   const now = Date.now();
   const monthAgo = now - 1000 * 60 * 60 * 24 * 30;
@@ -631,6 +711,10 @@ export function CustomersPage() {
         <SummaryCard title="לקוחות מובילים לפי הוצאה" value={String(summary.topSpenders)} hint="₪1,000+" tone="success" icon={Star} />
         <SummaryCard title="ממוצע הזמנות ללקוח" value={String(summary.avgOrders)} hint="דמו" tone="muted" icon={Filter} />
       </div>
+
+      {loading ? (
+        <div style={{ ...cardStyle, padding: "14px", color: "var(--muted-foreground)", fontSize: 13 }}>טוען לקוחות...</div>
+      ) : null}
 
       {/* Segments */}
       <div style={{ ...cardStyle, padding: "12px 14px", display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between" }}>
