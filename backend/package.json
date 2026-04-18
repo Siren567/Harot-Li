@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "prisma generate && prisma migrate deploy && tsc -p tsconfig.json",
+    "build": "node scripts/prisma-build.mjs && tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "seed:cms": "tsx src/scripts/seedCms.ts",
     "seed:product": "tsx src/scripts/seedProduct.ts",
