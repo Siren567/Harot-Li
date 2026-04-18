@@ -1,6 +1,6 @@
  "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Circle, Eye, EyeOff, Heart, Minus, Pencil, Plus, RefreshCw, Square, Trash2, X } from "lucide-react";
 import { useToast } from "../ui/toast";
 import { apiFetch } from "../lib/api";
@@ -541,6 +541,8 @@ export function ProductEditorPage() {
   const isCreateMode = openCreateWhenEmpty || Boolean(editing);
   const selectedMainCategory = categoryTree.find((c) => c.id === form.main_category_id) ?? null;
   const availableSubcategories = selectedMainCategory?.subcategories ?? [];
+  const mainImageInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryImageInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   const getGalleryAt = (index: number) => form.gallery_images[index] ?? "";
   const setGalleryAt = (index: number, value: string) => {
@@ -1131,20 +1133,23 @@ export function ProductEditorPage() {
                   onChange={(e) => setForm((p) => ({ ...p, image_url: e.target.value }))}
                   placeholder="כתובת URL של התמונה הראשית"
                 />
-                <label style={{ cursor: "pointer" }}>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    style={{ display: "none" }}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      onUploadImage(file, (url) => setForm((p) => ({ ...p, image_url: url })));
-                      e.currentTarget.value = "";
-                    }}
-                  />
-                  <SecondaryButton type="button">העלאה מהמחשב</SecondaryButton>
-                </label>
+                <input
+                  ref={(el) => {
+                    mainImageInputRef.current = el;
+                  }}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    onUploadImage(file, (url) => setForm((p) => ({ ...p, image_url: url })));
+                    e.currentTarget.value = "";
+                  }}
+                />
+                <SecondaryButton type="button" onClick={() => mainImageInputRef.current?.click()}>
+                  העלאה מהמחשב
+                </SecondaryButton>
               </div>
 
               {optionalGallerySlots.map((slot, idx) => (
@@ -1158,20 +1163,23 @@ export function ProductEditorPage() {
                       onChange={(e) => setGalleryAt(slot, e.target.value)}
                       placeholder="או הדבקת קישור למעלה"
                     />
-                    <label style={{ cursor: "pointer" }}>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        style={{ display: "none" }}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          onUploadImage(file, (url) => setGalleryAt(slot, url));
-                          e.currentTarget.value = "";
-                        }}
-                      />
-                      <SecondaryButton type="button">העלאה מהמחשב</SecondaryButton>
-                    </label>
+                    <input
+                      ref={(el) => {
+                        galleryImageInputRefs.current[slot] = el;
+                      }}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        onUploadImage(file, (url) => setGalleryAt(slot, url));
+                        e.currentTarget.value = "";
+                      }}
+                    />
+                    <SecondaryButton type="button" onClick={() => galleryImageInputRefs.current[slot]?.click()}>
+                      העלאה מהמחשב
+                    </SecondaryButton>
                   </div>
                 </div>
               ))}
