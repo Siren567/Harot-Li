@@ -14,8 +14,10 @@ contentRouter.get("/bootstrap", async (_req, res) => {
   try {
     const data = await getContentBootstrap();
     res.json(data);
-  } catch {
-    res.status(500).json({ error: "SERVER_ERROR" });
+  } catch (err: any) {
+    console.error("[content/bootstrap] FAILED message=", String(err?.message ?? err));
+    // Never block frontend boot — return empty defaults.
+    res.json({ sections: [], settings: [], legalPages: [], topSellers: [] });
   }
 });
 

@@ -238,13 +238,25 @@ export async function listTopSellersWithProducts(): Promise<TopSellerWithProduct
 }
 
 export async function getContentBootstrap() {
-  const [sections, settings, legalPages, topSellers] = await Promise.all([
+  // Each query is independent — if one fails (DB down, schema drift, pool issue)
+  // we still return a valid shape with empty defaults so the frontend can boot.
+  const results = await Promise.allSettled([
     listContentSections(),
     listSiteSettings(),
     listLegalPages(),
     listTopSellersWithProducts(),
   ]);
-
+  const [sectionsR, settingsR, legalR, topR] = results;
+  const labels = ["sections", "settings", "legalPages", "topSellers"];
+  results.forEach((r, i) => {
+    if (r.status === "rejected") {
+      console.warn(`[content/bootstrap] ${labels[i]} failed:`, (r.reason as any)?.message ?? r.reason);
+    }
+  });
+  const sections = sectionsR.status === "fulfilled" ? sectionsR.value : [];
+  const settings = settingsR.status === "fulfilled" ? settingsR.value : [];
+  const legalPages = legalR.status === "fulfilled" ? legalR.value : [];
+  const topSellers = topR.status === "fulfilled" ? topR.value : [];
   return {
     sections,
     settings,

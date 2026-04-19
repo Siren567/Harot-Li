@@ -14,8 +14,10 @@ analyticsRouter.post("/visit-start", async (req, res) => {
   try {
     await recordVisitStart(parsed.data.startedAt);
     return res.status(204).send();
-  } catch {
-    return res.status(500).json({ error: "SERVER_ERROR" });
+  } catch (err: any) {
+    console.warn("[analytics] failed (non-fatal):", err?.message);
+    // Analytics is best-effort — never fail the caller.
+    return res.status(204).send();
   }
 });
 
@@ -30,8 +32,10 @@ analyticsRouter.post("/visit-end", async (req, res) => {
   try {
     await recordVisitEnd(parsed.data.durationSeconds, parsed.data.endedAt);
     return res.status(204).send();
-  } catch {
-    return res.status(500).json({ error: "SERVER_ERROR" });
+  } catch (err: any) {
+    console.warn("[analytics] failed (non-fatal):", err?.message);
+    // Analytics is best-effort — never fail the caller.
+    return res.status(204).send();
   }
 });
 
