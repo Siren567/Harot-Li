@@ -267,6 +267,7 @@ const state = {
   selectedProductId: "",
   activeCategoryId: "",
   activeSubcategory: "",
+  userPickedCategory: false,
   previewGalleryIndex: 0,
   whatsappPhone: "",
   previewAngle: "front",
@@ -1379,10 +1380,12 @@ function renderCatalogSections() {
     catalogSectionsEl.innerHTML = `<section class="catalog-section"><p class="step-sub">אין כרגע מוצרים זמינים בקטלוג.</p></section>`;
     return;
   }
-  // Only auto-switch if the active id isn't a known category at all (stale/missing).
-  // Do NOT bounce away from a valid-but-empty category — the user may have just clicked it.
+  // Auto-switch to a populated category on initial/auto renders, but never bounce
+  // away from a category the user actively clicked — keep their valid-but-empty selection.
   const activeIsKnown = runtimeCategories.some((c) => c.id === state.activeCategoryId);
-  if (!activeIsKnown) {
+  const activeHasItems = runtimeItems.some((p) => p.category === state.activeCategoryId);
+  const needsFallback = !activeIsKnown || (!state.userPickedCategory && !activeHasItems);
+  if (needsFallback) {
     const fallbackCategoryWithItems = runtimeCategories.find((c) => runtimeItems.some((p) => p.category === c.id));
     if (fallbackCategoryWithItems) {
       state.activeCategoryId = fallbackCategoryWithItems.id;
@@ -2245,6 +2248,7 @@ function setupEvents() {
       clearCouponOnCartChange();
       state.activeCategoryId = chip.dataset.categoryChip;
       state.activeSubcategory = "";
+      state.userPickedCategory = true;
       renderCategoryChips();
       const firstInCategory = runtimeItems.find((p) => p.category === state.activeCategoryId);
       if (firstInCategory) state.selectedProductId = firstInCategory.id;
