@@ -228,18 +228,14 @@ const CategoryBaseSchema = z.object({
   slug: z.string().min(1).max(80).optional().nullable(),
   description: z.string().max(2000).optional().nullable(),
   imageUrl: z.string().url().optional().nullable(),
-  parentId: z.string().uuid().optional().nullable(),
+  parentId: z.string().min(1).max(120).optional().nullable(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(9999).optional(),
   seoTitle: z.string().max(120).optional().nullable(),
   seoDescription: z.string().max(320).optional().nullable(),
 });
 
-const CategoryCreateSchema = CategoryBaseSchema.superRefine((val, ctx) => {
-  if (val.parentId && val.parentId.length < 10) {
-    ctx.addIssue({ code: "custom", path: ["parentId"], message: "קטגוריית אב לא תקינה" });
-  }
-});
+const CategoryCreateSchema = CategoryBaseSchema;
 
 const CategoryUpdateSchema = CategoryBaseSchema.partial().superRefine((val, ctx) => {
   if (val.slug !== undefined && val.slug != null && val.slug.trim().length === 0) {

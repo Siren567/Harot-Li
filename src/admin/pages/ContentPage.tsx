@@ -5,7 +5,6 @@ import { useToast } from "../ui/toast";
 import { Badge } from "../ui/badge";
 import { apiFetch } from "../lib/api";
 import { Card, InputGroup, PageHeader, PrimaryButton, SearchField, TextInput } from "../ui/primitives";
-import { featuredProducts } from "../../constants/mockData";
 import {
   ArrowUp,
   ArrowDown,
@@ -13,6 +12,7 @@ import {
   Save,
   Trash2,
 } from "lucide-react";
+import { studioCategories, type StudioCategoryId } from "../../constants/studioData";
 
 type ContentSection = {
   id: string;
@@ -145,6 +145,16 @@ function getSection(sections: ContentSection[], key: string): ContentSection | u
   return sections.find((s) => s.key === key);
 }
 
+const DEFAULT_STUDIO_CATEGORY_ORDER: StudioCategoryId[] = studioCategories.map((c) => c.id);
+
+function normalizeStudioCategoryOrder(input: unknown): StudioCategoryId[] {
+  const allowed = new Set<StudioCategoryId>(DEFAULT_STUDIO_CATEGORY_ORDER);
+  const parsed = Array.isArray(input) ? input.filter((x): x is StudioCategoryId => typeof x === "string" && allowed.has(x as StudioCategoryId)) : [];
+  const unique = parsed.filter((x, i) => parsed.indexOf(x) === i);
+  for (const id of DEFAULT_STUDIO_CATEGORY_ORDER) if (!unique.includes(id)) unique.push(id);
+  return unique;
+}
+
 export function ContentPage() {
   const toast = useToast();
 
@@ -156,6 +166,7 @@ export function ContentPage() {
   const [topSellers, setTopSellers] = useState<TopSeller[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [productSearch, setProductSearch] = useState("");
+  const [selectedTopSellerSlot, setSelectedTopSellerSlot] = useState(0);
 
   const topSellerSection = getSection(sections, "top_sellers_section");
 
@@ -176,7 +187,7 @@ export function ContentPage() {
       ]);
       setSections(boot.sections);
       setLegalPages(boot.legalPages);
-      setTopSellers(boot.topSellers);
+      setTopSellers((boot.topSellers ?? []).slice(0, 3));
       setProducts(productsRes.products.filter((p) => p.is_active));
     } catch {
       toast("טעינת תוכן האתר נכשלה", "error");
@@ -202,14 +213,20 @@ export function ContentPage() {
     }
     setTextSections(textMap);
     setTopSellerCfg(
-      topSellerSection?.body ?? {
-        title: "נבחרים במיוחד",
-        subtitle: "הקולקציה שלנו",
-        isVisible: true,
-        limit: 3,
-        badgeTextDefault: "רב מכר",
-        manualItems: featuredProducts,
-      }
+      (() => {
+        const base =
+          topSellerSection?.body ?? {
+            title: "נבחרים במיוחד",
+            subtitle: "הקולקציה שלנו",
+            isVisible: true,
+            limit: 3,
+            badgeTextDefault: "רב מכר",
+          };
+        return {
+          ...base,
+          categoryOrder: normalizeStudioCategoryOrder((base as any).categoryOrder),
+        };
+      })()
     );
     setLegalText({
       terms:
@@ -272,8 +289,13 @@ export function ContentPage() {
   async function saveTopSellers() {
     setSavingKey("top_sellers");
     try {
+      const ordered = [...topSellers].slice(0, 3);
+      if (ordered.length !== 3 || ordered.some((x) => !x.product_id)) {
+        toast("יש לבחור בדיוק 3 מוצרים להצגה בדף הבית", "warning");
+        return;
+      }
       const payload = {
-        items: topSellers.map((x, idx) => ({
+        items: ordered.map((x, idx) => ({
           product_id: x.product_id,
           sort_order: idx,
           badge_text: x.badge_text ?? topSellerCfg.badgeTextDefault ?? null,
@@ -284,8 +306,14 @@ export function ContentPage() {
         method: "PUT",
         body: JSON.stringify(payload),
       });
-      setTopSellers(out.items);
-      await saveSection("top_sellers_section", topSellerCfg.title ?? "נבחרים במיוחד", topSellerCfg, true, 5);
+      setTopSellers((out.items ?? []).slice(0, 3));
+      await saveSection(
+        "top_sellers_section",
+        topSellerCfg.title ?? "נבחרים במיוחד",
+        { ...topSellerCfg, categoryOrder: normalizeStudioCategoryOrder(topSellerCfg.categoryOrder), limit: 3, isVisible: true },
+        true,
+        5
+      );
       toast("Top sellers נשמרו", "success");
     } catch {
       toast("שמירת Top sellers נכשלה", "error");
@@ -320,19 +348,24 @@ export function ContentPage() {
     }
   }
 
-  function addTopSeller(product: Product) {
-    if (topSellers.some((x) => x.product_id === product.id)) return;
-    setTopSellers((prev) => [
-      ...prev,
-      {
-        id: `tmp-${product.id}`,
+  function replaceTopSeller(slotIndex: number, product: Product) {
+    setTopSellers((prev) => {
+      const next = [...prev];
+      if (next.some((x, i) => i !== slotIndex && x.product_id === product.id)) {
+        toast("המוצר כבר קיים ברשימה", "warning");
+        return prev;
+      }
+      const row: TopSeller = {
+        id: next[slotIndex]?.id ?? `tmp-${slotIndex}-${product.id}`,
         product_id: product.id,
-        sort_order: prev.length,
-        badge_text: topSellerCfg.badgeTextDefault ?? null,
+        sort_order: slotIndex,
+        badge_text: next[slotIndex]?.badge_text ?? topSellerCfg.badgeTextDefault ?? null,
         is_active: true,
         products: product,
-      },
-    ]);
+      };
+      next[slotIndex] = row;
+      return next.slice(0, 3).map((x, i) => ({ ...x, sort_order: i }));
+    });
   }
 
   function moveTopSeller(index: number, dir: -1 | 1) {
@@ -346,12 +379,25 @@ export function ContentPage() {
     });
   }
 
+  function moveStudioCategory(index: number, dir: -1 | 1) {
+    setTopSellerCfg((prev: any) => {
+      const order = normalizeStudioCategoryOrder(prev?.categoryOrder);
+      const nextIndex = index + dir;
+      if (nextIndex < 0 || nextIndex >= order.length) return prev;
+      const copy = [...order];
+      const [item] = copy.splice(index, 1);
+      copy.splice(nextIndex, 0, item);
+      return { ...prev, categoryOrder: copy };
+    });
+  }
+
   if (loading) {
     return <div style={{ color: "var(--muted-foreground)", fontSize: 13 }}>טוען ניהול תוכן...</div>;
   }
 
   const activeSections = sections.filter((s) => s.is_active).length;
   const lastUpdated = sections.map((s) => new Date(s.updated_at).getTime()).sort((a, b) => b - a)[0];
+  const showAdvancedTools = false;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 18 }}>
@@ -367,7 +413,7 @@ export function ContentPage() {
         </Card>
         <Card>
           <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>Top sellers מוגדרים</div>
-          <div style={{ marginTop: 6, fontSize: 20, fontWeight: 900, color: "var(--foreground)" }}>{topSellers.length}</div>
+          <div style={{ marginTop: 6, fontSize: 20, fontWeight: 900, color: "var(--foreground)" }}>{Math.min(topSellers.length, 3)}/3</div>
         </Card>
         <Card>
           <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>עודכן לאחרונה</div>
@@ -377,6 +423,7 @@ export function ContentPage() {
         </Card>
       </div>
 
+      {showAdvancedTools ? (
       <Card>
         <SectionTitle title="עריכת מלל האתר (מידע קיים)" />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -411,9 +458,10 @@ export function ContentPage() {
           ))}
         </div>
       </Card>
+      ) : null}
 
       <Card>
-        <SectionTitle title="Top Sellers" />
+        <SectionTitle title="מוצרים מוצגים בדף הבית (3 בלבד)" />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <InputGroup label="כותרת סקשן">
             <TextInput value={topSellerCfg.title ?? ""} onChange={(e) => setTopSellerCfg((p: any) => ({ ...p, title: e.target.value }))} />
@@ -421,67 +469,36 @@ export function ContentPage() {
           <InputGroup label="תת כותרת סקשן">
             <TextInput value={topSellerCfg.subtitle ?? ""} onChange={(e) => setTopSellerCfg((p: any) => ({ ...p, subtitle: e.target.value }))} />
           </InputGroup>
-          <InputGroup label="טקסט תג ברירת מחדל">
-            <TextInput value={topSellerCfg.badgeTextDefault ?? ""} onChange={(e) => setTopSellerCfg((p: any) => ({ ...p, badgeTextDefault: e.target.value }))} />
-          </InputGroup>
-          <InputGroup label="כמות להצגה">
-            <TextInput type="number" value={topSellerCfg.limit ?? 3} onChange={(e) => setTopSellerCfg((p: any) => ({ ...p, limit: Number(e.target.value) }))} />
-          </InputGroup>
         </div>
-        <label style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 12 }}>
-          <input type="checkbox" checked={Boolean(topSellerCfg.isVisible ?? true)} onChange={(e) => setTopSellerCfg((p: any) => ({ ...p, isVisible: e.target.checked }))} style={{ accentColor: "var(--primary)" }} />
-          <span style={{ fontSize: 13, fontWeight: 800, color: "var(--foreground-secondary)" }}>הצג סקשן Top Sellers</span>
-        </label>
 
-        <div style={{ marginTop: 14 }}>
-          <InputGroup label="עריכה ישירה של הכרטיסים באתר (שם / תמונה / מחיר)">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-              {(Array.isArray(topSellerCfg.manualItems) ? topSellerCfg.manualItems : featuredProducts).map((item: any, idx: number) => (
-                <div key={idx} style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 12, padding: 10 }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 180px", gap: 8 }}>
-                    <TextInput
-                      value={item?.name ?? ""}
-                      onChange={(e) =>
-                        setTopSellerCfg((prev: any) => {
-                          const items = [...(Array.isArray(prev.manualItems) ? prev.manualItems : featuredProducts)];
-                          items[idx] = { ...(items[idx] ?? {}), name: e.target.value };
-                          return { ...prev, manualItems: items };
-                        })
-                      }
-                      placeholder="שם מוצר"
-                    />
-                    <TextInput
-                      value={item?.imageUrl ?? ""}
-                      onChange={(e) =>
-                        setTopSellerCfg((prev: any) => {
-                          const items = [...(Array.isArray(prev.manualItems) ? prev.manualItems : featuredProducts)];
-                          items[idx] = { ...(items[idx] ?? {}), imageUrl: e.target.value };
-                          return { ...prev, manualItems: items };
-                        })
-                      }
-                      placeholder="קישור תמונה"
-                    />
-                    <TextInput
-                      value={item?.priceFrom ?? ""}
-                      onChange={(e) =>
-                        setTopSellerCfg((prev: any) => {
-                          const items = [...(Array.isArray(prev.manualItems) ? prev.manualItems : featuredProducts)];
-                          items[idx] = { ...(items[idx] ?? {}), priceFrom: e.target.value };
-                          return { ...prev, manualItems: items };
-                        })
-                      }
-                      placeholder="₪149"
-                    />
+        <div style={{ marginTop: 12 }}>
+          <InputGroup label="סדר קטגוריות בסטודיו">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {normalizeStudioCategoryOrder(topSellerCfg.categoryOrder).map((catId: StudioCategoryId, idx: number) => {
+                const meta = studioCategories.find((c) => c.id === catId);
+                return (
+                  <div key={catId} style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ fontSize: 12, fontWeight: 900, color: "var(--foreground-secondary)" }}>
+                      {idx + 1}. {meta?.label ?? catId}
+                    </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button type="button" onClick={() => moveStudioCategory(idx, -1)} style={iconBtnStyle()} disabled={idx === 0}>
+                        <ArrowUp size={15} />
+                      </button>
+                      <button type="button" onClick={() => moveStudioCategory(idx, 1)} style={iconBtnStyle()} disabled={idx === DEFAULT_STUDIO_CATEGORY_ORDER.length - 1}>
+                        <ArrowDown size={15} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </InputGroup>
         </div>
 
         <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div>
-            <InputGroup label="חיפוש מוצר להוספה">
+            <InputGroup label="חיפוש מוצר להחלפה">
               <SearchField value={productSearch} onChange={setProductSearch} placeholder="חיפוש מוצר" />
             </InputGroup>
             <div style={{ marginTop: 8, maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
@@ -489,7 +506,7 @@ export function ContentPage() {
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => addTopSeller(p)}
+                  onClick={() => replaceTopSeller(selectedTopSellerSlot, p)}
                   style={{
                     width: "100%",
                     textAlign: "right",
@@ -512,16 +529,32 @@ export function ContentPage() {
             </div>
           </div>
           <div>
-            <InputGroup label="מוצרים נבחרים">
+            <InputGroup label="3 מוצרים מוצגים (בחר סלוט ואז החלף משמאל)">
               <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
-                {topSellers.map((x, idx) => (
-                  <div key={x.product_id} style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 12, padding: 10 }}>
+                {[0, 1, 2].map((idx) => {
+                  const x = topSellers[idx];
+                  return (
+                  <div
+                    key={x?.product_id ?? `slot-${idx}`}
+                    style={{
+                      background: "var(--input)",
+                      border: idx === selectedTopSellerSlot ? "1px solid rgba(201,169,110,0.55)" : "1px solid var(--border)",
+                      borderRadius: 12,
+                      padding: 10
+                    }}
+                  >
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
                       <div>
-                        <div style={{ fontSize: 12, fontWeight: 900, color: "var(--foreground)" }}>{x.products?.title ?? x.product_id}</div>
-                        <div style={{ marginTop: 3, fontSize: 11, color: "var(--muted-foreground)" }}>מחיר: ₪{((x.products?.price ?? 0) / 100).toLocaleString("he-IL")}</div>
+                        <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginBottom: 2 }}>מיקום {idx + 1}</div>
+                        <div style={{ fontSize: 12, fontWeight: 900, color: "var(--foreground)" }}>{x?.products?.title ?? "לא נבחר מוצר"}</div>
+                        <div style={{ marginTop: 3, fontSize: 11, color: "var(--muted-foreground)" }}>
+                          מחיר: ₪{(((x?.products?.price ?? 0) / 100) || 0).toLocaleString("he-IL")}
+                        </div>
                       </div>
                       <div style={{ display: "flex", gap: 6 }}>
+                        <button type="button" onClick={() => setSelectedTopSellerSlot(idx)} style={iconBtnStyle()}>
+                          בחר
+                        </button>
                         <button type="button" onClick={() => moveTopSeller(idx, -1)} style={iconBtnStyle()}>
                           <ArrowUp size={16} />
                         </button>
@@ -530,36 +563,18 @@ export function ContentPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setTopSellers((prev) => prev.filter((z) => z.product_id !== x.product_id))}
+                          onClick={() =>
+                            setTopSellers((prev) => prev.filter((z, zIdx) => (x ? z.product_id !== x.product_id : zIdx !== idx)))
+                          }
                           style={{ ...iconBtnStyle(), color: "var(--destructive)", borderColor: "rgba(239,68,68,0.35)" }}
+                          disabled={!x}
                         >
                           <Trash2 size={16} />
                         </button>
                       </div>
                     </div>
-                    <div style={{ marginTop: 8 }}>
-                      <input
-                        placeholder="טקסט תג (למשל: רב מכר)"
-                        value={x.badge_text ?? ""}
-                        onChange={(e) =>
-                          setTopSellers((prev) =>
-                            prev.map((z) => (z.product_id === x.product_id ? { ...z, badge_text: e.target.value } : z))
-                          )
-                        }
-                        style={{
-                          width: "100%",
-                          background: "var(--input)",
-                          border: "1px solid var(--border)",
-                          borderRadius: 12,
-                          padding: "10px 12px",
-                          color: "var(--foreground)",
-                          outline: "none",
-                          fontSize: 13,
-                        }}
-                      />
-                    </div>
                   </div>
-                ))}
+                )})}
               </div>
             </InputGroup>
           </div>
@@ -567,6 +582,7 @@ export function ContentPage() {
         <SaveBar loading={savingKey === "top_sellers"} onSave={saveTopSellers} />
       </Card>
 
+      {showAdvancedTools ? (
       <Card>
         <SectionTitle title="תקנון / פרטיות / תנאי שימוש" />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
@@ -600,6 +616,7 @@ export function ContentPage() {
           ))}
         </div>
       </Card>
+      ) : null}
     </div>
   );
 }

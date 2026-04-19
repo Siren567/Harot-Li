@@ -15,7 +15,27 @@ enum CouponDiscountType {
 enum OrderStatus {
   NEW
   PAID
+  FULFILLED
+  SHIPPED
+  COMPLETED
   CANCELLED
+  REFUNDED
+}
+
+enum InventoryReason {
+  ORDER_PLACED
+  ORDER_CANCELLED
+  ORDER_REFUNDED
+  MANUAL_ADJUSTMENT
+  INITIAL_STOCK
+  RESTOCK
+  CORRECTION
+}
+
+enum AdminRole {
+  OWNER
+  ADMIN
+  STAFF
 }
 
 model Customer {
@@ -46,14 +66,18 @@ model Order {
 
   status         OrderStatus @default(NEW)
   items          Json
+  legacyItems    Json?
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   redemptions    CouponRedemption[]
+  orderItems     OrderItem[]
 
   @@index([customerId])
   @@index([couponId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model Coupon {
@@ -131,6 +155,7 @@ model Category {
   updatedAt      DateTime @updatedAt
 
   products       CategoryProduct[]
+  productsMain   Product[] @relation("ProductMainCategory")
 
   @@index([parentId])
   @@index([isActive])
@@ -142,6 +167,7 @@ model CategoryProduct {
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
 
   @@unique([categoryId, productId])
@@ -149,3 +175,129 @@ model CategoryProduct {
   @@index([productId])
 }
 
+model Product {
+  id                       String    @id @default(uuid())
+  title                    String
+  slug                     String    @unique
+  description              String?
+  imageUrl                 String?
+  galleryImages            Json?
+  basePrice                Int
+  salePrice                Int?
+  isActive                 Boolean   @default(true)
+  isFeatured               Boolean   @default(false)
+  allowCustomerImageUpload Boolean   @default(false)
+  mainCategoryId           String?
+  mainCategory             Category? @relation("ProductMainCategory", fields: [mainCategoryId], references: [id], onDelete: SetNull)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  variants    ProductVariant[]
+  categories  CategoryProduct[]
+  orderItems  OrderItem[]
+
+  @@index([isActive])
+  @@index([isFeatured])
+  @@index([mainCategoryId])
+}
+
+model ProductVariant {
+  id            String    @id @default(uuid())
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku           String?   @unique
+  color         String?
+  pendantType   String?
+  material      String?
+  priceOverride Int?
+  stock         Int       @default(0)
+  lowThreshold  Int       @default(5)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  orderItems    OrderItem[]
+  inventoryLogs InventoryLog[]
+
+  @@unique([productId, color, pendantType, material])
+  @@index([productId])
+  @@index([isActive])
+}
+
+model OrderItem {
+  id            String          @id @default(uuid())
+  orderId       String
+  order         Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId     String?
+  product       Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variantId     String?
+  variant       ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  nameSnapshot  String
+  unitPrice     Int
+  qty           Int
+  engravingText String?
+  color         String?
+  pendantShape  String?
+  material      String?
+  createdAt     DateTime        @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([variantId])
+}
+
+model InventoryLog {
+  id        String          @id @default(uuid())
+  variantId String
+  variant   ProductVariant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  delta     Int
+  reason    InventoryReason
+  orderId   String?
+  actorId   String?
+  note      String?
+  createdAt DateTime        @default(now())
+
+  @@index([variantId])
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+// --- Legacy Supabase-managed tables (declared so Prisma db push does NOT drop them).
+// These are owned by supabase/schema.sql, not Prisma. Phase A reads from them;
+// Phase B+ will phase out reads after verification, then these models + tables
+// can be removed safely.
+model LegacyProduct {
+  id              String   @id @default(uuid()) @db.Uuid
+  title           String
+  slug            String   @unique
+  image_url       String?
+  price           Int
+  is_active       Boolean  @default(true)
+  is_customizable Boolean? @default(false)
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("products")
+}
+
+model LegacySiteSetting {
+  id         String   @id @default(uuid()) @db.Uuid
+  key        String   @unique
+  value      Json     @default("{}")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("site_settings")
+}
+
+model AdminUser {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  fullName     String?
+  role         AdminRole  @default(ADMIN)
+  isActive     Boolean    @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}

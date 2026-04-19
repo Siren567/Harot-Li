@@ -25,6 +25,17 @@ type Product = {
   subcategory_ids?: string[];
 };
 
+type ProductVariant = {
+  id: string;
+  productId: string;
+  color: string | null;
+  pendantType: string | null;
+  material: string | null;
+  stock: number;
+  priceOverride: number | null;
+  isActive: boolean;
+};
+
 type CategoryNode = {
   id: string;
   name: string;
@@ -36,40 +47,7 @@ type CategoryNode = {
 type CategoryTreeResponse = { categories: CategoryNode[] };
 
 const DEFAULT_CATEGORY_TREE: CategoryNode[] = [
-  {
-    id: "seed-main-necklaces",
-    name: "שרשראות",
-    parentId: null,
-    isActive: true,
-    subcategories: [
-      { id: "seed-sub-necklaces-men", name: "שרשראות גברים", parentId: "seed-main-necklaces", isActive: true },
-      { id: "seed-sub-necklaces-women", name: "שרשראות נשים", parentId: "seed-main-necklaces", isActive: true },
-    ],
-  },
-  {
-    id: "seed-main-bracelets",
-    name: "צמידים",
-    parentId: null,
-    isActive: true,
-    subcategories: [
-      { id: "seed-sub-bracelets-men", name: "צמידי גברים", parentId: "seed-main-bracelets", isActive: true },
-      { id: "seed-sub-bracelets-women", name: "צמידי נשים", parentId: "seed-main-bracelets", isActive: true },
-    ],
-  },
-  {
-    id: "seed-main-keychains",
-    name: "מחזיקי מפתחות",
-    parentId: null,
-    isActive: true,
-    subcategories: [],
-  },
-  {
-    id: "seed-main-other",
-    name: "אחר",
-    parentId: null,
-    isActive: true,
-    subcategories: [],
-  },
+  
 ];
 
 type ProductForm = {
@@ -274,6 +252,23 @@ function normalizeProducts(input: unknown): Product[] {
     .filter((p) => p.id && p.title);
 }
 
+function normalizeVariants(input: unknown): ProductVariant[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
+    .map((row) => ({
+      id: String(row.id ?? ""),
+      productId: String(row.productId ?? ""),
+      color: typeof row.color === "string" ? row.color : null,
+      pendantType: typeof row.pendantType === "string" ? row.pendantType : null,
+      material: typeof row.material === "string" ? row.material : null,
+      stock: Number.isFinite(Number(row.stock)) ? Number(row.stock) : 0,
+      priceOverride: Number.isFinite(Number(row.priceOverride)) ? Number(row.priceOverride) : null,
+      isActive: row.isActive !== false,
+    }))
+    .filter((v) => v.id && v.productId);
+}
+
 export function ProductEditorPage() {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
@@ -281,12 +276,15 @@ export function ProductEditorPage() {
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
+  const [variantsByProduct, setVariantsByProduct] = useState<Record<string, ProductVariant[]>>({});
   const [categoryTree, setCategoryTree] = useState<CategoryNode[]>([]);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form, setForm] = useState<ProductForm>(toForm());
   const [openCreateWhenEmpty, setOpenCreateWhenEmpty] = useState(false);
   const [seedingDemo, setSeedingDemo] = useState(false);
   const [productsFetchError, setProductsFetchError] = useState<string | null>(null);
+  const [savingVariantId, setSavingVariantId] = useState<string | null>(null);
+  const [variantDrafts, setVariantDrafts] = useState<Record<string, ProductVariant>>({});
 
   function findMainCategoryId(mainKey: ProductSeedPayload["mainKey"]) {
     const keyMap: Record<ProductSeedPayload["mainKey"], string[]> = {
@@ -363,11 +361,23 @@ export function ProductEditorPage() {
     try {
       const params = new URLSearchParams();
       if (query.trim()) params.set("q", query.trim());
-      const out = await apiFetch<{ products: Product[] }>(`/api/products?${params.toString()}`);
-      setProducts(normalizeProducts(out?.products));
+      const [out, variantsOut] = await Promise.all([
+        apiFetch<{ products: Product[] }>(`/api/products?${params.toString()}`),
+        apiFetch<{ variants: ProductVariant[] }>("/api/variants"),
+      ]);
+      const normalizedProducts = normalizeProducts(out?.products);
+      const normalizedVariants = normalizeVariants(variantsOut?.variants);
+      const grouped = normalizedVariants.reduce<Record<string, ProductVariant[]>>((acc, variant) => {
+        if (!acc[variant.productId]) acc[variant.productId] = [];
+        acc[variant.productId].push(variant);
+        return acc;
+      }, {});
+      setProducts(normalizedProducts);
+      setVariantsByProduct(grouped);
       setProductsFetchError(null);
     } catch {
       setProducts([]);
+      setVariantsByProduct({});
       setProductsFetchError("אין חיבור לשרת המוצרים כרגע. בדוק שה־Backend רץ על פורט 4000 ונסה שוב.");
       toast("טעינת מוצרים נכשלה", "error");
     } finally {
@@ -404,6 +414,13 @@ export function ProductEditorPage() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
+
+  useEffect(() => {
+    const drafts: Record<string, ProductVariant> = {};
+    const source = editing?.id ? variantsByProduct[editing.id] ?? [] : [];
+    for (const variant of source) drafts[variant.id] = { ...variant };
+    setVariantDrafts(drafts);
+  }, [editing?.id, variantsByProduct]);
 
   const parsedPriceAgorot = parseShekelsToAgorot(form.price);
   const parsedSalePriceAgorot = form.sale_price.trim() ? parseShekelsToAgorot(form.sale_price) : null;
@@ -499,6 +516,29 @@ export function ProductEditorPage() {
     setOpenCreateWhenEmpty(true);
   }
 
+  async function onSaveVariant(variant: ProductVariant, patch: Partial<ProductVariant>) {
+    setSavingVariantId(variant.id);
+    try {
+      await apiFetch<{ variant: ProductVariant }>(`/api/variants/${variant.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          color: patch.color,
+          pendantType: patch.pendantType,
+          material: patch.material,
+          stock: patch.stock,
+          priceOverride: patch.priceOverride,
+        }),
+      });
+      toast("הווריאציה נשמרה", "success");
+      await refresh({ silent: true });
+    } catch (e: any) {
+      if (e?.error === "VARIANT_COMBINATION_EXISTS") toast("כבר קיימת וריאציה עם אותו שילוב", "error");
+      else toast("שמירת וריאציה נכשלה", "error");
+    } finally {
+      setSavingVariantId(null);
+    }
+  }
+
   async function onToggleVisibility(product: Product) {
     try {
       await apiFetch(`/api/products/${product.id}`, {
@@ -541,6 +581,7 @@ export function ProductEditorPage() {
   const isCreateMode = openCreateWhenEmpty || Boolean(editing);
   const selectedMainCategory = categoryTree.find((c) => c.id === form.main_category_id) ?? null;
   const availableSubcategories = selectedMainCategory?.subcategories ?? [];
+  const editingVariants = editing ? variantsByProduct[editing.id] ?? [] : [];
   const mainImageInputRef = useRef<HTMLInputElement | null>(null);
   const galleryImageInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
@@ -695,7 +736,7 @@ export function ProductEditorPage() {
                   <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0 }}>
                     <thead>
                       <tr style={{ background: "rgba(255,255,255,0.02)" }}>
-                        {["מוצר", "קטגוריה / תת קטגוריה", "תאריך הוספה", "סטטוס", "מחיר", "פעולות"].map((h) => (
+                        {["מוצר", "קטגוריה / תת קטגוריה", "מלאי", "תאריך הוספה", "סטטוס", "מחיר", "פעולות"].map((h) => (
                           <th
                             key={h}
                             style={{
@@ -750,6 +791,19 @@ export function ProductEditorPage() {
                                 .filter(Boolean) as string[];
                               if (!main && subs.length === 0) return "—";
                               return `${main?.name ?? "—"}${subs.length ? ` / ${subs.join(", ")}` : ""}`;
+                            })()}
+                          </td>
+                          <td style={{ padding: "12px 14px", color: "var(--foreground-secondary)", fontSize: 12 }}>
+                            {(() => {
+                              const variants = variantsByProduct[p.id] ?? [];
+                              if (variants.length === 0) return "—";
+                              const totalStock = variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+                              const preview = variants
+                                .slice(0, 2)
+                                .map((v) => `${v.color || "—"} / ${v.pendantType || "—"}: ${v.stock}`)
+                                .join(" | ");
+                              const extra = variants.length > 2 ? ` (+${variants.length - 2})` : "";
+                              return `${totalStock} יח' (${preview}${extra})`;
                             })()}
                           </td>
                           <td style={{ padding: "12px 14px", color: "var(--muted-foreground)", fontSize: 12 }}>{fmtDate(p.created_at)}</td>
@@ -1099,6 +1153,100 @@ export function ProductEditorPage() {
               </div>
             </InputGroup>
           </div>
+
+          {editing ? (
+            <InputGroup label={`ווריאציות מוצר (${editingVariants.length})`}>
+              {editingVariants.length === 0 ? (
+                <div style={{ fontSize: 12, color: "var(--muted-foreground)", padding: "10px 12px", border: "1px dashed var(--border)", borderRadius: 10 }}>
+                  אין ווריאציות למוצר הזה כרגע.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {editingVariants.map((variant) => {
+                    const draft = variantDrafts[variant.id] ?? variant;
+                    return (
+                      <div
+                        key={variant.id}
+                        style={{
+                          border: "1px solid var(--border)",
+                          borderRadius: 10,
+                          padding: 10,
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr 1fr 110px 130px auto",
+                          gap: 8,
+                          alignItems: "center",
+                        }}
+                      >
+                        <TextInput
+                          value={draft.color ?? ""}
+                          onChange={(e) =>
+                            setVariantDrafts((prev) => ({
+                              ...prev,
+                              [variant.id]: { ...draft, color: e.target.value || null },
+                            }))
+                          }
+                          placeholder="צבע"
+                        />
+                        <TextInput
+                          value={draft.pendantType ?? ""}
+                          onChange={(e) =>
+                            setVariantDrafts((prev) => ({
+                              ...prev,
+                              [variant.id]: { ...draft, pendantType: e.target.value || null },
+                            }))
+                          }
+                          placeholder="סוג תליון"
+                        />
+                        <TextInput
+                          value={draft.material ?? ""}
+                          onChange={(e) =>
+                            setVariantDrafts((prev) => ({
+                              ...prev,
+                              [variant.id]: { ...draft, material: e.target.value || null },
+                            }))
+                          }
+                          placeholder="חומר"
+                        />
+                        <TextInput
+                          type="number"
+                          min="0"
+                          value={String(draft.stock)}
+                          onChange={(e) =>
+                            setVariantDrafts((prev) => ({
+                              ...prev,
+                              [variant.id]: { ...draft, stock: Math.max(0, Number(e.target.value || 0)) },
+                            }))
+                          }
+                          placeholder="מלאי"
+                        />
+                        <TextInput
+                          type="number"
+                          min="0"
+                          value={draft.priceOverride === null ? "" : String((draft.priceOverride / 100).toFixed(2))}
+                          onChange={(e) => {
+                            const raw = e.target.value.trim();
+                            const parsed = raw === "" ? null : parseShekelsToAgorot(raw);
+                            setVariantDrafts((prev) => ({
+                              ...prev,
+                              [variant.id]: { ...draft, priceOverride: parsed },
+                            }));
+                          }}
+                          placeholder='מחיר מיוחד (ש"ח)'
+                        />
+                        <SecondaryButton
+                          type="button"
+                          disabled={savingVariantId === variant.id}
+                          onClick={() => onSaveVariant(variant, draft)}
+                        >
+                          {savingVariantId === variant.id ? "שומר..." : "שמור"}
+                        </SecondaryButton>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </InputGroup>
+          ) : null}
 
           <label
             style={{

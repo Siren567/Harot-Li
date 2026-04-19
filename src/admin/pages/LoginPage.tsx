@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { Eye, EyeOff, Lock, User, Gem, AlertCircle } from "lucide-react";
-import { setAdminAuthed, TEST_ADMIN_PASSWORD, TEST_ADMIN_USERNAME } from "../state/auth";
+import { setAdminSession } from "../state/auth";
+import { apiFetch } from "../lib/api";
 
 export function LoginPage() {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -16,13 +17,18 @@ export function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      // Client-side test auth (no backend)
-      if (username.trim() === TEST_ADMIN_USERNAME && password === TEST_ADMIN_PASSWORD) {
-        setAdminAuthed();
-        window.location.assign("/admin");
-        return;
-      }
-      setError("שם משתמש או סיסמה שגויים");
+      const resp = await apiFetch<{ token: string; user: { id: string; email: string; fullName: string | null; role: string } }>(
+        "/api/admin/auth/login",
+        {
+          method: "POST",
+          body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+        }
+      );
+      setAdminSession(resp.token, resp.user);
+      window.location.assign("/admin");
+    } catch (err: any) {
+      if (err?.status === 401) setError("שם משתמש או סיסמה שגויים");
+      else setError("שגיאה בהתחברות, נסה שוב");
     } finally {
       setLoading(false);
     }
@@ -109,7 +115,7 @@ export function LoginPage() {
                   marginBottom: "7px",
                 }}
               >
-                שם משתמש
+                אימייל
               </label>
               <div style={{ position: "relative" }}>
                 <span
@@ -125,10 +131,10 @@ export function LoginPage() {
                   <User size={15} />
                 </span>
                 <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@example.com"
                   required
                   autoFocus
                   style={inputStyle(!!error)}
@@ -234,21 +240,6 @@ export function LoginPage() {
             </button>
           </form>
 
-          <div
-            style={{
-              marginTop: "18px",
-              paddingTop: "12px",
-              borderTop: "1px solid var(--border-subtle)",
-              fontSize: "12px",
-              color: "var(--muted-foreground)",
-              lineHeight: 1.55,
-            }}
-          >
-            <div style={{ fontWeight: 700, color: "var(--foreground-secondary)", marginBottom: "6px" }}>פרטי טסט</div>
-            שם משתמש: <code style={{ color: "var(--primary)" }}>{TEST_ADMIN_USERNAME}</code>
-            <br />
-            סיסמה: <code style={{ color: "var(--primary)" }}>{TEST_ADMIN_PASSWORD}</code>
-          </div>
         </div>
 
         <p style={{ textAlign: "center", color: "var(--muted-foreground)", fontSize: "11px", marginTop: "20px" }}>

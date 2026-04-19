@@ -4,14 +4,20 @@ import { prisma } from "../db/prisma.js";
 import { reasonToHebrew, validateCoupon } from "../logic/coupons/validateCoupon.js";
 import { getAnalyticsForRange } from "../services/analytics.service.js";
 import { getSupabaseAdminClient } from "../supabase/client.js";
+import { requireAdmin } from "../lib/auth.js";
 
 export const ordersRouter = Router();
 
 const OrderItemSchema = z.object({
   productId: z.string().min(1).max(120).optional().nullable(),
+  variantId: z.string().min(1).max(120).optional().nullable(),
   name: z.string().min(1).max(200),
   qty: z.number().int().min(1).max(999),
   unitPrice: z.number().int().min(0),
+  engravingText: z.string().max(400).optional().nullable(),
+  color: z.string().max(80).optional().nullable(),
+  pendantShape: z.string().max(80).optional().nullable(),
+  material: z.string().max(80).optional().nullable(),
 });
 
 const CreateOrderSchema = z.object({
@@ -35,7 +41,7 @@ function productExtraKey(productId: string) {
   return `product_extra:${productId}`;
 }
 
-ordersRouter.get("/", async (req, res) => {
+ordersRouter.get("/", requireAdmin, async (req, res) => {
   const limitRaw = Number(req.query.limit ?? 100);
   const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(500, Math.floor(limitRaw))) : 100;
   try {
@@ -44,6 +50,7 @@ ordersRouter.get("/", async (req, res) => {
       take: limit,
       include: {
         customer: true,
+        orderItems: true,
       },
     });
     res.json({ orders });
@@ -52,7 +59,7 @@ ordersRouter.get("/", async (req, res) => {
   }
 });
 
-ordersRouter.get("/dashboard", async (_req, res) => {
+ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
   try {
     const now = new Date();
     const monthAgo = new Date(now);
@@ -242,6 +249,32 @@ async function generateUniqueOrderNumber() {
   return `HG-${Date.now()}`;
 }
 
+// Resolve which variant should back an order line. Picks explicit variantId,
+// else best match on (productId, color, pendantType, material), else first variant.
+async function resolveVariant(
+  tx: any,
+  item: z.infer<typeof OrderItemSchema>
+): Promise<{ variantId: string | null; productId: string | null }> {
+  if (item.variantId) {
+    const v = await tx.productVariant.findUnique({ where: { id: item.variantId } });
+    if (v) return { variantId: v.id, productId: v.productId };
+  }
+  const productId = item.productId?.trim() || null;
+  if (!productId) return { variantId: null, productId: null };
+  const variants = await tx.productVariant.findMany({
+    where: { productId, isActive: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (variants.length === 0) return { variantId: null, productId };
+  const match = variants.find(
+    (v: any) =>
+      (item.color ? v.color === item.color : true) &&
+      (item.pendantShape ? v.pendantType === item.pendantShape : true) &&
+      (item.material ? v.material === item.material : true)
+  );
+  return { variantId: (match || variants[0]).id, productId };
+}
+
 ordersRouter.post("/", async (req, res) => {
   const parsed = CreateOrderSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "VALIDATION", details: parsed.error.flatten() });
@@ -267,18 +300,48 @@ ordersRouter.post("/", async (req, res) => {
         },
       });
 
+      // Resolve variants + validate stock BEFORE any writes.
+      const resolved: Array<{ item: z.infer<typeof OrderItemSchema>; variantId: string | null; productId: string | null }> = [];
+      for (const item of items) {
+        const r = await resolveVariant(tx, item);
+        resolved.push({ item, ...r });
+      }
+
+      // Aggregate qty per variant (same variant might appear on multiple lines).
+      const variantDemand = new Map<string, number>();
+      for (const r of resolved) {
+        if (!r.variantId) continue;
+        variantDemand.set(r.variantId, (variantDemand.get(r.variantId) ?? 0) + r.item.qty);
+      }
+
+      // Lock the variant rows so concurrent orders can't oversell.
+      if (variantDemand.size > 0) {
+        const variantIds = Array.from(variantDemand.keys());
+        const locked: Array<{ id: string; stock: number; productId: string }> = await tx.$queryRawUnsafe(
+          `SELECT id, stock, "productId" FROM "ProductVariant" WHERE id = ANY($1) FOR UPDATE`,
+          variantIds
+        );
+        for (const v of locked) {
+          const needed = variantDemand.get(v.id) ?? 0;
+          if (v.stock < needed) {
+            return { ok: false as const, reason: "OUT_OF_STOCK" as const, variantId: v.id, available: v.stock };
+          }
+        }
+      }
+
+      // Coupon validation (unchanged).
       let discountAmount = 0;
       let freeShipping = false;
       let appliedCouponId: string | null = null;
 
       if (code) {
         const coupon = await tx.coupon.findUnique({ where: { code } });
-        if (!coupon) {
-          return { ok: false as const, reason: "NOT_FOUND" as const };
-        }
+        if (!coupon) return { ok: false as const, reason: "NOT_FOUND" as const };
 
         const customerOrdersCount = await tx.order.count({ where: { customerId: customer.id } });
-        const customerRedemptionsCount = await tx.couponRedemption.count({ where: { couponId: coupon.id, customerId: customer.id } });
+        const customerRedemptionsCount = await tx.couponRedemption.count({
+          where: { couponId: coupon.id, customerId: customer.id },
+        });
 
         const validation = validateCoupon({
           coupon,
@@ -291,9 +354,7 @@ ordersRouter.post("/", async (req, res) => {
           existingCouponCode: null,
         });
 
-        if (!validation.ok) {
-          return { ok: false as const, reason: validation.reason };
-        }
+        if (!validation.ok) return { ok: false as const, reason: validation.reason };
 
         discountAmount = validation.discountAmount;
         freeShipping = validation.freeShipping;
@@ -314,46 +375,125 @@ ordersRouter.post("/", async (req, res) => {
           discountAmount,
           total,
           couponId: appliedCouponId,
-          items: items as unknown as any,
+          items: items as unknown as any, // kept for legacy readers; OrderItem rows are canonical
         },
       });
 
-      // Coupon redemption is recorded only after successful payment callback.
+      // Create normalized OrderItem rows.
+      await tx.orderItem.createMany({
+        data: resolved.map((r) => ({
+          orderId: order.id,
+          productId: r.productId,
+          variantId: r.variantId,
+          nameSnapshot: r.item.name,
+          unitPrice: r.item.unitPrice,
+          qty: r.item.qty,
+          engravingText: r.item.engravingText ?? null,
+          color: r.item.color ?? null,
+          pendantShape: r.item.pendantShape ?? null,
+          material: r.item.material ?? null,
+        })),
+      });
+
+      // Transactional stock deduction + InventoryLog.
+      for (const [variantId, qty] of variantDemand.entries()) {
+        await tx.productVariant.update({
+          where: { id: variantId },
+          data: { stock: { decrement: qty } },
+        });
+        await tx.inventoryLog.create({
+          data: {
+            variantId,
+            delta: -qty,
+            reason: "ORDER_PLACED",
+            orderId: order.id,
+          },
+        });
+      }
 
       return { ok: true as const, order };
     });
 
     if (!result.ok) {
       const reason = result.reason;
-      return res.status(400).json({ ok: false, reason, message: reasonToHebrew(reason) });
-    }
-
-    const productQtyMap = new Map<string, number>();
-    for (const item of items) {
-      const productId = String(item.productId || "").trim();
-      if (!productId) continue;
-      productQtyMap.set(productId, (productQtyMap.get(productId) ?? 0) + item.qty);
-    }
-    if (productQtyMap.size > 0) {
-      try {
-        const sb = getSupabaseAdminClient();
-        for (const [productId, qty] of productQtyMap.entries()) {
-          const key = productExtraKey(productId);
-          const { data: row } = await sb.from("site_settings").select("value").eq("key", key).maybeSingle();
-          const value = row?.value && typeof row.value === "object" && !Array.isArray(row.value) ? { ...row.value } : {};
-          const stockRaw = Number((value as any).stock ?? 0);
-          const nextStock = Math.max(0, (Number.isFinite(stockRaw) ? Math.round(stockRaw) : 0) - qty);
-          (value as any).stock = nextStock;
-          if (!Number.isFinite(Number((value as any).low_threshold))) (value as any).low_threshold = 5;
-          await sb.from("site_settings").upsert({ key, value }, { onConflict: "key" });
-        }
-      } catch {
-        // Keep order creation successful even if stock sync failed.
-      }
+      const status = reason === "OUT_OF_STOCK" ? 409 : 400;
+      const message = reason === "OUT_OF_STOCK" ? "אחד המוצרים אזל מהמלאי" : reasonToHebrew(reason as any);
+      return res.status(status).json({ ok: false, reason, message });
     }
 
     return res.status(201).json({ ok: true, order: result.order });
   } catch (e: any) {
+    // CHECK constraint stock >= 0 surfaces as transaction failure → never oversells.
+    if (String(e?.message || "").includes("variant_stock_nonneg")) {
+      return res.status(409).json({ ok: false, reason: "OUT_OF_STOCK" });
+    }
+    return res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// --- Order status transitions ---
+const AllowedTransitions: Record<string, string[]> = {
+  NEW:        ["PAID", "CANCELLED"],
+  PAID:       ["FULFILLED", "CANCELLED", "REFUNDED"],
+  FULFILLED:  ["SHIPPED", "CANCELLED", "REFUNDED"],
+  SHIPPED:    ["COMPLETED", "REFUNDED"],
+  COMPLETED:  ["REFUNDED"],
+  CANCELLED:  [],
+  REFUNDED:   [],
+};
+
+const StatusUpdateSchema = z.object({
+  status: z.enum(["NEW", "PAID", "FULFILLED", "SHIPPED", "COMPLETED", "CANCELLED", "REFUNDED"]),
+  note: z.string().max(400).optional().nullable(),
+});
+
+ordersRouter.patch("/:id/status", requireAdmin, async (req, res) => {
+  const parsed = StatusUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "VALIDATION", details: parsed.error.flatten() });
+  const { status: nextStatus, note } = parsed.data;
+
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({ where: { id: req.params.id }, include: { orderItems: true } });
+      if (!order) return { ok: false as const, code: 404, reason: "NOT_FOUND" as const };
+
+      if (order.status === nextStatus) return { ok: true as const, order };
+
+      const allowed = AllowedTransitions[order.status] ?? [];
+      if (!allowed.includes(nextStatus)) {
+        return { ok: false as const, code: 400, reason: "INVALID_TRANSITION" as const };
+      }
+
+      const restoresStock = nextStatus === "CANCELLED" || nextStatus === "REFUNDED";
+      if (restoresStock) {
+        for (const it of order.orderItems) {
+          if (!it.variantId) continue;
+          await tx.productVariant.update({
+            where: { id: it.variantId },
+            data: { stock: { increment: it.qty } },
+          });
+          await tx.inventoryLog.create({
+            data: {
+              variantId: it.variantId,
+              delta: it.qty,
+              reason: nextStatus === "CANCELLED" ? "ORDER_CANCELLED" : "ORDER_REFUNDED",
+              orderId: order.id,
+              note: note ?? null,
+            },
+          });
+        }
+      }
+
+      const next = await tx.order.update({
+        where: { id: order.id },
+        data: { status: nextStatus as any },
+      });
+      return { ok: true as const, order: next };
+    });
+
+    if (!updated.ok) return res.status(updated.code).json({ error: updated.reason });
+    return res.json({ ok: true, order: updated.order });
+  } catch {
     return res.status(500).json({ error: "SERVER_ERROR" });
   }
 });

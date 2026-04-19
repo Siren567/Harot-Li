@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { prisma } from "../db/prisma.js";
 import { getSupabaseAdminClient } from "../supabase/client.js";
 
 export type ProductRow = {
@@ -57,79 +58,6 @@ function productExtraKey(productId: string) {
   return `product_extra:${productId}`;
 }
 
-function normalizeExtraRow(row: any) {
-  const v = row?.value && typeof row.value === "object" && !Array.isArray(row.value) ? row.value : {};
-  return {
-    sale_price: typeof v.sale_price === "number" && Number.isFinite(v.sale_price) ? Math.max(0, Math.round(v.sale_price)) : null,
-    available_colors: Array.isArray(v.available_colors) ? v.available_colors.filter((x: any) => typeof x === "string") : [],
-    pendant_types: Array.isArray(v.pendant_types) ? v.pendant_types.filter((x: any) => typeof x === "string") : [],
-    allow_customer_image_upload: Boolean(v.allow_customer_image_upload),
-    gallery_images: Array.isArray(v.gallery_images) ? v.gallery_images.filter((x: any) => typeof x === "string") : [],
-    main_category_id: typeof v.main_category_id === "string" && v.main_category_id.trim() ? v.main_category_id : null,
-    subcategory_ids: Array.isArray(v.subcategory_ids) ? v.subcategory_ids.filter((x: any) => typeof x === "string") : [],
-    stock: typeof v.stock === "number" && Number.isFinite(v.stock) ? Math.max(0, Math.round(v.stock)) : 0,
-    low_threshold:
-      typeof v.low_threshold === "number" && Number.isFinite(v.low_threshold) ? Math.max(0, Math.round(v.low_threshold)) : 5,
-  };
-}
-
-async function loadExtrasMap(productIds: string[]) {
-  if (productIds.length === 0) return new Map<string, ReturnType<typeof normalizeExtraRow>>();
-  const sb = getSupabaseAdminClient();
-  const keys = productIds.map((id) => productExtraKey(id));
-  const map = new Map<string, ReturnType<typeof normalizeExtraRow>>();
-  try {
-    const { data, error } = await sb.from("site_settings").select("key,value").in("key", keys);
-    if (error) return map;
-    for (const row of data ?? []) {
-      const key = String(row.key ?? "");
-      const productId = key.split(":")[1];
-      if (!productId) continue;
-      map.set(productId, normalizeExtraRow(row));
-    }
-  } catch {
-    // Keep products readable even when extras source is unavailable.
-  }
-  return map;
-}
-
-async function saveProductExtras(productId: string, input: z.infer<typeof ProductCreateSchema> | z.infer<typeof ProductUpdateSchema>) {
-  const hasExtraFields =
-    input.sale_price !== undefined ||
-    input.available_colors !== undefined ||
-    input.pendant_types !== undefined ||
-    input.allow_customer_image_upload !== undefined ||
-    input.gallery_images !== undefined ||
-    input.main_category_id !== undefined ||
-    input.subcategory_ids !== undefined ||
-    input.stock !== undefined ||
-    input.low_threshold !== undefined;
-  if (!hasExtraFields) return;
-  const sb = getSupabaseAdminClient();
-  const { data: existingRow, error: existingErr } = await sb
-    .from("site_settings")
-    .select("value")
-    .eq("key", productExtraKey(productId))
-    .maybeSingle();
-  if (existingErr) throw existingErr;
-  const prev = normalizeExtraRow(existingRow ?? {});
-  const value = {
-    sale_price: input.sale_price ?? prev.sale_price,
-    available_colors: input.available_colors ?? prev.available_colors,
-    pendant_types: input.pendant_types ?? prev.pendant_types,
-    allow_customer_image_upload: input.allow_customer_image_upload ?? prev.allow_customer_image_upload,
-    gallery_images: input.gallery_images ?? prev.gallery_images,
-    main_category_id: input.main_category_id ?? prev.main_category_id,
-    subcategory_ids: input.subcategory_ids ?? prev.subcategory_ids,
-    stock: input.stock ?? prev.stock,
-    low_threshold: input.low_threshold ?? prev.low_threshold,
-  };
-  const { error } = await sb
-    .from("site_settings")
-    .upsert({ key: productExtraKey(productId), value }, { onConflict: "key" });
-  if (error) throw error;
-}
-
 function slugify(input: string) {
   return input
     .trim()
@@ -141,88 +69,286 @@ function slugify(input: string) {
 }
 
 async function resolveUniqueSlug(baseSlug: string, excludeId?: string) {
-  const sb = getSupabaseAdminClient();
   const base = baseSlug || `product-${Date.now()}`;
   for (let i = 0; i < 200; i += 1) {
     const candidate = i === 0 ? base : `${base}-${i + 1}`;
-    let query = sb.from("products").select("id").eq("slug", candidate).limit(1);
-    if (excludeId) query = query.neq("id", excludeId);
-    const { data, error } = await query;
-    if (error) throw error;
-    if (!data || data.length === 0) return candidate;
+    const existing = await prisma.product.findFirst({
+      where: { slug: candidate, ...(excludeId ? { NOT: { id: excludeId } } : {}) },
+      select: { id: true },
+    });
+    if (!existing) return candidate;
   }
   return `${base}-${Date.now()}`;
 }
 
+// Shape a Prisma Product + its variants + category links into legacy ProductRow.
+function toProductRow(p: any): ProductRow {
+  const variants = Array.isArray(p.variants) ? p.variants : [];
+  const colors = Array.from(
+    new Set(variants.map((v: any) => v.color).filter((x: any) => typeof x === "string" && x.trim()))
+  ) as string[];
+  const pendants = Array.from(
+    new Set(variants.map((v: any) => v.pendantType).filter((x: any) => typeof x === "string" && x.trim()))
+  ) as string[];
+  const totalStock = variants.reduce((sum: number, v: any) => sum + (Number(v.stock) || 0), 0);
+  const lowThreshold = variants.length ? Math.max(...variants.map((v: any) => Number(v.lowThreshold) || 0)) : 5;
+  const subcategoryIds: string[] = Array.isArray(p.categories)
+    ? p.categories.map((c: any) => c.categoryId).filter((id: string) => id && id !== p.mainCategoryId)
+    : [];
+  return {
+    id: p.id,
+    title: p.title,
+    slug: p.slug,
+    image_url: p.imageUrl ?? null,
+    price: p.basePrice,
+    is_active: p.isActive,
+    created_at: p.createdAt instanceof Date ? p.createdAt.toISOString() : String(p.createdAt),
+    updated_at: p.updatedAt instanceof Date ? p.updatedAt.toISOString() : String(p.updatedAt),
+    sale_price: p.salePrice ?? null,
+    available_colors: colors,
+    pendant_types: pendants,
+    allow_customer_image_upload: Boolean(p.allowCustomerImageUpload),
+    gallery_images: Array.isArray(p.galleryImages) ? p.galleryImages : [],
+    main_category_id: p.mainCategoryId ?? null,
+    subcategory_ids: subcategoryIds,
+    stock: totalStock,
+    low_threshold: lowThreshold,
+  };
+}
+
 export async function listProducts(params?: { q?: string; active?: boolean }): Promise<ProductRow[]> {
-  const sb = getSupabaseAdminClient();
-  let query = sb.from("products").select("*");
+  const where: any = {};
+  if (params?.active !== undefined) where.isActive = params.active;
   if (params?.q?.trim()) {
     const q = params.q.trim();
-    query = query.or(`title.ilike.%${q}%,slug.ilike.%${q}%`);
+    where.OR = [
+      { title: { contains: q, mode: "insensitive" } },
+      { slug: { contains: q, mode: "insensitive" } },
+    ];
   }
-  if (params?.active !== undefined) {
-    query = query.eq("is_active", params.active);
+  const products = await prisma.product.findMany({
+    where,
+    orderBy: { updatedAt: "desc" },
+    include: { variants: true, categories: true },
+  });
+  return products.map(toProductRow);
+}
+
+async function writeLegacyExtras(productId: string, input: any, previous?: any) {
+  // Dual-write to site_settings so any storefront code still reading the legacy path stays in sync.
+  const sb = getSupabaseAdminClient();
+  const value = {
+    sale_price: input.sale_price ?? previous?.sale_price ?? null,
+    available_colors: input.available_colors ?? previous?.available_colors ?? [],
+    pendant_types: input.pendant_types ?? previous?.pendant_types ?? [],
+    allow_customer_image_upload: input.allow_customer_image_upload ?? previous?.allow_customer_image_upload ?? false,
+    gallery_images: input.gallery_images ?? previous?.gallery_images ?? [],
+    main_category_id: input.main_category_id ?? previous?.main_category_id ?? null,
+    subcategory_ids: input.subcategory_ids ?? previous?.subcategory_ids ?? [],
+    stock: input.stock ?? previous?.stock ?? 0,
+    low_threshold: input.low_threshold ?? previous?.low_threshold ?? 5,
+  };
+  try {
+    await sb.from("site_settings").upsert({ key: productExtraKey(productId), value }, { onConflict: "key" });
+  } catch {
+    // Legacy sync is best-effort; Prisma is the source of truth.
   }
-  const { data, error } = await query.order("updated_at", { ascending: false });
-  if (error) throw error;
-  const rows = (data ?? []) as ProductRow[];
-  const extrasMap = await loadExtrasMap(rows.map((r) => r.id));
-  return rows.map((row) => ({ ...row, ...(extrasMap.get(row.id) ?? {}) }));
+}
+
+async function syncVariantsFromMatrix(
+  productId: string,
+  colors: string[] | undefined,
+  pendants: string[] | undefined,
+  stock: number | undefined,
+  lowThreshold: number | undefined
+) {
+  // If caller didn't provide any axis data, leave variants alone.
+  if (colors === undefined && pendants === undefined && stock === undefined && lowThreshold === undefined) return;
+  const c = (colors ?? []).filter((s) => typeof s === "string" && s.trim());
+  const p = (pendants ?? []).filter((s) => typeof s === "string" && s.trim());
+  const axes = [c.length ? c : [null], p.length ? p : [null]];
+  const combos: Array<{ color: string | null; pendantType: string | null }> = [];
+  for (const col of axes[0] as (string | null)[]) {
+    for (const pen of axes[1] as (string | null)[]) {
+      combos.push({ color: col, pendantType: pen });
+    }
+  }
+
+  const existing = await prisma.productVariant.findMany({ where: { productId } });
+  const keyOf = (v: { color: string | null; pendantType: string | null }) =>
+    `${v.color ?? ""}||${v.pendantType ?? ""}`;
+  const existingMap = new Map(existing.map((v) => [keyOf(v), v]));
+  const targetKeys = new Set(combos.map(keyOf));
+
+  // Create missing variants.
+  for (const combo of combos) {
+    if (existingMap.has(keyOf(combo))) continue;
+    await prisma.productVariant.create({
+      data: {
+        productId,
+        color: combo.color,
+        pendantType: combo.pendantType,
+        stock: 0,
+        lowThreshold: lowThreshold ?? 5,
+        isActive: true,
+      },
+    });
+  }
+
+  // Deactivate variants no longer in the matrix (keep rows for history).
+  for (const v of existing) {
+    if (!targetKeys.has(keyOf(v)) && v.isActive) {
+      await prisma.productVariant.update({ where: { id: v.id }, data: { isActive: false } });
+    }
+  }
+
+  // If a single default variant exists and stock was provided, set it.
+  if (stock !== undefined) {
+    const current = await prisma.productVariant.findMany({ where: { productId, isActive: true }, orderBy: { createdAt: "asc" } });
+    if (current.length === 1) {
+      await prisma.productVariant.update({ where: { id: current[0].id }, data: { stock } });
+    }
+  }
+  if (lowThreshold !== undefined) {
+    await prisma.productVariant.updateMany({ where: { productId }, data: { lowThreshold } });
+  }
+}
+
+async function syncCategoryLinks(productId: string, mainCategoryId: string | null | undefined, subcategoryIds: string[] | undefined) {
+  if (mainCategoryId === undefined && subcategoryIds === undefined) return;
+  const desired = new Set<string>();
+  if (mainCategoryId) desired.add(mainCategoryId);
+  for (const id of subcategoryIds ?? []) if (id) desired.add(id);
+
+  // Validate existence.
+  const valid = await prisma.category.findMany({
+    where: { id: { in: Array.from(desired) } },
+    select: { id: true },
+  });
+  const validSet = new Set(valid.map((c) => c.id));
+
+  await prisma.categoryProduct.deleteMany({ where: { productId } });
+  for (const cid of desired) {
+    if (!validSet.has(cid)) continue;
+    await prisma.categoryProduct.create({ data: { productId, categoryId: cid } });
+  }
 }
 
 export async function createProduct(input: unknown): Promise<ProductRow> {
   const parsed = ProductCreateSchema.safeParse(input);
   if (!parsed.success) throw { code: "VALIDATION", details: parsed.error.flatten() };
   const v = parsed.data;
+
   const requestedSlug = slugify(v.slug?.trim() ? v.slug : v.title);
   const slug = await resolveUniqueSlug(requestedSlug);
 
-  const sb = getSupabaseAdminClient();
-  const { data, error } = await sb
-    .from("products")
-    .insert({
+  const mainCategoryExists = v.main_category_id
+    ? !!(await prisma.category.findUnique({ where: { id: v.main_category_id } }))
+    : false;
+
+  const created = await prisma.product.create({
+    data: {
       title: v.title.trim(),
       slug,
-      image_url: v.image_url ?? null,
-      price: v.price,
-      is_active: v.is_active ?? true,
-    })
-    .select("*")
-    .single();
-  if (error) throw error;
-  await saveProductExtras(data.id, v);
-  const extrasMap = await loadExtrasMap([data.id]);
-  return { ...(data as any), ...(extrasMap.get(data.id) ?? {}) };
+      imageUrl: v.image_url ?? null,
+      basePrice: v.price,
+      isActive: v.is_active ?? true,
+      salePrice: v.sale_price ?? null,
+      galleryImages: (v.gallery_images ?? []) as any,
+      allowCustomerImageUpload: v.allow_customer_image_upload ?? false,
+      mainCategoryId: mainCategoryExists ? v.main_category_id! : null,
+    },
+  });
+
+  // Dual-write to legacy public.products so legacy code still works.
+  try {
+    const sb = getSupabaseAdminClient();
+    await sb.from("products").upsert(
+      {
+        id: created.id,
+        title: created.title,
+        slug: created.slug,
+        image_url: created.imageUrl,
+        price: created.basePrice,
+        is_active: created.isActive,
+      },
+      { onConflict: "id" }
+    );
+  } catch {
+    /* legacy sync best-effort */
+  }
+
+  await syncVariantsFromMatrix(created.id, v.available_colors, v.pendant_types, v.stock, v.low_threshold);
+  await syncCategoryLinks(created.id, v.main_category_id ?? null, v.subcategory_ids);
+  await writeLegacyExtras(created.id, v);
+
+  const full = await prisma.product.findUnique({
+    where: { id: created.id },
+    include: { variants: true, categories: true },
+  });
+  return toProductRow(full);
 }
 
 export async function updateProduct(id: string, input: unknown): Promise<ProductRow> {
   const parsed = ProductUpdateSchema.safeParse(input);
   if (!parsed.success) throw { code: "VALIDATION", details: parsed.error.flatten() };
   const v = parsed.data;
+
   const patch: any = {};
   if (v.title !== undefined) patch.title = v.title.trim();
   if (v.slug !== undefined || v.title !== undefined) {
     const nextBase = slugify(v.slug?.trim() ? v.slug : v.title ?? "");
     patch.slug = await resolveUniqueSlug(nextBase, id);
   }
-  if (v.image_url !== undefined) patch.image_url = v.image_url ?? null;
-  if (v.price !== undefined) patch.price = v.price;
-  if (v.is_active !== undefined) patch.is_active = v.is_active;
+  if (v.image_url !== undefined) patch.imageUrl = v.image_url ?? null;
+  if (v.price !== undefined) patch.basePrice = v.price;
+  if (v.is_active !== undefined) patch.isActive = v.is_active;
+  if (v.sale_price !== undefined) patch.salePrice = v.sale_price ?? null;
+  if (v.gallery_images !== undefined) patch.galleryImages = v.gallery_images as any;
+  if (v.allow_customer_image_upload !== undefined) patch.allowCustomerImageUpload = v.allow_customer_image_upload;
+  if (v.main_category_id !== undefined) {
+    const exists = v.main_category_id
+      ? !!(await prisma.category.findUnique({ where: { id: v.main_category_id } }))
+      : false;
+    patch.mainCategoryId = exists ? v.main_category_id! : null;
+  }
 
-  const sb = getSupabaseAdminClient();
-  const { data, error } = await sb.from("products").update(patch).eq("id", id).select("*").single();
-  if (error) throw error;
-  await saveProductExtras(id, v);
-  const extrasMap = await loadExtrasMap([id]);
-  return { ...(data as any), ...(extrasMap.get(id) ?? {}) };
+  const updated = await prisma.product.update({ where: { id }, data: patch });
+
+  try {
+    const sb = getSupabaseAdminClient();
+    await sb
+      .from("products")
+      .update({
+        ...(patch.title !== undefined ? { title: patch.title } : {}),
+        ...(patch.slug !== undefined ? { slug: patch.slug } : {}),
+        ...(patch.imageUrl !== undefined ? { image_url: patch.imageUrl } : {}),
+        ...(patch.basePrice !== undefined ? { price: patch.basePrice } : {}),
+        ...(patch.isActive !== undefined ? { is_active: patch.isActive } : {}),
+      })
+      .eq("id", id);
+  } catch {
+    /* legacy sync best-effort */
+  }
+
+  await syncVariantsFromMatrix(id, v.available_colors, v.pendant_types, v.stock, v.low_threshold);
+  await syncCategoryLinks(id, v.main_category_id, v.subcategory_ids);
+  await writeLegacyExtras(id, v);
+
+  const full = await prisma.product.findUnique({
+    where: { id: updated.id },
+    include: { variants: true, categories: true },
+  });
+  return toProductRow(full);
 }
 
 export async function deleteProduct(id: string): Promise<void> {
-  const sb = getSupabaseAdminClient();
-  const { error } = await sb.from("products").delete().eq("id", id);
-  if (error) throw error;
-  const { error: extraErr } = await sb.from("site_settings").delete().eq("key", productExtraKey(id));
-  if (extraErr) throw extraErr;
+  await prisma.product.delete({ where: { id } });
+  try {
+    const sb = getSupabaseAdminClient();
+    await sb.from("products").delete().eq("id", id);
+    await sb.from("site_settings").delete().eq("key", productExtraKey(id));
+  } catch {
+    /* legacy cleanup best-effort */
+  }
 }
-

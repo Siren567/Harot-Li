@@ -209,10 +209,14 @@ function Drawer({
 
   if (!open) return null;
 
+  const forceSubFlow = mode === "create" && Boolean(initial?.parentId);
+  const isSub = forceSubFlow || form.kind === "sub";
   const nameOk = form.name.trim().length > 0;
-  const kindOk = form.kind === "main" || (form.kind === "sub" && Boolean(form.parentId));
+  const kindOk = !isSub || Boolean(form.parentId);
   const valid = nameOk && kindOk;
-  const selectedParentMeta = form.kind === "sub" ? mains.find((m) => m.id === form.parentId) : null;
+  const selectedParentMeta = isSub ? mains.find((m) => m.id === form.parentId) : null;
+  const sectionTitle = isSub ? "פרטי תת קטגוריה" : "פרטי קטגוריה";
+  const nameLabel = isSub ? "שם תת קטגוריה" : "שם קטגוריה";
 
   async function submit() {
     if (!valid) {
@@ -226,7 +230,7 @@ function Drawer({
         slug: form.slug.trim() ? form.slug.trim() : null,
         description: form.description.trim() ? form.description.trim() : null,
         imageUrl: form.imageUrl.trim() ? form.imageUrl.trim() : null,
-        parentId: form.kind === "sub" ? form.parentId : null,
+        parentId: isSub ? form.parentId : null,
         isActive: Boolean(form.isActive),
         sortOrder: Number(form.sortOrder || 0),
         seoTitle: form.seoTitle.trim() ? form.seoTitle.trim() : null,
@@ -237,6 +241,8 @@ function Drawer({
       onClose();
     } catch (e: any) {
       if (e?.error === "SLUG_EXISTS") toast("Slug כבר קיים", "error");
+      else if (e?.error === "PARENT_NOT_FOUND") toast("קטגוריית האב שנבחרה לא קיימת", "error");
+      else if (e?.error === "PARENT_NOT_MAIN") toast("אפשר לבחור כתבת-אב רק מקטגוריה ראשית", "error");
       else if (e?.error === "HAS_SUBCATEGORIES") toast("לא ניתן למחוק קטגוריה שיש לה תתי-קטגוריות", "error");
       else if (e?.error === "HAS_PRODUCTS") toast("לא ניתן למחוק קטגוריה עם שיוכי מוצרים", "error");
       else toast("שמירה נכשלה", "error");
@@ -266,7 +272,9 @@ function Drawer({
       >
         <div style={{ padding: 18, borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 900, color: "var(--foreground)" }}>{mode === "create" ? "יצירת קטגוריה" : "עריכת קטגוריה"}</div>
+            <div style={{ fontSize: 14, fontWeight: 900, color: "var(--foreground)" }}>
+              {mode === "create" ? (isSub ? "יצירת תת קטגוריה" : "יצירת קטגוריה") : isSub ? "עריכת תת קטגוריה" : "עריכת קטגוריה"}
+            </div>
             <div style={{ marginTop: 2, fontSize: 12, color: "var(--muted-foreground)" }}>שמירה אמיתית בבסיס נתונים</div>
           </div>
           <button
@@ -292,13 +300,13 @@ function Drawer({
 
         <div style={{ padding: 18, overflowY: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ ...cardStyle, padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 900, color: "var(--foreground)" }}>פרטי קטגוריה</div>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "var(--foreground)" }}>{sectionTitle}</div>
             <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              <Field label="שם קטגוריה" required invalid={!nameOk}>
+              <Field label={nameLabel} required invalid={!nameOk}>
                 <input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} style={inputStyle(!nameOk)} />
               </Field>
               <Field label="Slug">
-                <input value={form.slug} onChange={(e) => setForm((p) => ({ ...p, slug: e.target.value }))} style={inputStyle(false)} placeholder="necklaces" />
+                <input value={form.slug} onChange={(e) => setForm((p) => ({ ...p, slug: e.target.value }))} style={inputStyle(false)} placeholder={isSub ? "necklaces-men" : "necklaces"} />
               </Field>
               <div style={{ gridColumn: "1 / -1" }}>
                 <Field label="תיאור">
@@ -312,13 +320,18 @@ function Drawer({
             <div style={{ fontSize: 13, fontWeight: 900, color: "var(--foreground)" }}>היררכיה ותצוגה</div>
             <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
               <Field label="סוג קטגוריה" required invalid={!kindOk}>
-                <select value={form.kind} onChange={(e) => setForm((p) => ({ ...p, kind: e.target.value as any, parentId: e.target.value === "main" ? "" : p.parentId }))} style={selectStyle()}>
+                <select
+                  value={isSub ? "sub" : form.kind}
+                  onChange={(e) => setForm((p) => ({ ...p, kind: e.target.value as any, parentId: e.target.value === "main" ? "" : p.parentId }))}
+                  style={selectStyle()}
+                  disabled={forceSubFlow}
+                >
                   <option value="main">ראשית</option>
                   <option value="sub">תת קטגוריה</option>
                 </select>
               </Field>
-              <Field label="קטגוריית אב" required={form.kind === "sub"} invalid={form.kind === "sub" && !form.parentId}>
-                <select value={form.parentId} onChange={(e) => setForm((p) => ({ ...p, parentId: e.target.value }))} style={selectStyle()} disabled={form.kind !== "sub"}>
+              <Field label="קטגוריית אב" required={isSub} invalid={isSub && !form.parentId}>
+                <select value={form.parentId} onChange={(e) => setForm((p) => ({ ...p, parentId: e.target.value }))} style={selectStyle()} disabled={!isSub}>
                   <option value="">בחר קטגוריית אב</option>
                   {mains.map((m) => (
                     <option key={m.id} value={m.id}>
@@ -326,7 +339,7 @@ function Drawer({
                     </option>
                   ))}
                 </select>
-                {form.kind === "sub" && selectedParentMeta ? (
+                {isSub && selectedParentMeta ? (
                   <div
                     style={{
                       marginTop: 6,

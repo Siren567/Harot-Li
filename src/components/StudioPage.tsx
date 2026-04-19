@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { StudioCategoryId, StudioSubcategory } from "../constants/studioData";
 import { getApiBaseUrl } from "../lib/apiBase";
 import {
@@ -6,9 +6,7 @@ import {
   studioFonts,
   studioMaterials,
   studioPayments,
-  studioProducts,
-  studioShippingMethods,
-  studioSubcategories
+  studioShippingMethods
 } from "../constants/studioData";
 
 type StudioPageProps = {
@@ -19,14 +17,66 @@ const stepLabels = ["בחירת מוצר", "עיצוב אישי", "פרטים ו
 
 const shekel = (n: number) => `₪${n.toLocaleString("he-IL")}`;
 
+type PublicVariant = {
+  id: string;
+  color: string | null;
+  pendantType: string | null;
+  material: string | null;
+  stock: number;
+  price: number;
+};
+
+type PublicProduct = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  image: string | null;
+  images: string[];
+  studioCategory: StudioCategoryId;
+  subcategoryLabel: string | null;
+  studioColors: string[];
+  stock: number;
+  variants?: PublicVariant[];
+};
+
+type StudioRuntimeProduct = {
+  id: string;
+  category: StudioCategoryId;
+  subcategory: StudioSubcategory;
+  title: string;
+  description: string;
+  price: number;
+  image: string | null;
+  colors: { name: string; swatch: string; variantId?: string; stock: number; pendantType?: string | null; material?: string | null; price: number }[];
+  totalStock: number;
+};
+
+const COLOR_META: Record<string, { name: string; swatch: string }> = {
+  gold: { name: "זהב", swatch: "#d4af37" },
+  silver: { name: "כסף", swatch: "#c0c0c0" },
+  rose: { name: "רוז גולד", swatch: "#d4a5a0" },
+  black: { name: "שחור", swatch: "#2a2a2a" }
+};
+
+const DEFAULT_STUDIO_CATEGORY_ORDER: StudioCategoryId[] = studioCategories.map((c) => c.id);
+
+function normalizeStudioCategoryOrder(input: unknown): StudioCategoryId[] {
+  const allowed = new Set<StudioCategoryId>(DEFAULT_STUDIO_CATEGORY_ORDER);
+  const parsed = Array.isArray(input) ? input.filter((x): x is StudioCategoryId => typeof x === "string" && allowed.has(x as StudioCategoryId)) : [];
+  const unique = parsed.filter((x, i) => parsed.indexOf(x) === i);
+  for (const id of DEFAULT_STUDIO_CATEGORY_ORDER) if (!unique.includes(id)) unique.push(id);
+  return unique;
+}
+
 const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [step, setStep] = useState(0);
   const [category, setCategory] = useState<StudioCategoryId>("bracelets");
-  const [subcategory, setSubcategory] = useState<StudioSubcategory>("men");
-  const [productId, setProductId] = useState<string>(studioProducts[0].id);
-  const [selectedColorByProduct, setSelectedColorByProduct] = useState<Record<string, number>>(
-    Object.fromEntries(studioProducts.map((p) => [p.id, 0]))
-  );
+  const [categoryOrder, setCategoryOrder] = useState<StudioCategoryId[]>(DEFAULT_STUDIO_CATEGORY_ORDER);
+  const [runtimeProducts, setRuntimeProducts] = useState<StudioRuntimeProduct[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [productId, setProductId] = useState<string>("");
+  const [selectedColorByProduct, setSelectedColorByProduct] = useState<Record<string, number>>({});
 
   const [text, setText] = useState("לנצח שלך");
   const [font, setFont] = useState("heebo");
@@ -51,30 +101,104 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     city: "",
     address: ""
   });
+  const apiBase = getApiBaseUrl();
 
-  const activeProduct = useMemo(
-    () => studioProducts.find((p) => p.id === productId) ?? studioProducts[0],
-    [productId]
-  );
-  const activeColor = activeProduct.colors[selectedColorByProduct[activeProduct.id] ?? 0] ?? activeProduct.colors[0];
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const [res, bootstrapRes] = await Promise.all([
+          fetch(`${apiBase}/api/public/products`, { credentials: "include" }),
+          fetch(`${apiBase}/api/content/bootstrap`, { credentials: "include" }),
+        ]);
+        if (!res.ok) throw new Error("public-products");
+        const data = (await res.json()) as { products?: PublicProduct[] };
+        const bootstrap = bootstrapRes.ok ? ((await bootstrapRes.json()) as { sections?: Array<{ key: string; body: any }> }) : null;
+        const topSellerSection = (bootstrap?.sections ?? []).find((s) => s.key === "top_sellers_section");
+        const ordered = normalizeStudioCategoryOrder(topSellerSection?.body?.categoryOrder);
+        const rows = Array.isArray(data.products) ? data.products : [];
+        const mapped: StudioRuntimeProduct[] = rows.map((p) => {
+          const variants = Array.isArray(p.variants) ? p.variants : [];
+          const colors =
+            variants.length > 0
+              ? variants.map((v) => {
+                  const key = p.studioColors.find((c) => {
+                    const mappedColor = COLOR_META[c]?.name.toLowerCase();
+                    return mappedColor ? mappedColor === String(v.color ?? "").toLowerCase() : false;
+                  }) ?? p.studioColors[0] ?? "gold";
+                  const meta = COLOR_META[key] ?? { name: v.color || "ברירת מחדל", swatch: "#c0c0c0" };
+                  return {
+                    name: v.color || meta.name,
+                    swatch: meta.swatch,
+                    variantId: v.id,
+                    stock: Number(v.stock) || 0,
+                    pendantType: v.pendantType ?? null,
+                    material: v.material ?? null,
+                    price: Number(v.price) || Number(p.price) || 0
+                  };
+                })
+              : (p.studioColors.length ? p.studioColors : ["gold"]).map((key) => {
+                  const meta = COLOR_META[key] ?? { name: key, swatch: "#c0c0c0" };
+                  return { name: meta.name, swatch: meta.swatch, stock: Number(p.stock) || 0, price: Number(p.price) || 0 };
+                });
+          return {
+            id: p.id,
+            category: p.studioCategory,
+            subcategory: p.subcategoryLabel === "נשים" ? "women" : p.subcategoryLabel === "גברים" ? "men" : null,
+            title: p.name,
+            description: p.description || "",
+            price: Number(p.price) || 0,
+            image: p.image ?? p.images?.[0] ?? null,
+            colors,
+            totalStock: Number(p.stock) || 0
+          };
+        });
+        if (!mounted) return;
+        setCategoryOrder(ordered);
+        setRuntimeProducts(mapped);
+        setSelectedColorByProduct(Object.fromEntries(mapped.map((p) => [p.id, 0])));
+        if (mapped.length > 0) setProductId((prev) => (prev && mapped.some((p) => p.id === prev) ? prev : mapped[0].id));
+      } catch {
+        if (!mounted) return;
+        setRuntimeProducts([]);
+        setCouponMsg("לא ניתן לטעון מוצרים כרגע");
+      } finally {
+        if (mounted) setLoadingProducts(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [apiBase]);
+
+  const activeProduct = useMemo(() => {
+    if (runtimeProducts.length === 0) return null;
+    return runtimeProducts.find((p) => p.id === productId) ?? runtimeProducts[0];
+  }, [productId, runtimeProducts]);
+  const activeColor = activeProduct
+    ? activeProduct.colors[selectedColorByProduct[activeProduct.id] ?? 0] ?? activeProduct.colors[0]
+    : null;
 
   const filteredProducts = useMemo(() => {
-    return studioProducts.filter((p) => {
+    return runtimeProducts.filter((p) => {
       if (p.category !== category) return false;
-      if (category === "bracelets" || category === "necklaces") {
-        return p.subcategory === subcategory;
-      }
       return true;
     });
-  }, [category, subcategory]);
+  }, [category, runtimeProducts]);
+
+  const groupedProducts = useMemo(() => {
+    const men = filteredProducts.filter((p) => p.subcategory === "men");
+    const women = filteredProducts.filter((p) => p.subcategory === "women");
+    const others = filteredProducts.filter((p) => p.subcategory !== "men" && p.subcategory !== "women");
+    return { men, women, others };
+  }, [filteredProducts]);
 
   const shipping = studioShippingMethods.find((s) => s.id === shippingId) ?? studioShippingMethods[0];
-  const subtotal = activeProduct.price * qty;
+  const subtotal = (activeColor?.price ?? activeProduct?.price ?? 0) * qty;
   const discount = appliedCoupon?.discountAmount ?? 0;
   const effectiveShippingFee = appliedCoupon?.freeShipping ? 0 : shipping.fee;
   const total = Math.max(0, subtotal + effectiveShippingFee - discount);
-
-  const apiBase = getApiBaseUrl();
+  const canPurchase = Boolean(activeProduct && activeColor && activeColor.stock > 0 && activeProduct.totalStock > 0);
 
   async function applyCoupon() {
     const code = couponCode.trim();
@@ -114,6 +238,14 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   async function submitOrder() {
     if (submitting) return;
+    if (!activeProduct || !activeColor) {
+      setCouponMsg("לא נבחר מוצר תקין");
+      return;
+    }
+    if (activeColor.stock <= 0 || activeProduct.totalStock <= 0) {
+      setCouponMsg("המוצר שנבחר אזל מהמלאי");
+      return;
+    }
     if (!customer.fullName.trim() || !customer.phone.trim() || !customer.email.trim()) {
       setCouponMsg("נא למלא שם מלא, טלפון ואימייל לפני תשלום");
       return;
@@ -132,8 +264,13 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           items: [
             {
               name: `${activeProduct.title} (${activeColor.name})`,
+              productId: activeProduct.id,
+              variantId: activeColor.variantId ?? null,
               qty,
-              unitPrice: activeProduct.price
+              unitPrice: Math.round((activeColor.price ?? activeProduct.price) * 100),
+              color: activeColor.name,
+              pendantShape: activeColor.pendantType ?? null,
+              material: activeColor.material ?? null
             }
           ]
         })
@@ -168,7 +305,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             type="button"
             className="studio-primary-btn studio-top-next"
             onClick={step === 2 ? submitOrder : goNext}
-            disabled={step === 3 || submitting}
+            disabled={step === 3 || submitting || (step === 0 && !activeProduct) || (step === 2 && !canPurchase)}
           >
             {step === 2 ? (submitting ? "מעבד תשלום..." : "לתשלום מאובטח") : step === 3 ? "הושלם" : "השלב הבא"}
           </button>
@@ -190,69 +327,151 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         <section className="studio-step-section">
           <h2>בוחרים מוצר להתחלה</h2>
           <div className="studio-chip-row">
-            {studioCategories.map((cat) => (
-              <button
-                key={cat.id}
-                className={`studio-chip ${category === cat.id ? "active" : ""}`}
-                onClick={() => {
-                  setCategory(cat.id);
-                  if (cat.id === "bracelets" || cat.id === "necklaces") setSubcategory("men");
-                }}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-          {category === "bracelets" || category === "necklaces" ? (
-            <div className="studio-subcategory-tabs" role="tablist" aria-label="תתי קטגוריה">
-              {studioSubcategories.map((sub) => (
+            {categoryOrder.map((catId) => {
+              const cat = studioCategories.find((x) => x.id === catId);
+              if (!cat) return null;
+              return (
                 <button
-                  key={sub.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={subcategory === sub.id}
-                  className={`studio-subcategory-tab ${subcategory === sub.id ? "active" : ""}`}
-                  onClick={() => setSubcategory(sub.id)}
+                  key={cat.id}
+                  className={`studio-chip ${category === cat.id ? "active" : ""}`}
+                  onClick={() => {
+                    setCategory(cat.id);
+                  }}
                 >
-                  {sub.label}
+                  {cat.label}
                 </button>
-              ))}
-            </div>
-          ) : null}
+              );
+            })}
+          </div>
 
           <div className="studio-products-grid">
-            {filteredProducts.map((product) => (
-              <article
-                key={product.id}
-                className={`studio-product-card ${productId === product.id ? "selected" : ""}`}
-                onClick={() => selectProductAndGoDesign(product.id)}
-              >
-                <span className="studio-product-category-label">
-                  {studioCategories.find((c) => c.id === product.category)?.label ?? "קטגוריה"}
-                </span>
-                <div className={`studio-product-thumb ${product.category}`} />
-                <h3>{product.title}</h3>
-                <strong className="studio-product-price">{shekel(product.price)}</strong>
-                <div className="studio-swatch-row">
-                  {product.colors.map((color, index) => (
-                    <button
-                      key={`${product.id}-${color.name}`}
-                      type="button"
-                      className={`studio-color-swatch ${index === (selectedColorByProduct[product.id] ?? 0) ? "active" : ""}`}
-                      style={{ ["--swatch" as string]: color.swatch }}
-                      aria-label={color.name}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setSelectedColorByProduct((prev) => ({ ...prev, [product.id]: index }));
-                      }}
-                    />
-                  ))}
-                </div>
-                <button type="button" className="studio-select-btn">
-                  בחר
-                </button>
-              </article>
-            ))}
+            {loadingProducts ? <p>טוען מוצרים...</p> : null}
+            {!loadingProducts && filteredProducts.length === 0 ? <p>אין מוצרים זמינים כרגע בקטגוריה זו.</p> : null}
+            {(category === "bracelets" || category === "necklaces") && groupedProducts.men.length > 0 ? (
+              <>
+                <div className="studio-subsection-title">גברים</div>
+                {groupedProducts.men.map((product) => {
+                  const outOfStock = product.totalStock <= 0;
+                  return (
+                    <article
+                      key={product.id}
+                      className={`studio-product-card ${productId === product.id ? "selected" : ""} ${outOfStock ? "out-of-stock" : ""}`}
+                      onClick={() => selectProductAndGoDesign(product.id)}
+                    >
+                      <span className="studio-product-category-label">
+                        {studioCategories.find((c) => c.id === product.category)?.label ?? "קטגוריה"}
+                      </span>
+                      {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
+                      <div className={`studio-product-thumb ${product.category}`}>
+                        {product.image ? <img src={product.image} alt={product.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                      </div>
+                      <h3>{product.title}</h3>
+                      <strong className="studio-product-price">{shekel(product.price)}</strong>
+                      <div className="studio-swatch-row">
+                        {product.colors.map((color, index) => (
+                          <button
+                            key={`${product.id}-${color.name}-${index}`}
+                            type="button"
+                            className={`studio-color-swatch ${index === (selectedColorByProduct[product.id] ?? 0) ? "active" : ""}`}
+                            style={{ ["--swatch" as string]: color.swatch, opacity: color.stock > 0 ? 1 : 0.35 }}
+                            aria-label={color.name}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedColorByProduct((prev) => ({ ...prev, [product.id]: index }));
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <button type="button" className="studio-select-btn" disabled={outOfStock}>
+                        {outOfStock ? "אזל המלאי" : "בחר"}
+                      </button>
+                    </article>
+                  );
+                })}
+              </>
+            ) : null}
+            {(category === "bracelets" || category === "necklaces") && groupedProducts.women.length > 0 ? (
+              <>
+                <div className="studio-subsection-divider" />
+                <div className="studio-subsection-title">נשים</div>
+                {groupedProducts.women.map((product) => {
+                  const outOfStock = product.totalStock <= 0;
+                  return (
+                    <article
+                      key={product.id}
+                      className={`studio-product-card ${productId === product.id ? "selected" : ""} ${outOfStock ? "out-of-stock" : ""}`}
+                      onClick={() => selectProductAndGoDesign(product.id)}
+                    >
+                      <span className="studio-product-category-label">
+                        {studioCategories.find((c) => c.id === product.category)?.label ?? "קטגוריה"}
+                      </span>
+                      {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
+                      <div className={`studio-product-thumb ${product.category}`}>
+                        {product.image ? <img src={product.image} alt={product.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                      </div>
+                      <h3>{product.title}</h3>
+                      <strong className="studio-product-price">{shekel(product.price)}</strong>
+                      <div className="studio-swatch-row">
+                        {product.colors.map((color, index) => (
+                          <button
+                            key={`${product.id}-${color.name}-${index}`}
+                            type="button"
+                            className={`studio-color-swatch ${index === (selectedColorByProduct[product.id] ?? 0) ? "active" : ""}`}
+                            style={{ ["--swatch" as string]: color.swatch, opacity: color.stock > 0 ? 1 : 0.35 }}
+                            aria-label={color.name}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedColorByProduct((prev) => ({ ...prev, [product.id]: index }));
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <button type="button" className="studio-select-btn" disabled={outOfStock}>
+                        {outOfStock ? "אזל המלאי" : "בחר"}
+                      </button>
+                    </article>
+                  );
+                })}
+              </>
+            ) : null}
+            {(category !== "bracelets" && category !== "necklaces" ? filteredProducts : groupedProducts.others).map((product) => {
+              const outOfStock = product.totalStock <= 0;
+              return (
+                <article
+                  key={product.id}
+                  className={`studio-product-card ${productId === product.id ? "selected" : ""} ${outOfStock ? "out-of-stock" : ""}`}
+                  onClick={() => selectProductAndGoDesign(product.id)}
+                >
+                  <span className="studio-product-category-label">
+                    {studioCategories.find((c) => c.id === product.category)?.label ?? "קטגוריה"}
+                  </span>
+                  {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
+                  <div className={`studio-product-thumb ${product.category}`}>
+                    {product.image ? <img src={product.image} alt={product.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                  </div>
+                  <h3>{product.title}</h3>
+                  <strong className="studio-product-price">{shekel(product.price)}</strong>
+                  <div className="studio-swatch-row">
+                    {product.colors.map((color, index) => (
+                      <button
+                        key={`${product.id}-${color.name}-${index}`}
+                        type="button"
+                        className={`studio-color-swatch ${index === (selectedColorByProduct[product.id] ?? 0) ? "active" : ""}`}
+                        style={{ ["--swatch" as string]: color.swatch, opacity: color.stock > 0 ? 1 : 0.35 }}
+                        aria-label={color.name}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedColorByProduct((prev) => ({ ...prev, [product.id]: index }));
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <button type="button" className="studio-select-btn" disabled={outOfStock}>
+                    {outOfStock ? "אזל המלאי" : "בחר"}
+                  </button>
+                </article>
+              );
+            })}
           </div>
         </section>
       ) : null}
@@ -260,6 +479,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       {step === 1 ? (
         <section className="studio-step-section">
           <h2>מעצבים את התכשיט שלך</h2>
+          {!activeProduct || !activeColor ? (
+            <p>בחר מוצר מהשלב הראשון כדי להמשיך לעיצוב.</p>
+          ) : null}
           <div className="studio-custom-layout">
             <aside className="studio-control-panel">
               <label>
@@ -305,12 +527,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             <div className="studio-preview-panel">
               <div className="studio-preview-stage">
                 <div
-                  className={`studio-3d-object ${activeProduct.category}`}
+                  className={`studio-3d-object ${activeProduct?.category ?? "other"}`}
                   style={
                     {
                       transform: `rotateY(${rotation}deg) rotateX(8deg) scale(${zoom})`,
                       ["--engrave-size" as string]: `${size}px`,
-                      ["--studio-metal" as string]: activeColor.swatch
+                      ["--studio-metal" as string]: activeColor?.swatch ?? "#d4af37"
                     } as CSSProperties
                   }
                 >
@@ -393,11 +615,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
             <aside className="studio-order-summary">
               <h3>סיכום הזמנה</h3>
-              <p>{activeProduct.title}</p>
-              <p>צבע: {activeColor.name}</p>
+              <p>{activeProduct?.title ?? "—"}</p>
+              <p>צבע: {activeColor?.name ?? "—"}</p>
               <p>חריטה: {text || "ללא טקסט"}</p>
               <p>כמות: {qty}</p>
               <p>משלוח: {shipping.label}</p>
+              {!canPurchase ? <p style={{ color: "#b42318", fontWeight: 700 }}>אזל מהמלאי - לא ניתן להשלים הזמנה</p> : null}
               <hr />
               <p>ביניים: {shekel(subtotal)}</p>
               <p>משלוח: {effectiveShippingFee === 0 ? "חינם" : shekel(effectiveShippingFee)}</p>

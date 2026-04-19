@@ -1,17 +1,37 @@
-const AUTH_KEY = "harotli_admin_auth_v1";
+const TOKEN_KEY = "harotli_admin_token_v1";
+const USER_KEY = "harotli_admin_user_v1";
 
-export const TEST_ADMIN_USERNAME = "admin";
-export const TEST_ADMIN_PASSWORD = "1020304050";
+// Legacy keys kept so we can migrate old logins cleanly.
+const LEGACY_AUTH_KEY = "harotli_admin_auth_v1";
 
-export function isAdminAuthed() {
-  return localStorage.getItem(AUTH_KEY) === "1";
+export type AdminUser = { id: string; email: string; fullName: string | null; role: string };
+
+export function getAdminToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
 }
 
-export function setAdminAuthed() {
-  localStorage.setItem(AUTH_KEY, "1");
+export function getAdminUser(): AdminUser | null {
+  const raw = localStorage.getItem(USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AdminUser;
+  } catch {
+    return null;
+  }
+}
+
+export function isAdminAuthed(): boolean {
+  return !!getAdminToken();
+}
+
+export function setAdminSession(token: string, user: AdminUser) {
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  localStorage.removeItem(LEGACY_AUTH_KEY);
 }
 
 export function clearAdminAuth() {
-  localStorage.removeItem(AUTH_KEY);
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(LEGACY_AUTH_KEY);
 }
-

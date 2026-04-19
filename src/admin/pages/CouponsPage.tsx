@@ -106,7 +106,7 @@ function SummaryCard({
 }
 
 function fmtMoney(v: number) {
-  return `₪${Number(v || 0).toLocaleString("he-IL")}`;
+  return `₪${(Number(v || 0) / 100).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
 function fmtDate(iso: string | null) {
@@ -204,13 +204,13 @@ function Drawer({
     name: initial?.name ?? "",
     description: initial?.description ?? "",
     discountType: (initial?.discountType ?? "PERCENTAGE") as DiscountType,
-    discountValue: initial?.discountValue ?? 10,
+    discountValue: initial ? (initial.discountType === "FIXED_AMOUNT" ? agorotToShekelsInput(initial.discountValue) || 10 : initial.discountValue ?? 10) : 10,
     isActive: initial?.isActive ?? true,
     hasNoExpiry: initial?.hasNoExpiry ?? false,
     startsAt: initial?.startsAt ? toLocalDatetimeInput(initial.startsAt) : "",
     endsAt: initial?.endsAt ? toLocalDatetimeInput(initial.endsAt) : "",
-    minCartAmount: initial?.minCartAmount ?? "",
-    maxCartAmount: initial?.maxCartAmount ?? "",
+    minCartAmount: agorotToShekelsInput(initial?.minCartAmount),
+    maxCartAmount: agorotToShekelsInput(initial?.maxCartAmount),
     minItemsQuantity: initial?.minItemsQuantity ?? "",
     usageLimitTotal: initial?.usageLimitTotal ?? "",
     usageLimitPerCustomer: initial?.usageLimitPerCustomer ?? "",
@@ -227,13 +227,13 @@ function Drawer({
       name: initial?.name ?? "",
       description: initial?.description ?? "",
       discountType: (initial?.discountType ?? "PERCENTAGE") as DiscountType,
-      discountValue: initial?.discountValue ?? 10,
+      discountValue: initial ? (initial.discountType === "FIXED_AMOUNT" ? agorotToShekelsInput(initial.discountValue) || 10 : initial.discountValue ?? 10) : 10,
       isActive: initial?.isActive ?? true,
       hasNoExpiry: initial?.hasNoExpiry ?? false,
       startsAt: initial?.startsAt ? toLocalDatetimeInput(initial.startsAt) : "",
       endsAt: initial?.endsAt ? toLocalDatetimeInput(initial.endsAt) : "",
-      minCartAmount: initial?.minCartAmount ?? "",
-      maxCartAmount: initial?.maxCartAmount ?? "",
+      minCartAmount: agorotToShekelsInput(initial?.minCartAmount),
+      maxCartAmount: agorotToShekelsInput(initial?.maxCartAmount),
       minItemsQuantity: initial?.minItemsQuantity ?? "",
       usageLimitTotal: initial?.usageLimitTotal ?? "",
       usageLimitPerCustomer: initial?.usageLimitPerCustomer ?? "",
@@ -263,18 +263,29 @@ function Drawer({
     }
     setSaving(true);
     try {
+      const parsedDiscountValue =
+        form.discountType === "FIXED_AMOUNT"
+          ? shekelsToAgorot(form.discountValue)
+          : Number(form.discountValue);
+      if (parsedDiscountValue == null || !Number.isFinite(parsedDiscountValue)) {
+        toast("ערך ההנחה לא תקין", "warning");
+        setSaving(false);
+        return;
+      }
+      const minCartAmountAgorot = form.minCartAmount === "" ? null : shekelsToAgorot(form.minCartAmount);
+      const maxCartAmountAgorot = form.maxCartAmount === "" ? null : shekelsToAgorot(form.maxCartAmount);
       const payload: any = {
         code: form.code.trim().toUpperCase(),
         name: form.name.trim(),
         description: form.description?.trim() ? form.description.trim() : null,
         discountType: form.discountType,
-        discountValue: Number(form.discountValue),
+        discountValue: parsedDiscountValue,
         isActive: Boolean(form.isActive),
         hasNoExpiry: Boolean(form.hasNoExpiry),
         startsAt: form.startsAt ? fromLocalDatetimeInput(form.startsAt) : null,
         endsAt: form.hasNoExpiry ? null : form.endsAt ? fromLocalDatetimeInput(form.endsAt) : null,
-        minCartAmount: form.minCartAmount === "" ? null : Number(form.minCartAmount),
-        maxCartAmount: form.maxCartAmount === "" ? null : Number(form.maxCartAmount),
+        minCartAmount: minCartAmountAgorot,
+        maxCartAmount: maxCartAmountAgorot,
         minItemsQuantity: form.minItemsQuantity === "" ? null : Number(form.minItemsQuantity),
         usageLimitTotal: form.usageLimitTotal === "" ? null : Number(form.usageLimitTotal),
         usageLimitPerCustomer: form.usageLimitPerCustomer === "" ? null : Number(form.usageLimitPerCustomer),
@@ -419,10 +430,10 @@ function Drawer({
 
             <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
               <Field label="מינ׳ סל (₪)">
-                <input type="number" value={form.minCartAmount} onChange={(e) => setForm((p) => ({ ...p, minCartAmount: e.target.value === "" ? "" : Number(e.target.value) }))} style={inputStyle(false)} />
+                <input type="number" step="0.01" value={form.minCartAmount} onChange={(e) => setForm((p) => ({ ...p, minCartAmount: e.target.value === "" ? "" : Number(e.target.value) }))} style={inputStyle(false)} />
               </Field>
               <Field label="מקס׳ סל (₪)">
-                <input type="number" value={form.maxCartAmount} onChange={(e) => setForm((p) => ({ ...p, maxCartAmount: e.target.value === "" ? "" : Number(e.target.value) }))} style={inputStyle(false)} />
+                <input type="number" step="0.01" value={form.maxCartAmount} onChange={(e) => setForm((p) => ({ ...p, maxCartAmount: e.target.value === "" ? "" : Number(e.target.value) }))} style={inputStyle(false)} />
               </Field>
               <Field label="מינ׳ כמות פריטים">
                 <input type="number" value={form.minItemsQuantity} onChange={(e) => setForm((p) => ({ ...p, minItemsQuantity: e.target.value === "" ? "" : Number(e.target.value) }))} style={inputStyle(false)} />
@@ -550,6 +561,17 @@ function fromLocalDatetimeInput(local: string) {
   // Interpret as local time and convert to ISO
   const d = new Date(local);
   return d.toISOString();
+}
+
+function agorotToShekelsInput(v: number | null | undefined) {
+  if (v == null || !Number.isFinite(Number(v))) return "";
+  return Number(v) / 100;
+}
+
+function shekelsToAgorot(v: number | string) {
+  const n = typeof v === "string" ? Number(v) : v;
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 100);
 }
 
 export function CouponsPage() {
@@ -812,7 +834,7 @@ export function CouponsPage() {
                             try {
                               const out = await apiFetch<any>("/api/coupons/validate", {
                                 method: "POST",
-                                body: JSON.stringify({ code: c.code, cartSubtotal: 300, itemsQuantity: 1, customerEmail: null }),
+                                body: JSON.stringify({ code: c.code, cartSubtotal: 30_000, itemsQuantity: 1, customerEmail: null }),
                               });
                               toast(out.ok ? "בדיקת קופון: תקין (דמו)" : `בדיקת קופון: ${out.message}`, out.ok ? "success" : "warning");
                             } catch {

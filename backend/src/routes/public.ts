@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { listProducts } from "../services/products.service.js";
 import { getSupabaseAdminClient } from "../supabase/client.js";
+import { prisma } from "../db/prisma.js";
 
 export const publicRouter = Router();
 
@@ -80,6 +81,18 @@ publicRouter.get("/products", async (_req, res) => {
     }
 
     const categoriesById = new Map<string, { id: string; name: string; slug: string; parent_id: string | null }>();
+    const variantsByProductId = new Map<
+      string,
+      Array<{
+        id: string;
+        color: string | null;
+        pendantType: string | null;
+        material: string | null;
+        stock: number;
+        priceOverride: number | null;
+        isActive: boolean;
+      }>
+    >();
     if (ids.size > 0) {
       try {
         const sb = getSupabaseAdminClient();
@@ -100,6 +113,30 @@ publicRouter.get("/products", async (_req, res) => {
       }
     }
 
+    if (rows.length > 0) {
+      const productIds = rows.map((p) => p.id);
+      const variants = await prisma.productVariant.findMany({
+        where: { productId: { in: productIds } },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          productId: true,
+          color: true,
+          pendantType: true,
+          material: true,
+          stock: true,
+          priceOverride: true,
+          isActive: true,
+        },
+      });
+      for (const variant of variants) {
+        const key = variant.productId;
+        const existing = variantsByProductId.get(key) ?? [];
+        existing.push(variant);
+        variantsByProductId.set(key, existing);
+      }
+    }
+
     const products = rows.map((p) => {
       const legacyCategoryId = (p as any)?.category_id ? String((p as any).category_id) : null;
       const mainRaw = p.main_category_id
@@ -116,6 +153,9 @@ publicRouter.get("/products", async (_req, res) => {
       const images = Array.from(new Set([image, ...gallery].filter(Boolean))) as string[];
       const effectivePriceAgorot = p.sale_price && p.sale_price > 0 && p.sale_price < p.price ? p.sale_price : p.price;
       const pAny = p as any;
+      const variants = variantsByProductId.get(p.id) ?? [];
+      const activeVariants = variants.filter((v) => v.isActive);
+      const totalStock = activeVariants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
       const subcategoryLabels = pickSubcategoryLabels([
         ...subRows.map((s) => s?.name),
         ...subRows.map((s) => s?.slug),
@@ -150,8 +190,17 @@ publicRouter.get("/products", async (_req, res) => {
         subcategoryName: subRawFirst?.name ?? null,
         studioColors: mapStudioColors(p.available_colors),
         allowCustomerImageUpload: Boolean(p.allow_customer_image_upload),
-        stock: typeof p.stock === "number" ? p.stock : 0,
+        stock: totalStock,
         lowThreshold: typeof p.low_threshold === "number" ? p.low_threshold : 5,
+        variants: activeVariants.map((v) => ({
+          id: v.id,
+          color: v.color,
+          pendantType: v.pendantType,
+          material: v.material,
+          stock: Number(v.stock) || 0,
+          price: Number(((v.priceOverride ?? effectivePriceAgorot) / 100).toFixed(2)),
+          isActive: v.isActive,
+        })),
       };
     });
     res.json({ products });

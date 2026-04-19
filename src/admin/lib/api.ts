@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from "../../lib/apiBase";
+import { clearAdminAuth, getAdminToken } from "../state/auth";
 
 type ApiError = {
   status: number;
@@ -14,10 +15,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
+    const token = getAdminToken();
     res = await fetch(url, {
       ...init,
       headers: {
         "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init?.headers ?? {}),
       },
       credentials: "include",
@@ -36,6 +39,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const data = text ? JSON.parse(text) : null;
 
   if (!res.ok) {
+    if (res.status === 401) {
+      clearAdminAuth();
+    }
     const err: ApiError = {
       status: res.status,
       ...(typeof data === "object" && data ? data : {}),

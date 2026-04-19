@@ -5,6 +5,7 @@ import {
   listProducts,
   updateProduct,
 } from "../services/products.service.js";
+import { requireAdmin } from "../lib/auth.js";
 
 export const productsRouter = Router();
 
@@ -21,7 +22,7 @@ productsRouter.get("/", async (req, res) => {
   }
 });
 
-productsRouter.post("/", async (req, res) => {
+productsRouter.post("/", requireAdmin, async (req, res) => {
   try {
     const product = await createProduct(req.body);
     res.status(201).json({ product });
@@ -32,7 +33,7 @@ productsRouter.post("/", async (req, res) => {
   }
 });
 
-productsRouter.patch("/:id", async (req, res) => {
+productsRouter.patch("/:id", requireAdmin, async (req, res) => {
   try {
     const product = await updateProduct(req.params.id, req.body);
     res.json({ product });
@@ -44,7 +45,7 @@ productsRouter.patch("/:id", async (req, res) => {
   }
 });
 
-productsRouter.delete("/:id", async (req, res) => {
+productsRouter.delete("/:id", requireAdmin, async (req, res) => {
   try {
     await deleteProduct(req.params.id);
     res.status(204).send();

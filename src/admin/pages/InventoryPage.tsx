@@ -8,7 +8,6 @@ import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
-  Download,
   Edit3,
   Eye,
   RefreshCw,
@@ -29,6 +28,7 @@ type InventoryProduct = {
   stock: number;
   lowThreshold: number;
   price: number;
+  variants: Array<{ id: string; label: string; stock: number }>;
 };
 
 type ProductApiRow = {
@@ -43,8 +43,17 @@ type ProductApiRow = {
   low_threshold?: number;
 };
 
+type ProductVariantApiRow = {
+  id: string;
+  productId: string;
+  color?: string | null;
+  pendantType?: string | null;
+  material?: string | null;
+  stock?: number;
+};
+
 function fmtMoney(v: number) {
-  return `₪${Number(v || 0).toLocaleString("he-IL")}`;
+  return `₪${(Number(v || 0) / 100).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
 function getStatus(stock: number, lowThreshold: number): InventoryStatus {
@@ -251,6 +260,7 @@ export function InventoryPage() {
   const toast = useToast();
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<InventoryStatus | "all">("all");
@@ -264,18 +274,40 @@ export function InventoryPage() {
 
   async function refreshInventory(silent?: boolean) {
     if (!silent) setLoading(true);
+    if (silent) setRefreshing(true);
     try {
-      const out = await apiFetch<{ products: ProductApiRow[] }>("/api/products");
+      const [out, variantsOut] = await Promise.all([
+        apiFetch<{ products: ProductApiRow[] }>("/api/products"),
+        apiFetch<{ variants: ProductVariantApiRow[] }>("/api/variants"),
+      ]);
       const rows = Array.isArray(out?.products) ? out.products : [];
+      const variants = Array.isArray(variantsOut?.variants) ? variantsOut.variants : [];
+      const byProduct = variants.reduce<Record<string, ProductVariantApiRow[]>>((acc, v) => {
+        const key = String(v.productId || "");
+        if (!key) return acc;
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(v);
+        return acc;
+      }, {});
       setProducts(
         rows.map((p) => ({
+          variants: (byProduct[p.id] ?? []).map((v) => ({
+            id: v.id,
+            label: [v.color, v.pendantType, v.material].filter(Boolean).join(" / ") || "וריאציה",
+            stock: Number.isFinite(Number(v.stock)) ? Math.max(0, Number(v.stock)) : 0,
+          })),
           id: p.id,
           name: p.title || "מוצר",
           imageUrl: p.image_url || "",
           sku: p.slug || p.id,
           category: p.main_category_id || "ללא קטגוריה",
           customizable: Boolean(p.allow_customer_image_upload),
-          stock: Number.isFinite(Number(p.stock)) ? Math.max(0, Number(p.stock)) : 0,
+          stock:
+            (byProduct[p.id] ?? []).length > 0
+              ? (byProduct[p.id] ?? []).reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+              : Number.isFinite(Number(p.stock))
+                ? Math.max(0, Number(p.stock))
+                : 0,
           lowThreshold: Number.isFinite(Number(p.low_threshold)) ? Math.max(0, Number(p.low_threshold)) : 5,
           price: Number.isFinite(Number(p.price)) ? Number(p.price) : 0,
         }))
@@ -285,6 +317,7 @@ export function InventoryPage() {
       setProducts([]);
     } finally {
       if (!silent) setLoading(false);
+      if (silent) setRefreshing(false);
     }
   }
 
@@ -392,6 +425,30 @@ export function InventoryPage() {
     setSelectedIds([]);
   }
 
+  async function updateVariantStock(productId: string, variantId: string, stock: number) {
+    setProducts((prev) =>
+      prev.map((p) =>
+        p.id !== productId
+          ? p
+          : {
+              ...p,
+              variants: p.variants.map((v) => (v.id === variantId ? { ...v, stock } : v)),
+              stock: p.variants.reduce((sum, v) => sum + (v.id === variantId ? stock : v.stock), 0),
+            }
+      )
+    );
+    pulseRow(productId);
+    try {
+      await apiFetch(`/api/variants/${variantId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ stock }),
+      });
+    } catch {
+      toast("שמירת מלאי וריאציה נכשלה", "error");
+      await refreshInventory(true);
+    }
+  }
+
   async function updateProduct(id: string, patch: Partial<InventoryProduct>) {
     setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
     pulseRow(id);
@@ -411,19 +468,27 @@ export function InventoryPage() {
   async function applyBulkUpdate() {
     if (selectedIds.length === 0) return;
     for (const id of selectedIds) {
-      setProducts((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, stock: Number.isFinite(bulkStock) ? bulkStock : p.stock } : p))
-      );
-      pulseRow(id);
-      try {
-        await apiFetch(`/api/products/${id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ stock: Number.isFinite(bulkStock) ? bulkStock : 0 }),
-        });
-      } catch {
-        // handled with summary toast
+      const product = products.find((p) => p.id === id);
+      if (!product) continue;
+      const nextStock = Number.isFinite(bulkStock) ? bulkStock : 0;
+      if (product.variants.length > 0) {
+        for (const v of product.variants) {
+          try {
+            await apiFetch(`/api/variants/${v.id}`, { method: "PATCH", body: JSON.stringify({ stock: nextStock }) });
+          } catch {
+            // summary toast below
+          }
+        }
+      } else {
+        try {
+          await apiFetch(`/api/products/${id}`, { method: "PATCH", body: JSON.stringify({ stock: nextStock }) });
+        } catch {
+          // summary toast below
+        }
       }
+      pulseRow(id);
     }
+    await refreshInventory(true);
     toast("עדכון מלאי מרוכז נשמר", "success");
   }
 
@@ -432,15 +497,25 @@ export function InventoryPage() {
     setProducts((prev) => prev.map((p) => (selectedSet.has(p.id) ? { ...p, stock: 0 } : p)));
     for (const id of selectedIds) pulseRow(id);
     for (const id of selectedIds) {
-      try {
-        await apiFetch(`/api/products/${id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ stock: 0 }),
-        });
-      } catch {
-        // handled with summary toast
+      const product = products.find((p) => p.id === id);
+      if (!product) continue;
+      if (product.variants.length > 0) {
+        for (const v of product.variants) {
+          try {
+            await apiFetch(`/api/variants/${v.id}`, { method: "PATCH", body: JSON.stringify({ stock: 0 }) });
+          } catch {
+            // handled with summary toast
+          }
+        }
+      } else {
+        try {
+          await apiFetch(`/api/products/${id}`, { method: "PATCH", body: JSON.stringify({ stock: 0 }) });
+        } catch {
+          // handled with summary toast
+        }
       }
     }
+    await refreshInventory(true);
     toast("סומן כנגמר במלאי", "warning");
   }
 
@@ -459,27 +534,8 @@ export function InventoryPage() {
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-start" }}>
           <button
             type="button"
-            onClick={() => toast("ייצוא מלאי (placeholder)", "info")}
-            style={{
-              background: "var(--input)",
-              border: "1px solid var(--border)",
-              color: "var(--foreground-secondary)",
-              borderRadius: "10px",
-              padding: "10px 12px",
-              fontSize: "12px",
-              fontWeight: 900,
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
-            <Download size={16} />
-            ייצוא מלאי
-          </button>
-          <button
-            type="button"
             onClick={() => refreshInventory(true)}
+            disabled={refreshing}
             style={{
               background: "var(--primary)",
               border: "1px solid rgba(201,169,110,0.35)",
@@ -488,14 +544,15 @@ export function InventoryPage() {
               padding: "10px 12px",
               fontSize: "12px",
               fontWeight: 900,
-              cursor: "pointer",
+              cursor: refreshing ? "not-allowed" : "pointer",
+              opacity: refreshing ? 0.75 : 1,
               display: "inline-flex",
               alignItems: "center",
               gap: "8px",
             }}
           >
-            <RefreshCw size={16} />
-            רענון
+            <RefreshCw size={16} style={{ animation: refreshing ? "spin 1s linear infinite" : "none" }} />
+            {refreshing ? "מרענן..." : "רענון"}
           </button>
         </div>
       </div>
@@ -749,6 +806,7 @@ export function InventoryPage() {
                     "SKU",
                     "קטגוריה",
                     "מלאי נוכחי",
+                    "מלאי לפי צבע/וריאציה",
                     "התראת מלאי נמוך",
                     "סטטוס מלאי",
                     "מחיר",
@@ -831,10 +889,33 @@ export function InventoryPage() {
                           id={`stock_${p.id}`}
                           type="number"
                           value={p.stock}
-                          onChange={(e) => updateProduct(p.id, { stock: Number(e.target.value) })}
+                          readOnly
                           style={inputStyle(pulsing)}
-                          aria-label={`עריכת מלאי עבור ${p.name}`}
+                          aria-label={`מלאי כולל עבור ${p.name}`}
                         />
+                      </td>
+                      <td style={{ padding: "13px 14px", minWidth: 240 }}>
+                        {p.variants.length === 0 ? (
+                          <div style={{ fontSize: 11, color: "var(--muted-foreground)" }}>ללא וריאציות</div>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {p.variants.map((v) => (
+                              <div key={v.id} style={{ display: "grid", gridTemplateColumns: "1fr 80px", gap: 6, alignItems: "center" }}>
+                                <div style={{ fontSize: 11, color: "var(--muted-foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                  {v.label}
+                                </div>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={v.stock}
+                                  onChange={(e) => updateVariantStock(p.id, v.id, Math.max(0, Number(e.target.value) || 0))}
+                                  style={{ ...inputStyle(false), width: "100%" }}
+                                  aria-label={`מלאי וריאציה ${v.label}`}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding: "13px 14px" }}>
                         <input
@@ -1001,6 +1082,7 @@ export function InventoryPage() {
         </div>
       </div>
 
+      <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
       <Drawer open={Boolean(drawerProductId)} product={drawerProduct} onClose={() => setDrawerProductId(null)} />
     </div>
   );

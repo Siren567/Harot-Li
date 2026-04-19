@@ -10,6 +10,8 @@ import { topSellersRouter } from "./routes/topSellers.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { publicRouter } from "./routes/public.js";
 import { paymentsRouter } from "./routes/payments.js";
+import { adminAuthRouter } from "./routes/adminAuth.js";
+import { variantsRouter } from "./routes/variants.js";
 
 const app = express();
 
@@ -39,6 +41,8 @@ app.use("/api/top-sellers", topSellersRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/public", publicRouter);
 app.use("/api/payments", paymentsRouter);
+app.use("/api/admin/auth", adminAuthRouter);
+app.use("/api/variants", variantsRouter);
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
