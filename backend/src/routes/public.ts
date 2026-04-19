@@ -26,6 +26,7 @@ function mapSubcategoryLabel(raw?: string | null) {
   const source = String(raw ?? "").trim();
   const s = source.toLowerCase();
   if (!s) return null;
+  if (s.includes("couple") || s.includes("זוג")) return "זוגיים";
   if (s.includes("men") || s.includes("גברים")) return "גברים";
   if (s.includes("women") || s.includes("נשים")) return "נשים";
   return source || null;
@@ -35,7 +36,10 @@ function pickSubcategoryLabel(inputs: Array<string | null | undefined>, productT
   const labels = inputs.map((x) => mapSubcategoryLabel(x)).filter(Boolean) as string[];
   const title = String(productTitle ?? "").toLowerCase();
   if (title.includes("פרח")) return "נשים";
+  if (title.includes("זוג")) return "זוגיים";
   if (!labels.length) return null;
+  const hasCouple = labels.includes("זוגיים");
+  if (hasCouple) return "זוגיים";
   const hasWomen = labels.includes("נשים");
   const hasMen = labels.includes("גברים");
   if (hasWomen && hasMen) {
