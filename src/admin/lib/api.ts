@@ -9,13 +9,16 @@ type ApiError = {
 };
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const bases = getApiBaseUrls();
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const isAdminLogin = normalizedPath === "/api/admin/auth/login";
+  const allBases = getApiBaseUrls();
+  const bases = isAdminLogin ? allBases.slice(0, 1) : allBases;
   let lastNetworkError: any = null;
   let lastHttpError: ApiError | null = null;
 
   for (let i = 0; i < bases.length; i += 1) {
     const base = bases[i];
-    const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+    const url = `${base}${normalizedPath}`;
     const controller = new AbortController();
     const timeoutMs = 20000;
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -52,7 +55,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
     if (!res.ok) {
       // Try next base URL on proxy-path misses or redirects.
-      if ((res.status === 301 || res.status === 302 || res.status === 307 || res.status === 308 || res.status === 404 || res.status === 405) && i < bases.length - 1) {
+      if (!isAdminLogin && (res.status === 301 || res.status === 302 || res.status === 307 || res.status === 308 || res.status === 404 || res.status === 405) && i < bases.length - 1) {
         continue;
       }
       if (res.status === 401) clearAdminAuth();

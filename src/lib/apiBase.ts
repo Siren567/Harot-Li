@@ -10,12 +10,12 @@ export function getApiBaseUrls() {
   const isLocal = host === "localhost" || host === "127.0.0.1";
   if (isLocal) return ["http://localhost:4000"];
 
-  const canonical = "https://www.harot-li.store";
+  const canonicalBackend = "https://www.harot-li.store/_/backend";
   const onCanonical = host === "www.harot-li.store";
 
-  // Try canonical backend first to avoid redirect/method issues on non-www.
-  if (onCanonical) return ["/_/backend", "/backend", "", `${canonical}/_/backend`];
-  return [`${canonical}/_/backend`, "/_/backend", "/backend", ""];
+  // Production should use one stable backend route to avoid method/path drift.
+  if (onCanonical) return ["/_/backend"];
+  return [canonicalBackend];
 }
 
 export function getApiBaseUrl() {
