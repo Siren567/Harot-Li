@@ -1379,11 +1379,16 @@ function renderCatalogSections() {
     catalogSectionsEl.innerHTML = `<section class="catalog-section"><p class="step-sub">אין כרגע מוצרים זמינים בקטלוג.</p></section>`;
     return;
   }
-  const fallbackCategoryWithItems = runtimeCategories.find((c) => runtimeItems.some((p) => p.category === c.id));
-  if (fallbackCategoryWithItems && !runtimeItems.some((p) => p.category === state.activeCategoryId)) {
-    state.activeCategoryId = fallbackCategoryWithItems.id;
-    state.selectedProductId = runtimeItems.find((p) => p.category === state.activeCategoryId)?.id || runtimeItems[0]?.id || "";
-    renderCategoryChips();
+  // Only auto-switch if the active id isn't a known category at all (stale/missing).
+  // Do NOT bounce away from a valid-but-empty category — the user may have just clicked it.
+  const activeIsKnown = runtimeCategories.some((c) => c.id === state.activeCategoryId);
+  if (!activeIsKnown) {
+    const fallbackCategoryWithItems = runtimeCategories.find((c) => runtimeItems.some((p) => p.category === c.id));
+    if (fallbackCategoryWithItems) {
+      state.activeCategoryId = fallbackCategoryWithItems.id;
+      state.selectedProductId = runtimeItems.find((p) => p.category === state.activeCategoryId)?.id || runtimeItems[0]?.id || "";
+      renderCategoryChips();
+    }
   }
   let category = runtimeCategories.find((c) => c.id === state.activeCategoryId) || runtimeCategories[0];
   let items = runtimeItems.filter((p) => p.category === category.id);
@@ -1519,6 +1524,29 @@ function renderCatalogSections() {
     `;
     };
 
+    let subTabsMarkup = "";
+    if (
+      category.useSubcategories &&
+      subcategories.length > 1 &&
+      String(category.studioCategoryKey || category.id || "").toLowerCase() !== "necklaces"
+    ) {
+      const orderedSubs = [
+        ...(menSubcategory ? [menSubcategory] : []),
+        ...(womenSubcategory && womenSubcategory !== menSubcategory ? [womenSubcategory] : []),
+        ...subcategories.filter((s) => s !== menSubcategory && s !== womenSubcategory),
+      ];
+      subTabsMarkup = `
+        <div class="subcategory-tabs">
+          ${orderedSubs
+            .map(
+              (s) =>
+                `<button class="subcategory-tab ${state.activeSubcategory === s ? "active" : ""}" data-subcategory-chip="${escHtml(s)}">${escHtml(s)}</button>`
+            )
+            .join("")}
+        </div>
+      `;
+    }
+
     let rowsMarkup = "";
     if (category.useSubcategories) {
       const categoryKey = String(category.studioCategoryKey || category.id || "").toLowerCase();
@@ -1552,6 +1580,7 @@ function renderCatalogSections() {
   catalogSectionsEl.innerHTML = `
     <section class="catalog-section" id="catalog-${category.id}">
       ${shouldHideCategoryTitle ? "" : `<h3 class="catalog-title">${category.title}</h3>`}
+      ${subTabsMarkup}
       ${rowsMarkup}
     </section>
   `;
