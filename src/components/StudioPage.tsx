@@ -486,15 +486,31 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           ]
         })
       });
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        setCouponMsg(data?.message || "הזמנה נכשלה");
+      let data: { ok?: boolean; order?: { orderNumber?: string }; message?: string; hint?: string } = {};
+      try {
+        const text = await res.text();
+        if (text) data = JSON.parse(text);
+      } catch {
+        data = {};
+      }
+      if (!res.ok || !data?.ok || !data.order?.orderNumber) {
+        const hint =
+          res.status === 500 || res.status === 0
+            ? " ודאו שהשרת (בקאנד) רץ ושמסד הנתונים מחובר."
+            : "";
+        setCouponMsg(
+          (data?.message || (res.status === 500 ? "שגיאת שרת" : "הזמנה נכשלה")) +
+            (data?.hint ? ` (${String(data.hint).slice(0, 120)})` : "") +
+            hint
+        );
         return;
       }
       setOrderNumber(data.order.orderNumber);
       setStep(3);
     } catch {
-      setCouponMsg("לא ניתן להשלים הזמנה כרגע");
+      setCouponMsg(
+        "לא ניתן להתחבר לשרת. ודאו שהבקאנד רץ (למשל npm run dev ב-backend) ושהאתר נטען דרך npm run dev כדי ש־/api יעבוד."
+      );
     } finally {
       setSubmitting(false);
     }
@@ -1046,6 +1062,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             <div className="studio-success-icon">✓</div>
             <h2>ההזמנה התקבלה בהצלחה</h2>
             <p>מספר הזמנה: {orderNumber ? `#${orderNumber}` : "—"}</p>
+            <p style={{ fontSize: "0.88rem", opacity: 0.85, lineHeight: 1.5 }}>
+              לבדיקת סטטוס מהדף הראשי: העתיקו את המספר המלא (כולל HG-) או את הספרות האחרונות.
+            </p>
             <p>המוצר שלך ייכנס לייצור אישי ונעדכן אותך בכל שלב.</p>
             <button type="button" className="studio-primary-btn" onClick={onBackToLanding}>
               חזרה לדף הבית
