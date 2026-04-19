@@ -115,7 +115,7 @@ export function LoginPage() {
                   marginBottom: "7px",
                 }}
               >
-                אימייל
+                אימייל / יוזר
               </label>
               <div style={{ position: "relative" }}>
                 <span
@@ -131,10 +131,10 @@ export function LoginPage() {
                   <User size={15} />
                 </span>
                 <input
-                  type="email"
+                  type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
+                  placeholder="admin@example.com או root"
                   required
                   autoFocus
                   style={inputStyle(!!error)}

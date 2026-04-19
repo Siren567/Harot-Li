@@ -61,18 +61,20 @@ const COLOR_META: Record<string, { name: string; swatch: string }> = {
 
 const DEFAULT_STUDIO_CATEGORY_ORDER: StudioCategoryId[] = studioCategories.map((c) => c.id);
 
-function normalizeStudioCategoryOrder(input: unknown): StudioCategoryId[] {
-  const allowed = new Set<StudioCategoryId>(DEFAULT_STUDIO_CATEGORY_ORDER);
-  const parsed = Array.isArray(input) ? input.filter((x): x is StudioCategoryId => typeof x === "string" && allowed.has(x as StudioCategoryId)) : [];
-  const unique = parsed.filter((x, i) => parsed.indexOf(x) === i);
-  for (const id of DEFAULT_STUDIO_CATEGORY_ORDER) if (!unique.includes(id)) unique.push(id);
-  return unique;
+function normalizeCategoryKey(raw: string) {
+  const v = String(raw || "").trim().toLowerCase();
+  if (v.includes("זוג") || v.includes("couple")) return "couple";
+  if (v.includes("bracelet") || v.includes("צמיד")) return "bracelets";
+  if (v.includes("necklace") || v.includes("שרשר")) return "necklaces";
+  if (v.includes("key") || v.includes("מחזיק")) return "keychains";
+  if (v.includes("other") || v.includes("אחר")) return "other";
+  return v;
 }
 
 const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [step, setStep] = useState(0);
-  const [category, setCategory] = useState<StudioCategoryId>("bracelets");
-  const [categoryOrder, setCategoryOrder] = useState<StudioCategoryId[]>(DEFAULT_STUDIO_CATEGORY_ORDER);
+  const [category, setCategory] = useState<string>("bracelets");
+  const [categoryOrder, setCategoryOrder] = useState<Array<StudioCategoryId | string>>(DEFAULT_STUDIO_CATEGORY_ORDER);
   const [runtimeProducts, setRuntimeProducts] = useState<StudioRuntimeProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productId, setProductId] = useState<string>("");
@@ -115,7 +117,8 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         const data = (await res.json()) as { products?: PublicProduct[] };
         const bootstrap = bootstrapRes.ok ? ((await bootstrapRes.json()) as { sections?: Array<{ key: string; body: any }> }) : null;
         const topSellerSection = (bootstrap?.sections ?? []).find((s) => s.key === "top_sellers_section");
-        const ordered = normalizeStudioCategoryOrder(topSellerSection?.body?.categoryOrder);
+        const rawOrder = Array.isArray(topSellerSection?.body?.categoryOrder) ? topSellerSection?.body?.categoryOrder : DEFAULT_STUDIO_CATEGORY_ORDER;
+        const ordered = rawOrder.map((x: any) => (typeof x === "string" ? x : String(x?.id || ""))).filter(Boolean);
         const rows = Array.isArray(data.products) ? data.products : [];
         const mapped: StudioRuntimeProduct[] = rows.map((p) => {
           const variants = Array.isArray(p.variants) ? p.variants : [];
@@ -155,6 +158,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         });
         if (!mounted) return;
         setCategoryOrder(ordered);
+        if (ordered.length > 0) {
+          setCategory((prev) => (ordered.includes(prev) ? prev : ordered[0]));
+        }
         setRuntimeProducts(mapped);
         setSelectedColorByProduct(Object.fromEntries(mapped.map((p) => [p.id, 0])));
         if (mapped.length > 0) setProductId((prev) => (prev && mapped.some((p) => p.id === prev) ? prev : mapped[0].id));
@@ -180,8 +186,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     : null;
 
   const filteredProducts = useMemo(() => {
+    const normalized = normalizeCategoryKey(category);
     return runtimeProducts.filter((p) => {
-      if (p.category !== category) return false;
+      if (normalized === "couple") {
+        return p.subcategory === "couple";
+      }
+      if (normalizeCategoryKey(p.category) !== normalized) return false;
       return true;
     });
   }, [category, runtimeProducts]);
@@ -327,18 +337,19 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         <section className="studio-step-section">
           <h2>בוחרים מוצר להתחלה</h2>
           <div className="studio-chip-row">
-            {categoryOrder.map((catId) => {
+            {categoryOrder.map((catIdRaw) => {
+              const catId = String(catIdRaw);
               const cat = studioCategories.find((x) => x.id === catId);
-              if (!cat) return null;
+              const label = cat?.label ?? (normalizeCategoryKey(catId) === "couple" ? "זוגיים" : catId);
               return (
                 <button
-                  key={cat.id}
-                  className={`studio-chip ${category === cat.id ? "active" : ""}`}
+                  key={catId}
+                  className={`studio-chip ${category === catId ? "active" : ""}`}
                   onClick={() => {
-                    setCategory(cat.id);
+                    setCategory(catId);
                   }}
                 >
-                  {cat.label}
+                  {label}
                 </button>
               );
             })}
@@ -347,7 +358,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           <div className="studio-products-grid">
             {loadingProducts ? <p>טוען מוצרים...</p> : null}
             {!loadingProducts && filteredProducts.length === 0 ? <p>אין מוצרים זמינים כרגע בקטגוריה זו.</p> : null}
-            {(category === "bracelets" || category === "necklaces") && groupedProducts.men.length > 0 ? (
+            {(["bracelets", "necklaces"].includes(normalizeCategoryKey(category))) && groupedProducts.men.length > 0 ? (
               <>
                 <div className="studio-subsection-title">גברים</div>
                 {groupedProducts.men.map((product) => {
@@ -390,7 +401,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 })}
               </>
             ) : null}
-            {(category === "bracelets" || category === "necklaces") && groupedProducts.women.length > 0 ? (
+            {(["bracelets", "necklaces"].includes(normalizeCategoryKey(category))) && groupedProducts.women.length > 0 ? (
               <>
                 <div className="studio-subsection-divider" />
                 <div className="studio-subsection-title">נשים</div>
@@ -434,7 +445,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 })}
               </>
             ) : null}
-            {(category !== "bracelets" && category !== "necklaces" ? filteredProducts : groupedProducts.others).map((product) => {
+            {(!["bracelets", "necklaces"].includes(normalizeCategoryKey(category)) ? filteredProducts : groupedProducts.others).map((product) => {
               const outOfStock = product.totalStock <= 0;
               return (
                 <article
