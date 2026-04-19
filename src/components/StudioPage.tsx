@@ -35,6 +35,7 @@ type PublicProduct = {
   images: string[];
   studioCategory: StudioCategoryId;
   subcategoryLabel: string | null;
+  subcategoryLabels?: string[];
   studioColors: string[];
   stock: number;
   variants?: PublicVariant[];
@@ -69,6 +70,14 @@ function normalizeCategoryKey(raw: string) {
   if (v.includes("key") || v.includes("מחזיק")) return "keychains";
   if (v.includes("other") || v.includes("אחר")) return "other";
   return v;
+}
+
+function inferSubcategoryFromTexts(texts: string[]): StudioSubcategory {
+  const t = texts.join(" ").toLowerCase();
+  if (t.includes("זוג") || t.includes("couple")) return "couple";
+  if (t.includes("נשים") || t.includes("אישה") || t.includes("women") || t.includes("woman")) return "women";
+  if (t.includes("גברים") || t.includes("גבר") || t.includes("men") || t.includes("man")) return "men";
+  return null;
 }
 
 const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
@@ -147,7 +156,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           return {
             id: p.id,
             category: p.studioCategory,
-            subcategory: p.subcategoryLabel === "נשים" ? "women" : p.subcategoryLabel === "גברים" ? "men" : null,
+            subcategory: inferSubcategoryFromTexts([
+              p.subcategoryLabel ?? "",
+              ...(Array.isArray(p.subcategoryLabels) ? p.subcategoryLabels : []),
+              p.name ?? "",
+              p.description ?? "",
+            ]),
             title: p.name,
             description: p.description || "",
             price: Number(p.price) || 0,
@@ -199,8 +213,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const groupedProducts = useMemo(() => {
     const men = filteredProducts.filter((p) => p.subcategory === "men");
     const women = filteredProducts.filter((p) => p.subcategory === "women");
-    const others = filteredProducts.filter((p) => p.subcategory !== "men" && p.subcategory !== "women");
-    return { men, women, others };
+    const couple = filteredProducts.filter((p) => p.subcategory === "couple");
+    const others = filteredProducts.filter((p) => p.subcategory !== "men" && p.subcategory !== "women" && p.subcategory !== "couple");
+    return { men, women, couple, others };
   }, [filteredProducts]);
 
   const shipping = studioShippingMethods.find((s) => s.id === shippingId) ?? studioShippingMethods[0];
@@ -406,6 +421,50 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 <div className="studio-subsection-divider" />
                 <div className="studio-subsection-title">נשים</div>
                 {groupedProducts.women.map((product) => {
+                  const outOfStock = product.totalStock <= 0;
+                  return (
+                    <article
+                      key={product.id}
+                      className={`studio-product-card ${productId === product.id ? "selected" : ""} ${outOfStock ? "out-of-stock" : ""}`}
+                      onClick={() => selectProductAndGoDesign(product.id)}
+                    >
+                      <span className="studio-product-category-label">
+                        {studioCategories.find((c) => c.id === product.category)?.label ?? "קטגוריה"}
+                      </span>
+                      {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
+                      <div className={`studio-product-thumb ${product.category}`}>
+                        {product.image ? <img src={product.image} alt={product.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                      </div>
+                      <h3>{product.title}</h3>
+                      <strong className="studio-product-price">{shekel(product.price)}</strong>
+                      <div className="studio-swatch-row">
+                        {product.colors.map((color, index) => (
+                          <button
+                            key={`${product.id}-${color.name}-${index}`}
+                            type="button"
+                            className={`studio-color-swatch ${index === (selectedColorByProduct[product.id] ?? 0) ? "active" : ""}`}
+                            style={{ ["--swatch" as string]: color.swatch, opacity: color.stock > 0 ? 1 : 0.35 }}
+                            aria-label={color.name}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setSelectedColorByProduct((prev) => ({ ...prev, [product.id]: index }));
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <button type="button" className="studio-select-btn" disabled={outOfStock}>
+                        {outOfStock ? "אזל המלאי" : "בחר"}
+                      </button>
+                    </article>
+                  );
+                })}
+              </>
+            ) : null}
+            {(["bracelets", "necklaces"].includes(normalizeCategoryKey(category))) && groupedProducts.couple.length > 0 ? (
+              <>
+                <div className="studio-subsection-divider" />
+                <div className="studio-subsection-title">זוגיים</div>
+                {groupedProducts.couple.map((product) => {
                   const outOfStock = product.totalStock <= 0;
                   return (
                     <article
