@@ -208,8 +208,40 @@ publicRouter.get("/products", async (_req, res) => {
       };
     });
     res.json({ products });
-  } catch {
+  } catch (err: any) {
+    console.error("[GET /api/public/products] failed:", {
+      message: err?.message,
+      code: err?.code,
+      name: err?.name,
+      stack: err?.stack,
+    });
     res.status(500).json({ error: "SERVER_ERROR" });
   }
+});
+
+// GET /api/public/site — minimal site meta used by the storefront (WhatsApp digits, etc.).
+publicRouter.get("/site", async (_req, res) => {
+  let whatsapp: string | null = null;
+  try {
+    const sb = getSupabaseAdminClient();
+    const { data } = await sb
+      .from("site_settings")
+      .select("value")
+      .in("key", ["site_whatsapp", "whatsapp", "studio_whatsapp"])
+      .limit(1)
+      .maybeSingle();
+    const raw = data?.value;
+    if (typeof raw === "string") whatsapp = raw;
+    else if (raw && typeof raw === "object") whatsapp = (raw as any).digits ?? (raw as any).phone ?? null;
+  } catch (err: any) {
+    console.warn("[GET /api/public/site] site_settings lookup failed:", err?.message);
+  }
+  res.json({ whatsapp: whatsapp ?? "" });
+});
+
+// POST /api/public/marketing-events — stub accepts events and returns OK.
+// Keeps beacon from erroring until analytics ingestion is wired.
+publicRouter.post("/marketing-events", (_req, res) => {
+  res.json({ ok: true });
 });
 

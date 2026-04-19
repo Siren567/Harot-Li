@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { getSupabaseAdminClient } from "../supabase/client.js";
+import { requireAdmin } from "../lib/auth.js";
 
 export const categoriesRouter = Router();
 
@@ -367,7 +368,7 @@ categoriesRouter.get("/:id", async (req, res) => {
   res.json({ category: { ...category, productCount: 0 } });
 });
 
-categoriesRouter.post("/", async (req, res) => {
+categoriesRouter.post("/", requireAdmin, async (req, res) => {
   const parsed = CategoryCreateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "VALIDATION", details: parsed.error.flatten() });
 
@@ -429,7 +430,7 @@ categoriesRouter.post("/", async (req, res) => {
   }
 });
 
-categoriesRouter.patch("/:id", async (req, res) => {
+categoriesRouter.patch("/:id", requireAdmin, async (req, res) => {
   const id = req.params.id;
   const parsed = CategoryUpdateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "VALIDATION", details: parsed.error.flatten() });
@@ -497,7 +498,7 @@ categoriesRouter.patch("/:id", async (req, res) => {
   }
 });
 
-categoriesRouter.post("/:id/toggle", async (req, res) => {
+categoriesRouter.post("/:id/toggle", requireAdmin, async (req, res) => {
   const id = req.params.id;
   const parsed = z.object({ isActive: z.boolean() }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "VALIDATION", details: parsed.error.flatten() });
@@ -535,7 +536,7 @@ categoriesRouter.post("/:id/toggle", async (req, res) => {
   }
 });
 
-categoriesRouter.delete("/:id", async (req, res) => {
+categoriesRouter.delete("/:id", requireAdmin, async (req, res) => {
   const id = req.params.id;
 
   const existing = await prisma.category.findUnique({ where: { id } });

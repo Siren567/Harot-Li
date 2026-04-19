@@ -16,6 +16,27 @@ import {
 
 type PaymentStatus = "paid" | "pending" | "failed";
 type OrderStatus = "new" | "processing" | "ready" | "shipped" | "completed" | "cancelled";
+type BackendOrderStatus = "NEW" | "PAID" | "FULFILLED" | "SHIPPED" | "COMPLETED" | "CANCELLED" | "REFUNDED";
+
+const BACKEND_STATUS_LABEL: Record<BackendOrderStatus, string> = {
+  NEW: "חדש",
+  PAID: "שולם",
+  FULFILLED: "בהכנה",
+  SHIPPED: "נשלח",
+  COMPLETED: "הושלם",
+  CANCELLED: "בוטל",
+  REFUNDED: "זוכה",
+};
+
+const ALLOWED_TRANSITIONS: Record<BackendOrderStatus, BackendOrderStatus[]> = {
+  NEW: ["PAID", "CANCELLED"],
+  PAID: ["FULFILLED", "CANCELLED", "REFUNDED"],
+  FULFILLED: ["SHIPPED", "CANCELLED", "REFUNDED"],
+  SHIPPED: ["COMPLETED", "REFUNDED"],
+  COMPLETED: ["REFUNDED"],
+  CANCELLED: [],
+  REFUNDED: [],
+};
 
 type OrderItem = {
   id: string;
@@ -34,6 +55,7 @@ type Order = {
   total: number;
   paymentStatus: PaymentStatus;
   orderStatus: OrderStatus;
+  rawStatus: BackendOrderStatus;
   designNumber: string;
   items: OrderItem[];
   engravingText: string;
@@ -144,12 +166,43 @@ function Drawer({
   open,
   order,
   onClose,
+  onStatusUpdated,
 }: {
   open: boolean;
   order: Order | null;
   onClose: () => void;
+  onStatusUpdated: (id: string, next: BackendOrderStatus) => void;
 }) {
+  const [nextStatus, setNextStatus] = useState<BackendOrderStatus | "">("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    setNextStatus("");
+    setErr(null);
+  }, [order?.id]);
+
   if (!open) return null;
+
+  const allowed = order ? ALLOWED_TRANSITIONS[order.rawStatus] ?? [] : [];
+
+  async function handleSave() {
+    if (!order || !nextStatus) return;
+    setSaving(true);
+    setErr(null);
+    try {
+      await apiFetch(`/api/orders/${order.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      onStatusUpdated(order.id, nextStatus);
+      setNextStatus("");
+    } catch (e: any) {
+      setErr(e?.error === "INVALID_TRANSITION" ? "מעבר סטטוס לא חוקי" : "שגיאה בעדכון סטטוס");
+    } finally {
+      setSaving(false);
+    }
+  }
   return (
     <>
       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 200 }} onClick={onClose} />
@@ -300,34 +353,52 @@ function Drawer({
             flexShrink: 0,
           }}
         >
-          <button
-            style={{
-              background: "var(--primary)",
-              color: "var(--primary-foreground)",
-              border: "1px solid rgba(201,169,110,0.35)",
-              borderRadius: "10px",
-              padding: "10px 12px",
-              fontSize: "12px",
-              fontWeight: 800,
-              cursor: "pointer",
-            }}
-          >
-            עדכון סטטוס
-          </button>
-          <button
-            style={{
-              background: "var(--input)",
-              color: "var(--foreground-secondary)",
-              border: "1px solid var(--border)",
-              borderRadius: "10px",
-              padding: "10px 12px",
-              fontSize: "12px",
-              fontWeight: 800,
-              cursor: "pointer",
-            }}
-          >
-            עריכה
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px", flex: 1 }}>
+            <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+              סטטוס נוכחי: {order ? BACKEND_STATUS_LABEL[order.rawStatus] : "—"}
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <select
+                value={nextStatus}
+                onChange={(e) => setNextStatus(e.target.value as BackendOrderStatus | "")}
+                disabled={!order || allowed.length === 0 || saving}
+                style={{
+                  background: "var(--input)",
+                  color: "var(--foreground)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "10px",
+                  padding: "10px 12px",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  flex: 1,
+                }}
+              >
+                <option value="">{allowed.length ? "בחר סטטוס חדש…" : "אין מעברים אפשריים"}</option>
+                {allowed.map((s) => (
+                  <option key={s} value={s}>{BACKEND_STATUS_LABEL[s]}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleSave}
+                disabled={!nextStatus || saving}
+                style={{
+                  background: nextStatus && !saving ? "var(--primary)" : "rgba(201,169,110,0.4)",
+                  color: "var(--primary-foreground)",
+                  border: "1px solid rgba(201,169,110,0.35)",
+                  borderRadius: "10px",
+                  padding: "10px 14px",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  cursor: nextStatus && !saving ? "pointer" : "not-allowed",
+                }}
+              >
+                {saving ? "שומר…" : "עדכון סטטוס"}
+              </button>
+            </div>
+            {err && (
+              <div style={{ fontSize: "11px", color: "var(--destructive)" }}>{err}</div>
+            )}
+          </div>
         </div>
       </aside>
     </>
@@ -346,7 +417,20 @@ export function OrdersPage() {
         if (!mounted) return;
         const rows = Array.isArray(out?.orders) ? out.orders : [];
         const mapped: Order[] = rows.map((o: any) => {
-          const items = Array.isArray(o.items) ? o.items : [];
+          const orderItems = Array.isArray(o.orderItems) ? o.orderItems : [];
+          const legacyItems = Array.isArray(o.items) ? o.items : [];
+          const items = orderItems.length ? orderItems : legacyItems;
+          const raw: BackendOrderStatus = (o.status as BackendOrderStatus) ?? "NEW";
+          const uiStatus: OrderStatus =
+            raw === "COMPLETED" || raw === "PAID"
+              ? "completed"
+              : raw === "CANCELLED" || raw === "REFUNDED"
+                ? "cancelled"
+                : raw === "SHIPPED"
+                  ? "shipped"
+                  : raw === "FULFILLED"
+                    ? "ready"
+                    : "new";
           return {
             id: String(o.id ?? ""),
             orderNumber: String(o.orderNumber ?? ""),
@@ -355,13 +439,13 @@ export function OrdersPage() {
             customerEmail: String(o.customer?.email ?? "—"),
             createdAt: String(o.createdAt ?? new Date().toISOString()),
             total: Number(o.total ?? 0),
-            paymentStatus: o.status === "PAID" ? "paid" : o.status === "CANCELLED" ? "failed" : "pending",
-            orderStatus:
-              o.status === "PAID" ? "completed" : o.status === "CANCELLED" ? "cancelled" : "new",
+            paymentStatus: raw === "PAID" || raw === "COMPLETED" ? "paid" : raw === "CANCELLED" || raw === "REFUNDED" ? "failed" : "pending",
+            orderStatus: uiStatus,
+            rawStatus: raw,
             designNumber: "—",
             items: items.map((it: any, idx: number) => ({
-              id: `${o.id}-${idx}`,
-              name: String(it?.name ?? "מוצר"),
+              id: String(it?.id ?? `${o.id}-${idx}`),
+              name: String(it?.title ?? it?.name ?? "מוצר"),
               qty: Number(it?.qty ?? 1),
               price: Number(it?.unitPrice ?? 0),
             })),
@@ -818,6 +902,7 @@ export function OrdersPage() {
                           עריכה
                         </button>
                         <button
+                          onClick={() => setSelected(o)}
                           style={{
                             background: "var(--primary)",
                             border: "1px solid rgba(201,169,110,0.35)",
@@ -935,7 +1020,40 @@ export function OrdersPage() {
         </div>
       </div>
 
-      <Drawer open={Boolean(selected)} order={selected} onClose={() => setSelected(null)} />
+      <Drawer
+        open={Boolean(selected)}
+        order={selected}
+        onClose={() => setSelected(null)}
+        onStatusUpdated={(id, next) => {
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === id
+                ? {
+                    ...o,
+                    rawStatus: next,
+                    orderStatus:
+                      next === "COMPLETED" || next === "PAID"
+                        ? "completed"
+                        : next === "CANCELLED" || next === "REFUNDED"
+                          ? "cancelled"
+                          : next === "SHIPPED"
+                            ? "shipped"
+                            : next === "FULFILLED"
+                              ? "ready"
+                              : "new",
+                    paymentStatus:
+                      next === "PAID" || next === "COMPLETED"
+                        ? "paid"
+                        : next === "CANCELLED" || next === "REFUNDED"
+                          ? "failed"
+                          : "pending",
+                  }
+                : o,
+            ),
+          );
+          setSelected((cur) => (cur && cur.id === id ? { ...cur, rawStatus: next } : cur));
+        }}
+      />
     </div>
   );
 }

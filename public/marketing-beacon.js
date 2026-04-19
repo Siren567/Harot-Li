@@ -5,9 +5,12 @@
 const SESSION_KEY = "harotli_mkt_session_v1";
 
 function apiBases() {
-  const host = typeof window !== "undefined" ? window.location.hostname || "localhost" : "localhost";
-  const origin = typeof window !== "undefined" ? window.location.origin || "" : "";
-  return [origin, "", "http://localhost:4444", `http://${host}:4444`, `http://${host}:3000`];
+  if (typeof window === "undefined") return [""];
+  const host = window.location.hostname || "";
+  const isLocal = host === "localhost" || host === "127.0.0.1";
+  if (isLocal) return ["http://localhost:4444", ""];
+  // In production use relative + common proxy prefixes only — avoid mixed-content dev URLs.
+  return ["", "/_/backend", "/backend"];
 }
 
 function sessionId() {
