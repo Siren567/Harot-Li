@@ -209,13 +209,15 @@ publicRouter.get("/products", async (_req, res) => {
     });
     res.json({ products });
   } catch (err: any) {
-    console.error("[GET /api/public/products] failed:", {
-      message: err?.message,
-      code: err?.code,
-      name: err?.name,
-      stack: err?.stack,
-    });
-    res.status(500).json({ error: "SERVER_ERROR" });
+    // Log the full Prisma error (name + code + meta + message + stack) on separate lines
+    // so Vercel keeps each field intact and we can see the schema-drift cause.
+    console.error("[GET /api/public/products] FAILED name=", err?.name);
+    console.error("[GET /api/public/products] FAILED code=", err?.code);
+    console.error("[GET /api/public/products] FAILED clientVersion=", err?.clientVersion);
+    console.error("[GET /api/public/products] FAILED meta=", JSON.stringify(err?.meta ?? null));
+    console.error("[GET /api/public/products] FAILED message=", String(err?.message ?? err));
+    console.error("[GET /api/public/products] FAILED stack=", err?.stack);
+    res.status(500).json({ error: "SERVER_ERROR", hint: String(err?.message ?? "").slice(0, 500) });
   }
 });
 

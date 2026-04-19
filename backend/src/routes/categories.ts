@@ -316,7 +316,11 @@ categoriesRouter.get("/tree", async (_req, res) => {
     });
 
     res.json({ categories: mains });
-  } catch {
+  } catch (err: any) {
+    console.error("[GET /api/categories/tree] FAILED name=", err?.name);
+    console.error("[GET /api/categories/tree] FAILED code=", err?.code);
+    console.error("[GET /api/categories/tree] FAILED meta=", JSON.stringify(err?.meta ?? null));
+    console.error("[GET /api/categories/tree] FAILED message=", String(err?.message ?? err));
     // Fallback categories so product/category UIs keep working if Prisma DB is unavailable.
     const rows = await loadFallbackRows();
     res.json({ categories: toTree(rows) });
