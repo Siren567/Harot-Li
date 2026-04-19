@@ -224,12 +224,20 @@ function slugify(input: string) {
     .replace(/^-|-$/g, "");
 }
 
+const optionalUrl = z.preprocess(
+  (v) => (v === "" || v === undefined ? null : v),
+  z.union([z.string().url(), z.null()]).optional()
+);
+
 const CategoryBaseSchema = z.object({
   name: z.string().min(1).max(80),
   slug: z.string().min(1).max(80).optional().nullable(),
   description: z.string().max(2000).optional().nullable(),
-  imageUrl: z.string().url().optional().nullable(),
-  parentId: z.string().min(1).max(120).optional().nullable(),
+  imageUrl: optionalUrl,
+  parentId: z.preprocess(
+    (v) => (v === "" || v === undefined ? null : v),
+    z.union([z.string().min(1).max(120), z.null()]).optional()
+  ),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().min(0).max(9999).optional(),
   seoTitle: z.string().max(120).optional().nullable(),

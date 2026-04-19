@@ -251,20 +251,48 @@ export function ContentPage() {
     return products.filter((p) => p.title.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q));
   }, [productSearch, products]);
 
-  async function saveSection(key: string, title: string | null, body: any, isActive = true, sortOrder = 0) {
-    setSavingKey(key);
+  type SaveSectionOpts = { savingKey?: string; successToast?: string | false };
+
+  async function saveSection(
+    key: string,
+    title: string | null,
+    body: any,
+    isActive = true,
+    sortOrder = 0,
+    opts?: SaveSectionOpts
+  ) {
+    const sk = opts?.savingKey ?? key;
+    setSavingKey(sk);
     try {
       const out = await apiFetch<{ section: ContentSection }>(`/api/content/sections/${key}`, {
         method: "PUT",
         body: JSON.stringify({ title, body, is_active: isActive, sort_order: sortOrder }),
       });
       setSections((prev) => upsertSection(prev, out.section));
-      toast("החלק נשמר בהצלחה", "success");
+      if (opts?.successToast !== false) {
+        toast(opts?.successToast ?? "החלק נשמר בהצלחה", "success");
+      }
     } catch {
       toast("שמירת החלק נכשלה", "error");
     } finally {
       setSavingKey(null);
     }
+  }
+
+  async function saveStudioCategoryOrder() {
+    await saveSection(
+      "top_sellers_section",
+      topSellerCfg.title ?? "נבחרים במיוחד",
+      {
+        ...topSellerCfg,
+        categoryOrder: normalizeStudioCategoryOrder(topSellerCfg.categoryOrder),
+        limit: 3,
+        isVisible: topSellerCfg.isVisible !== false,
+      },
+      true,
+      5,
+      { savingKey: "studio_category_order", successToast: "סדר הקטגוריות נשמר" }
+    );
   }
 
   async function saveTextSection(key: string) {
@@ -286,7 +314,7 @@ export function ContentPage() {
     }
   }
 
-  async function saveTopSellers() {
+  async function saveFeaturedHomeProducts() {
     setSavingKey("top_sellers");
     try {
       const ordered = [...topSellers].slice(0, 3);
@@ -312,11 +340,11 @@ export function ContentPage() {
         topSellerCfg.title ?? "נבחרים במיוחד",
         { ...topSellerCfg, categoryOrder: normalizeStudioCategoryOrder(topSellerCfg.categoryOrder), limit: 3, isVisible: true },
         true,
-        5
+        5,
+        { savingKey: "top_sellers", successToast: "מוצרי הבית נשמרו" }
       );
-      toast("Top sellers נשמרו", "success");
     } catch {
-      toast("שמירת Top sellers נכשלה", "error");
+      toast("שמירת מוצרי הבית נכשלה", "error");
     } finally {
       setSavingKey(null);
     }
@@ -395,33 +423,14 @@ export function ContentPage() {
     return <div style={{ color: "var(--muted-foreground)", fontSize: 13 }}>טוען ניהול תוכן...</div>;
   }
 
-  const activeSections = sections.filter((s) => s.is_active).length;
-  const lastUpdated = sections.map((s) => new Date(s.updated_at).getTime()).sort((a, b) => b - a)[0];
   const showAdvancedTools = false;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingBottom: 18 }}>
       <PageHeader
         title="דף הבית - ניהול תוכן"
-        subtitle="עריכת מלל האתר וניהול שרשרת המוצרים הנמכרים ביותר בלבד."
+        subtitle="סדר קטגוריות בסטודיו ומוצרים בולטים בדף הבית. לכל חלק כפתור שמירה נפרד."
       />
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-        <Card>
-          <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>קטעי תוכן פעילים</div>
-          <div style={{ marginTop: 6, fontSize: 20, fontWeight: 900, color: "var(--foreground)" }}>{activeSections}</div>
-        </Card>
-        <Card>
-          <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>Top sellers מוגדרים</div>
-          <div style={{ marginTop: 6, fontSize: 20, fontWeight: 900, color: "var(--foreground)" }}>{Math.min(topSellers.length, 3)}/3</div>
-        </Card>
-        <Card>
-          <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>עודכן לאחרונה</div>
-          <div style={{ marginTop: 6, fontSize: 13, fontWeight: 900, color: "var(--foreground)" }}>
-            {lastUpdated ? new Date(lastUpdated).toLocaleString("he-IL") : "—"}
-          </div>
-        </Card>
-      </div>
 
       {showAdvancedTools ? (
       <Card>
@@ -461,6 +470,36 @@ export function ContentPage() {
       ) : null}
 
       <Card>
+        <SectionTitle title="סדר קטגוריות בסטודיו" />
+        <p style={{ margin: "0 0 12px", fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.45 }}>
+          קובע את סדר הטאבים/הרשימה בסטודיו בלבד. השמירה כאן לא משנה את מוצרי הבית.
+        </p>
+        <InputGroup label="קטגוריות (למעלה ↔ למטה)">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {normalizeStudioCategoryOrder(topSellerCfg.categoryOrder).map((catId: StudioCategoryId, idx: number) => {
+              const meta = studioCategories.find((c) => c.id === catId);
+              return (
+                <div key={catId} style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ fontSize: 12, fontWeight: 900, color: "var(--foreground-secondary)" }}>
+                    {idx + 1}. {meta?.label ?? catId}
+                  </div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button type="button" onClick={() => moveStudioCategory(idx, -1)} style={iconBtnStyle()} disabled={idx === 0}>
+                      <ArrowUp size={15} />
+                    </button>
+                    <button type="button" onClick={() => moveStudioCategory(idx, 1)} style={iconBtnStyle()} disabled={idx === DEFAULT_STUDIO_CATEGORY_ORDER.length - 1}>
+                      <ArrowDown size={15} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </InputGroup>
+        <SaveBar loading={savingKey === "studio_category_order"} onSave={saveStudioCategoryOrder} label="שמור סדר קטגוריות" />
+      </Card>
+
+      <Card>
         <SectionTitle title="מוצרים מוצגים בדף הבית (3 בלבד)" />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <InputGroup label="כותרת סקשן">
@@ -468,31 +507,6 @@ export function ContentPage() {
           </InputGroup>
           <InputGroup label="תת כותרת סקשן">
             <TextInput value={topSellerCfg.subtitle ?? ""} onChange={(e) => setTopSellerCfg((p: any) => ({ ...p, subtitle: e.target.value }))} />
-          </InputGroup>
-        </div>
-
-        <div style={{ marginTop: 12 }}>
-          <InputGroup label="סדר קטגוריות בסטודיו">
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {normalizeStudioCategoryOrder(topSellerCfg.categoryOrder).map((catId: StudioCategoryId, idx: number) => {
-                const meta = studioCategories.find((c) => c.id === catId);
-                return (
-                  <div key={catId} style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ fontSize: 12, fontWeight: 900, color: "var(--foreground-secondary)" }}>
-                      {idx + 1}. {meta?.label ?? catId}
-                    </div>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button type="button" onClick={() => moveStudioCategory(idx, -1)} style={iconBtnStyle()} disabled={idx === 0}>
-                        <ArrowUp size={15} />
-                      </button>
-                      <button type="button" onClick={() => moveStudioCategory(idx, 1)} style={iconBtnStyle()} disabled={idx === DEFAULT_STUDIO_CATEGORY_ORDER.length - 1}>
-                        <ArrowDown size={15} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           </InputGroup>
         </div>
 
@@ -579,7 +593,7 @@ export function ContentPage() {
             </InputGroup>
           </div>
         </div>
-        <SaveBar loading={savingKey === "top_sellers"} onSave={saveTopSellers} />
+        <SaveBar loading={savingKey === "top_sellers"} onSave={saveFeaturedHomeProducts} label="שמור מוצרי בית" />
       </Card>
 
       {showAdvancedTools ? (
@@ -630,12 +644,12 @@ function SectionTitle({ title }: { title: string }) {
   );
 }
 
-function SaveBar({ loading, onSave }: { loading: boolean; onSave: () => void }) {
+function SaveBar({ loading, onSave, label = "שמור" }: { loading: boolean; onSave: () => void; label?: string }) {
   return (
     <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-start" }}>
       <SmallBtn loading={loading} onClick={onSave}>
         <Save size={16} />
-        שמור
+        {label}
       </SmallBtn>
     </div>
   );

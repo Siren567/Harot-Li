@@ -1,13 +1,7 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { StudioCategoryId, StudioSubcategory } from "../constants/studioData";
 import { getApiBaseUrl } from "../lib/apiBase";
-import {
-  studioCategories,
-  studioFonts,
-  studioMaterials,
-  studioPayments,
-  studioShippingMethods
-} from "../constants/studioData";
+import { studioCategories, studioFonts, studioPayments, studioShippingMethods } from "../constants/studioData";
 
 type StudioPageProps = {
   onBackToLanding: () => void;
@@ -24,6 +18,7 @@ type PublicVariant = {
   material: string | null;
   stock: number;
   price: number;
+  lowThreshold?: number;
 };
 
 type PublicProduct = {
@@ -40,7 +35,22 @@ type PublicProduct = {
   audiences?: Array<"men" | "women" | "couple">;
   studioColors: string[];
   stock: number;
+  allowCustomerImageUpload?: boolean;
+  lowThreshold?: number;
   variants?: PublicVariant[];
+};
+
+type ColorKey = "gold" | "silver" | "rose" | "black";
+
+type StudioColorRow = {
+  name: string;
+  swatch: string;
+  variantId?: string;
+  stock: number;
+  pendantType?: string | null;
+  material?: string | null;
+  price: number;
+  colorKey: ColorKey | null;
 };
 
 type StudioRuntimeProduct = {
@@ -51,16 +61,126 @@ type StudioRuntimeProduct = {
   description: string;
   price: number;
   image: string | null;
-  colors: { name: string; swatch: string; variantId?: string; stock: number; pendantType?: string | null; material?: string | null; price: number }[];
+  images: string[];
+  colors: StudioColorRow[];
   totalStock: number;
+  allowCustomerImageUpload: boolean;
+  lowThreshold: number;
 };
 
-const COLOR_META: Record<string, { name: string; swatch: string }> = {
+type EngravingItem = {
+  id: string;
+  text: string;
+  font: string;
+  size: number;
+  x: number;
+  y: number;
+};
+
+const COLOR_META: Record<ColorKey, { name: string; swatch: string }> = {
   gold: { name: "זהב", swatch: "#d4af37" },
   silver: { name: "כסף", swatch: "#c0c0c0" },
   rose: { name: "רוז גולד", swatch: "#d4a5a0" },
   black: { name: "שחור", swatch: "#2a2a2a" }
 };
+
+function tokenToColorKey(token: string): ColorKey | null {
+  const x = String(token).trim().toLowerCase();
+  if (!x) return null;
+  if (x === "gold" || x === "זהב") return "gold";
+  if (x === "silver" || x === "כסף") return "silver";
+  if (x === "rose" || x === "רוז" || x.includes("רוז")) return "rose";
+  if (x === "black" || x.includes("שחור")) return "black";
+  return null;
+}
+
+function inferColorKeyFromLabel(raw: string | null | undefined): ColorKey | null {
+  const s = String(raw ?? "").toLowerCase();
+  if (s.includes("שחור") || s.includes("black")) return "black";
+  if (s.includes("רוז") || s.includes("rose")) return "rose";
+  if (s.includes("כסף") || s.includes("silver")) return "silver";
+  if (s.includes("זהב") || s.includes("gold")) return "gold";
+  return null;
+}
+
+function buildStudioColors(p: PublicProduct): StudioColorRow[] {
+  const variants = Array.isArray(p.variants) ? p.variants : [];
+  const allowed = new Set(
+    (p.studioColors ?? []).map((t) => tokenToColorKey(String(t))).filter((k): k is ColorKey => Boolean(k))
+  );
+
+  if (variants.length > 0) {
+    const mapped: Array<StudioColorRow | null> = variants.map((v) => {
+      const key = inferColorKeyFromLabel(v.color) ?? tokenToColorKey(String(v.color ?? ""));
+      if (allowed.size > 0 && key && !allowed.has(key)) return null;
+      const meta = key ? COLOR_META[key] : { name: String(v.color || "צבע").trim() || "צבע", swatch: "#b8b8b8" };
+      const row: StudioColorRow = {
+        name: meta.name,
+        swatch: meta.swatch,
+        variantId: v.id,
+        stock: Number(v.stock) || 0,
+        pendantType: v.pendantType ?? null,
+        material: v.material ?? null,
+        price: Number(v.price) || Number(p.price) || 0,
+        colorKey: key,
+      };
+      return row;
+    });
+    const rows = mapped.filter((x): x is StudioColorRow => x !== null);
+    if (rows.length > 0) return rows;
+    return variants.map((v) => {
+      const key = inferColorKeyFromLabel(v.color) ?? tokenToColorKey(String(v.color ?? ""));
+      const meta = key ? COLOR_META[key] : { name: String(v.color || "צבע").trim() || "צבע", swatch: "#b8b8b8" };
+      return {
+        name: meta.name,
+        swatch: meta.swatch,
+        variantId: v.id,
+        stock: Number(v.stock) || 0,
+        pendantType: v.pendantType ?? null,
+        material: v.material ?? null,
+        price: Number(v.price) || Number(p.price) || 0,
+        colorKey: key,
+      };
+    });
+  }
+
+  const onlyKeys = (p.studioColors ?? []).map((t) => tokenToColorKey(String(t))).filter((k): k is ColorKey => Boolean(k));
+  if (onlyKeys.length === 0) {
+    return [
+      {
+        name: "מלאי כללי",
+        swatch: "#c0c0c0",
+        stock: Number(p.stock) || 0,
+        price: Number(p.price) || 0,
+        colorKey: null,
+      },
+    ];
+  }
+  return onlyKeys.map((key) => ({
+    name: COLOR_META[key].name,
+    swatch: COLOR_META[key].swatch,
+    stock: Number(p.stock) || 0,
+    price: Number(p.price) || 0,
+    colorKey: key,
+  }));
+}
+
+function pendantShapeClassName(pendantType: string | null | undefined): string {
+  const t = String(pendantType ?? "").trim();
+  if (!t) return "";
+  if (t.includes("לב")) return "pendant-heart";
+  if (t.includes("עיגול")) return "pendant-circle";
+  if (t.includes("ריבוע")) return "pendant-square";
+  if (t.includes("מלבן")) return "pendant-bar";
+  return "";
+}
+
+function autoEngraveFontPx(text: string, baseSize: number): number {
+  const len = text.length;
+  if (len <= 14) return baseSize;
+  if (len <= 32) return Math.max(11, baseSize - Math.round((len - 14) * 0.65));
+  return Math.max(9, Math.min(baseSize, Math.round(200 / Math.sqrt(len + 4))));
+}
 
 const DEFAULT_STUDIO_CATEGORY_ORDER: StudioCategoryId[] = studioCategories.map((c) => c.id);
 
@@ -91,10 +211,14 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [productId, setProductId] = useState<string>("");
   const [selectedColorByProduct, setSelectedColorByProduct] = useState<Record<string, number>>({});
 
-  const [text, setText] = useState("לנצח שלך");
-  const [font, setFont] = useState("heebo");
-  const [material, setMaterial] = useState("gold");
-  const [size, setSize] = useState(28);
+  const [engravings, setEngravings] = useState<EngravingItem[]>([
+    { id: "engraving-1", text: "לנצח שלך", font: "heebo", size: 28, x: 0, y: 0 },
+  ]);
+  const [activeEngravingId, setActiveEngravingId] = useState("engraving-1");
+  const [activeTextDraft, setActiveTextDraft] = useState("לנצח שלך");
+  const [customerImageDataUrl, setCustomerImageDataUrl] = useState<string | null>(null);
+  const customerImageInputRef = useRef<HTMLInputElement | null>(null);
+  const [galleryPickIndex, setGalleryPickIndex] = useState(0);
   const [rotation, setRotation] = useState(14);
   const [zoom, setZoom] = useState(1);
   const [qty, setQty] = useState(1);
@@ -114,7 +238,69 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     city: "",
     address: ""
   });
+  const objectRef = useRef<HTMLDivElement | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const apiBase = getApiBaseUrl();
+
+  const activeEngraving = useMemo(
+    () => engravings.find((item) => item.id === activeEngravingId) ?? engravings[0] ?? null,
+    [activeEngravingId, engravings]
+  );
+  const engravingSummary = useMemo(
+    () => engravings.map((item) => item.text.trim()).filter(Boolean).join(" | "),
+    [engravings]
+  );
+
+  function updateEngraving(id: string, patch: Partial<EngravingItem>) {
+    setEngravings((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function addEngraving() {
+    const id = `engraving-${Date.now()}`;
+    setEngravings((prev) => [...prev, { id, text: "💛", font: "heebo", size: 26, x: 0, y: 0 }]);
+    setActiveEngravingId(id);
+  }
+
+  function removeActiveEngraving() {
+    if (engravings.length <= 1 || !activeEngraving) return;
+    const next = engravings.filter((item) => item.id !== activeEngraving.id);
+    setEngravings(next);
+    setActiveEngravingId(next[0]?.id ?? "");
+  }
+
+  function clampPercent(value: number) {
+    return Math.max(-45, Math.min(45, value));
+  }
+
+  function startDragEngraving(id: string) {
+    setActiveEngravingId(id);
+    setDraggingId(id);
+  }
+
+  useEffect(() => {
+    const selected = engravings.find((item) => item.id === activeEngravingId) ?? engravings[0] ?? null;
+    setActiveTextDraft(selected?.text ?? "");
+  }, [activeEngravingId, engravings]);
+
+  useEffect(() => {
+    if (!draggingId) return;
+    const onMove = (event: PointerEvent) => {
+      const target = objectRef.current;
+      if (!target) return;
+      const rect = target.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const x = ((event.clientX - rect.left) / rect.width) * 100 - 50;
+      const y = ((event.clientY - rect.top) / rect.height) * 100 - 50;
+      updateEngraving(draggingId, { x: clampPercent(x), y: clampPercent(y) });
+    };
+    const onUp = () => setDraggingId(null);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [draggingId]);
 
   useEffect(() => {
     let mounted = true;
@@ -132,44 +318,29 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         const ordered = rawOrder.map((x: any) => (typeof x === "string" ? x : String(x?.id || ""))).filter(Boolean);
         const rows = Array.isArray(data.products) ? data.products : [];
         const mapped: StudioRuntimeProduct[] = rows.map((p) => {
-          const variants = Array.isArray(p.variants) ? p.variants : [];
-          const colors =
-            variants.length > 0
-              ? variants.map((v) => {
-                  const key = p.studioColors.find((c) => {
-                    const mappedColor = COLOR_META[c]?.name.toLowerCase();
-                    return mappedColor ? mappedColor === String(v.color ?? "").toLowerCase() : false;
-                  }) ?? p.studioColors[0] ?? "gold";
-                  const meta = COLOR_META[key] ?? { name: v.color || "ברירת מחדל", swatch: "#c0c0c0" };
-                  return {
-                    name: v.color || meta.name,
-                    swatch: meta.swatch,
-                    variantId: v.id,
-                    stock: Number(v.stock) || 0,
-                    pendantType: v.pendantType ?? null,
-                    material: v.material ?? null,
-                    price: Number(v.price) || Number(p.price) || 0
-                  };
-                })
-              : (p.studioColors.length ? p.studioColors : ["gold"]).map((key) => {
-                  const meta = COLOR_META[key] ?? { name: key, swatch: "#c0c0c0" };
-                  return { name: meta.name, swatch: meta.swatch, stock: Number(p.stock) || 0, price: Number(p.price) || 0 };
-                });
+          const colors = buildStudioColors(p);
           const explicitAudience =
             p.audience === "men" || p.audience === "women" || p.audience === "couple" ? p.audience : null;
+          const imgs = Array.isArray(p.images) ? p.images.filter(Boolean) : [];
           return {
             id: p.id,
             category: p.studioCategory,
-            // Prefer admin-defined audience from backend; use textual inference only as a safe fallback.
             subcategory:
               explicitAudience ??
-              inferSubcategoryFromTexts([p.subcategoryLabel ?? "", ...(Array.isArray(p.subcategoryLabels) ? p.subcategoryLabels : [])]),
+              inferSubcategoryFromTexts([
+                p.subcategoryLabel ?? "",
+                ...(Array.isArray(p.subcategoryLabels) ? p.subcategoryLabels : []),
+                p.name ?? "",
+              ]),
             title: p.name,
             description: p.description || "",
             price: Number(p.price) || 0,
-            image: p.image ?? p.images?.[0] ?? null,
+            image: p.image ?? imgs[0] ?? null,
+            images: imgs.length ? imgs : (p.image ? [p.image] : []).filter(Boolean) as string[],
             colors,
-            totalStock: Number(p.stock) || 0
+            totalStock: Number(p.stock) || 0,
+            allowCustomerImageUpload: Boolean(p.allowCustomerImageUpload),
+            lowThreshold: typeof p.lowThreshold === "number" ? p.lowThreshold : 5,
           };
         });
         if (!mounted) return;
@@ -179,6 +350,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         }
         setRuntimeProducts(mapped);
         setSelectedColorByProduct(Object.fromEntries(mapped.map((p) => [p.id, 0])));
+        setGalleryPickIndex(0);
         if (mapped.length > 0) setProductId((prev) => (prev && mapped.some((p) => p.id === prev) ? prev : mapped[0].id));
       } catch {
         if (!mounted) return;
@@ -193,6 +365,11 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     };
   }, [apiBase]);
 
+  useEffect(() => {
+    setCustomerImageDataUrl(null);
+    setGalleryPickIndex(0);
+  }, [productId]);
+
   const activeProduct = useMemo(() => {
     if (runtimeProducts.length === 0) return null;
     return runtimeProducts.find((p) => p.id === productId) ?? runtimeProducts[0];
@@ -200,6 +377,11 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const activeColor = activeProduct
     ? activeProduct.colors[selectedColorByProduct[activeProduct.id] ?? 0] ?? activeProduct.colors[0]
     : null;
+
+  const pendantExtraClass = useMemo(() => pendantShapeClassName(activeColor?.pendantType), [activeColor?.pendantType]);
+
+  const galleryUrls = activeProduct?.images?.length ? activeProduct.images : activeProduct?.image ? [activeProduct.image] : [];
+  const heroVisualUrl = galleryUrls[galleryPickIndex] ?? galleryUrls[0] ?? activeProduct?.image ?? null;
 
   const filteredProducts = useMemo(() => {
     const normalized = normalizeCategoryKey(category);
@@ -297,7 +479,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               unitPrice: Math.round((activeColor.price ?? activeProduct.price) * 100),
               color: activeColor.name,
               pendantShape: activeColor.pendantType ?? null,
-              material: activeColor.material ?? null
+              material: activeColor.material ?? null,
+              engravingText: engravingSummary || null,
+              customerImageUrl: activeProduct.allowCustomerImageUpload ? customerImageDataUrl : null,
             }
           ]
         })
@@ -329,9 +513,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       <header className="studio-topbar">
         <div className="studio-top-actions">
           <button
-            type="button"
+            type={step === 2 ? "submit" : "button"}
+            form={step === 2 ? "studio-checkout-form" : undefined}
             className="studio-primary-btn studio-top-next"
-            onClick={step === 2 ? submitOrder : goNext}
+            onClick={() => {
+              if (step !== 2) goNext();
+            }}
             disabled={step === 3 || submitting || (step === 0 && !activeProduct) || (step === 2 && !canPurchase)}
           >
             {step === 2 ? (submitting ? "מעבד תשלום..." : "לתשלום מאובטח") : step === 3 ? "הושלם" : "השלב הבא"}
@@ -373,7 +560,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             })}
           </div>
 
-          <div className="studio-products-grid">
+          <div className="studio-products-grid studio-products-grid--uniform">
             {loadingProducts ? <p>טוען מוצרים...</p> : null}
             {!loadingProducts && filteredProducts.length === 0 ? <p>אין מוצרים זמינים כרגע בקטגוריה זו.</p> : null}
             {(["bracelets", "necklaces"].includes(normalizeCategoryKey(category))) && groupedProducts.men.length > 0 ? (
@@ -381,6 +568,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 <div className="studio-subsection-title">גברים</div>
                 {groupedProducts.men.map((product) => {
                   const outOfStock = product.totalStock <= 0;
+                  const lowStock = !outOfStock && product.totalStock > 0 && product.totalStock <= product.lowThreshold;
                   return (
                     <article
                       key={product.id}
@@ -391,6 +579,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                         {studioCategories.find((c) => c.id === product.category)?.label ?? "קטגוריה"}
                       </span>
                       {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
+                      {lowStock ? <span className="studio-stock-badge studio-stock-badge--low">מלאי מוגבל</span> : null}
                       <div className={`studio-product-thumb ${product.category}`}>
                         {product.image ? <img src={product.image} alt={product.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
                       </div>
@@ -425,6 +614,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 <div className="studio-subsection-title">נשים</div>
                 {groupedProducts.women.map((product) => {
                   const outOfStock = product.totalStock <= 0;
+                  const lowStock = !outOfStock && product.totalStock > 0 && product.totalStock <= product.lowThreshold;
                   return (
                     <article
                       key={product.id}
@@ -435,6 +625,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                         {studioCategories.find((c) => c.id === product.category)?.label ?? "קטגוריה"}
                       </span>
                       {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
+                      {lowStock ? <span className="studio-stock-badge studio-stock-badge--low">מלאי מוגבל</span> : null}
                       <div className={`studio-product-thumb ${product.category}`}>
                         {product.image ? <img src={product.image} alt={product.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
                       </div>
@@ -469,6 +660,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 <div className="studio-subsection-title">זוגיים</div>
                 {groupedProducts.couple.map((product) => {
                   const outOfStock = product.totalStock <= 0;
+                  const lowStock = !outOfStock && product.totalStock > 0 && product.totalStock <= product.lowThreshold;
                   return (
                     <article
                       key={product.id}
@@ -479,6 +671,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                         {studioCategories.find((c) => c.id === product.category)?.label ?? "קטגוריה"}
                       </span>
                       {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
+                      {lowStock ? <span className="studio-stock-badge studio-stock-badge--low">מלאי מוגבל</span> : null}
                       <div className={`studio-product-thumb ${product.category}`}>
                         {product.image ? <img src={product.image} alt={product.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
                       </div>
@@ -509,6 +702,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             ) : null}
             {(!["bracelets", "necklaces"].includes(normalizeCategoryKey(category)) ? filteredProducts : groupedProducts.others).map((product) => {
               const outOfStock = product.totalStock <= 0;
+              const lowStock = !outOfStock && product.totalStock > 0 && product.totalStock <= product.lowThreshold;
               return (
                 <article
                   key={product.id}
@@ -519,6 +713,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     {studioCategories.find((c) => c.id === product.category)?.label ?? "קטגוריה"}
                   </span>
                   {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
+                  {lowStock ? <span className="studio-stock-badge studio-stock-badge--low">מלאי מוגבל</span> : null}
                   <div className={`studio-product-thumb ${product.category}`}>
                     {product.image ? <img src={product.image} alt={product.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
                   </div>
@@ -558,12 +753,23 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           <div className="studio-custom-layout">
             <aside className="studio-control-panel">
               <label>
-                טקסט לחריטה
-                <input value={text} onChange={(e) => setText(e.target.value)} maxLength={28} />
+                טקסט לחריטה (הבוקס הפעיל)
+                <textarea
+                  rows={3}
+                  value={activeTextDraft}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setActiveTextDraft(value);
+                    if (activeEngraving) updateEngraving(activeEngraving.id, { text: value });
+                  }}
+                />
               </label>
               <label>
                 פונט
-                <select value={font} onChange={(e) => setFont(e.target.value)}>
+                <select
+                  value={activeEngraving?.font ?? "heebo"}
+                  onChange={(e) => activeEngraving && updateEngraving(activeEngraving.id, { font: e.target.value })}
+                >
                   {studioFonts.map((f) => (
                     <option key={f.id} value={f.id}>
                       {f.label}
@@ -572,21 +778,79 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 </select>
               </label>
               <label>
-                גודל טקסט
-                <input type="range" min={18} max={44} value={size} onChange={(e) => setSize(Number(e.target.value))} />
+                גודל טקסט (בסיס)
+                <input
+                  type="range"
+                  min={18}
+                  max={44}
+                  value={activeEngraving?.size ?? 28}
+                  onChange={(e) => activeEngraving && updateEngraving(activeEngraving.id, { size: Number(e.target.value) })}
+                />
               </label>
-              <div className="studio-chip-row">
-                {studioMaterials.map((m) => (
+              <div className="studio-engraving-tools">
+                <button type="button" className="studio-chip" onClick={addEngraving}>
+                  הוסף בוקס טקסט / אימוג'י
+                </button>
+                <button type="button" className="studio-chip light" onClick={removeActiveEngraving} disabled={engravings.length <= 1}>
+                  מחק בוקס נבחר
+                </button>
+              </div>
+              <div className="studio-engraving-list">
+                {engravings.map((item, idx) => (
                   <button
-                    key={m.id}
-                    className={`studio-chip material ${material === m.id ? "active" : ""}`}
-                    style={{ ["--mat" as string]: m.color }}
-                    onClick={() => setMaterial(m.id)}
+                    key={item.id}
+                    type="button"
+                    className={`studio-chip ${activeEngravingId === item.id ? "active" : ""}`}
+                    onClick={() => setActiveEngravingId(item.id)}
                   >
-                    {m.label}
+                    טקסט {idx + 1}: {item.text.trim() || "ריק"}
                   </button>
                 ))}
               </div>
+              {activeProduct ? (
+                <div className="studio-chip-row studio-color-pick-row" aria-label="צבע מוצר">
+                  {activeProduct.colors.map((c, i) => (
+                    <button
+                      type="button"
+                      key={`${activeProduct.id}-color-${i}`}
+                      className={`studio-chip material ${(selectedColorByProduct[activeProduct.id] ?? 0) === i ? "active" : ""}`}
+                      style={{ ["--mat" as string]: c.swatch }}
+                      onClick={() => setSelectedColorByProduct((prev) => ({ ...prev, [activeProduct.id]: i }))}
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {activeProduct?.allowCustomerImageUpload ? (
+                <div className="studio-customer-photo-block">
+                  <div className="studio-field-hint">תמונה אישית (אופציונלי)</div>
+                  <input
+                    ref={customerImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="visually-hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      const reader = new FileReader();
+                      reader.onload = () => setCustomerImageDataUrl(typeof reader.result === "string" ? reader.result : null);
+                      reader.readAsDataURL(f);
+                      e.target.value = "";
+                    }}
+                  />
+                  <div className="studio-customer-photo-actions">
+                    <button type="button" className="studio-chip" onClick={() => customerImageInputRef.current?.click()}>
+                      {customerImageDataUrl ? "החלפת תמונה" : "העלאת תמונה"}
+                    </button>
+                    {customerImageDataUrl ? (
+                      <button type="button" className="studio-chip light" onClick={() => setCustomerImageDataUrl(null)}>
+                        הסר תמונה
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
               <label>
                 כמות
                 <input type="number" min={1} max={10} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))} />
@@ -600,18 +864,57 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             <div className="studio-preview-panel">
               <div className="studio-preview-stage">
                 <div
-                  className={`studio-3d-object ${activeProduct?.category ?? "other"}`}
+                  ref={objectRef}
+                  className={`studio-3d-object ${activeProduct?.category ?? "other"} ${pendantExtraClass} ${heroVisualUrl ? "has-photo" : ""}`}
                   style={
                     {
                       transform: `rotateY(${rotation}deg) rotateX(8deg) scale(${zoom})`,
-                      ["--engrave-size" as string]: `${size}px`,
                       ["--studio-metal" as string]: activeColor?.swatch ?? "#d4af37"
                     } as CSSProperties
                   }
                 >
-                  <span className={`studio-engrave-text ${font}`}>{text || "לנצח שלך"}</span>
+                  {heroVisualUrl ? <img className="studio-3d-fill" src={heroVisualUrl} alt="" /> : null}
+                  {customerImageDataUrl ? (
+                    <img className="studio-customer-overlay" src={customerImageDataUrl} alt="" />
+                  ) : null}
+                  {engravings.map((item) => {
+                    const inkDark = activeColor?.colorKey !== "black";
+                    const px = autoEngraveFontPx(item.text || "", item.size);
+                    return (
+                      <span
+                        key={item.id}
+                        className={`studio-engrave-text ${item.font} ${activeEngravingId === item.id ? "is-active" : ""} ${
+                          inkDark ? "engrave-ink--dark" : "engrave-ink--light"
+                        }`}
+                        style={
+                          {
+                            left: `calc(50% + ${item.x}%)`,
+                            top: `calc(50% + ${item.y}%)`,
+                            fontSize: `${px}px`,
+                          } as CSSProperties
+                        }
+                        onPointerDown={() => startDragEngraving(item.id)}
+                      >
+                        {item.text || "•"}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
+              {galleryUrls.length > 1 ? (
+                <div className="studio-subgallery" role="tablist" aria-label="תמונות מוצר">
+                  {galleryUrls.map((url, idx) => (
+                    <button
+                      key={`${url}-${idx}`}
+                      type="button"
+                      className={`studio-subgallery-thumb ${galleryPickIndex === idx ? "active" : ""}`}
+                      onClick={() => setGalleryPickIndex(idx)}
+                    >
+                      <img src={url} alt="" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               <div className="studio-slider-row">
                 <label>
                   זווית
@@ -634,9 +937,17 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       ) : null}
 
       {step === 2 ? (
-        <section className="studio-step-section">
+        <section className="studio-step-section studio-step-section--checkout">
           <h2>פרטים ותשלום</h2>
-          <div className="studio-checkout-grid">
+          <form
+            id="studio-checkout-form"
+            className="studio-checkout-grid"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitOrder();
+            }}
+            noValidate
+          >
             <div className="studio-checkout-form">
               <label>
                 שם מלא
@@ -692,7 +1003,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               <h3>סיכום הזמנה</h3>
               <p>{activeProduct?.title ?? "—"}</p>
               <p>צבע: {activeColor?.name ?? "—"}</p>
-              <p>חריטה: {text || "ללא טקסט"}</p>
+              <p>חריטה: {engravingSummary || "ללא טקסט"}</p>
               <p>כמות: {qty}</p>
               <p>משלוח: {shipping.label}</p>
               {!canPurchase ? <p style={{ color: "#b42318", fontWeight: 700 }}>אזל מהמלאי - לא ניתן להשלים הזמנה</p> : null}
@@ -725,7 +1036,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 {couponMsg ? <p style={{ marginTop: "8px", fontSize: "12px", opacity: 0.85 }}>{couponMsg}</p> : null}
               </div>
             </aside>
-          </div>
+          </form>
         </section>
       ) : null}
 

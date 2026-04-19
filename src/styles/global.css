@@ -495,6 +495,11 @@ textarea:focus-visible {
   padding: 24px 20px 100px;
 }
 
+/* Checkout: extra bottom space so sticky footer never covers fields / summary */
+.studio-step-section--checkout {
+  padding-bottom: max(120px, calc(100px + env(safe-area-inset-bottom, 0px)));
+}
+
 .studio-step-section h2 {
   margin: 0 0 14px;
   color: #2b1b10;
@@ -502,9 +507,26 @@ textarea:focus-visible {
 
 .studio-chip-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   margin: 0 0 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .studio-chip {
@@ -567,6 +589,28 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+}
+
+/* Unified catalog: same column rhythm for every category (bracelets / keychains / etc.) */
+.studio-products-grid.studio-products-grid--uniform {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.studio-products-grid.studio-products-grid--uniform .studio-subsection-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: #2c1b10;
+  margin-top: 10px;
+  margin-bottom: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e4d4c5;
+}
+
+.studio-products-grid.studio-products-grid--uniform .studio-subsection-title:first-of-type {
+  margin-top: 0;
 }
 
 .studio-subsection-title {
@@ -659,6 +703,12 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
+.studio-stock-badge--low {
+  border-color: rgba(245,158,11,.35);
+  background: rgba(245,158,11,.14);
+  color: #92400e;
+}
+
 .studio-swatch-row {
   display: flex;
   align-items: center;
@@ -668,8 +718,8 @@ textarea:focus-visible {
 }
 
 .studio-color-swatch {
-  width: 14px;
-  height: 14px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   border: 1px solid rgba(82, 55, 34, 0.22);
   background: var(--swatch);
@@ -737,16 +787,22 @@ textarea:focus-visible {
   gap: 5px;
   font-size: .82rem;
   color: #7f6653;
+  min-width: 0;
 }
 
 .studio-control-panel input,
 .studio-control-panel select,
 .studio-control-panel textarea,
-.studio-checkout-form input {
+.studio-checkout-form input,
+.studio-order-summary input {
   border: 1px solid #e9d9ca;
   border-radius: 10px;
   padding: 9px 10px;
   font-family: inherit;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .studio-preview-stage {
@@ -796,14 +852,148 @@ textarea:focus-visible {
   border-radius: 18px;
 }
 
-.studio-engrave-text {
+.studio-3d-object.pendant-heart {
+  border-radius: 50% 50% 46% 46% / 42% 42% 58% 58%;
+  width: 58%;
+  aspect-ratio: 4/5;
+}
+
+.studio-3d-object.pendant-circle {
+  border-radius: 50%;
+  width: 58%;
+  aspect-ratio: 1/1;
+}
+
+.studio-3d-object.pendant-square {
+  border-radius: 16px;
+  width: 58%;
+  aspect-ratio: 1/1;
+}
+
+.studio-3d-object.pendant-bar {
+  border-radius: 14px;
+  width: 78%;
+  aspect-ratio: 5/2;
+}
+
+.studio-3d-object.has-photo {
+  background: #1a1410;
+}
+
+.studio-3d-fill {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: var(--engrave-size, 28px);
-  color: rgba(38, 28, 18, .88);
-  text-shadow: 0 1px 0 rgba(255,255,255,.22);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.96;
+}
+
+.studio-customer-overlay {
+  position: absolute;
+  right: 8%;
+  bottom: 10%;
+  width: 26%;
+  max-width: 120px;
+  border-radius: 12px;
+  border: 2px solid rgba(255,255,255,.65);
+  box-shadow: 0 8px 22px rgba(0,0,0,.25);
+  z-index: 1;
+  pointer-events: none;
+  object-fit: cover;
+  aspect-ratio: 1/1;
+}
+
+.studio-subgallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+  justify-content: center;
+}
+
+.studio-subgallery-thumb {
+  border: 2px solid #e4d4c5;
+  border-radius: 12px;
+  padding: 0;
+  background: #fff;
+  cursor: pointer;
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.studio-subgallery-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.studio-subgallery-thumb.active {
+  border-color: #9b6a45;
+  box-shadow: 0 0 0 2px rgba(155, 106, 69, .2);
+}
+
+.studio-field-hint {
+  font-size: .78rem;
+  color: #7f6653;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.studio-customer-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.studio-engrave-text {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: pre-wrap;
+  line-height: 1.15;
+  max-width: 88%;
+  text-align: center;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  z-index: 2;
+  font-family: "Heebo", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  word-break: break-word;
+}
+
+.studio-engrave-text.engrave-ink--dark {
+  color: rgba(24, 18, 12, 0.92);
+  text-shadow: 0 1px 0 rgba(255,255,255,.2);
+}
+
+.studio-engrave-text.engrave-ink--light {
+  color: rgba(255, 252, 248, 0.94);
+  text-shadow: 0 1px 2px rgba(0,0,0,.45);
+}
+
+.studio-engrave-text.is-active {
+  outline: 1px dashed rgba(38, 28, 18, .4);
+  outline-offset: 4px;
+}
+
+.studio-engraving-tools {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.studio-engraving-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .studio-engrave-text.assistant { font-family: "Assistant", sans-serif; }
@@ -821,6 +1011,14 @@ textarea:focus-visible {
   display: grid;
   grid-template-columns: 1.1fr .9fr;
   gap: 14px;
+  align-items: start;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.studio-checkout-grid > * {
+  min-width: 0;
 }
 
 .studio-checkout-form {
@@ -832,7 +1030,7 @@ textarea:focus-visible {
 .studio-shipping-row {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
   gap: 10px;
 }
 
@@ -845,6 +1043,7 @@ textarea:focus-visible {
   cursor: pointer;
   display: grid;
   gap: 3px;
+  min-width: 0;
 }
 
 .studio-ship-card.active {
@@ -857,6 +1056,12 @@ textarea:focus-visible {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  max-width: 100%;
+}
+
+.studio-order-summary {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .studio-order-summary h3 {
@@ -866,6 +1071,8 @@ textarea:focus-visible {
 .studio-order-summary p {
   margin: 0 0 7px;
   color: #6f5644;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .studio-order-summary hr {
@@ -913,7 +1120,7 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 14px 22px;
+  padding: 14px 22px max(14px, env(safe-area-inset-bottom, 0px));
   position: sticky;
   bottom: 0;
   direction: ltr;
@@ -1002,6 +1209,10 @@ textarea:focus-visible {
   }
   .studio-checkout-form {
     grid-template-columns: 1fr;
+  }
+  .studio-checkout-form input,
+  .studio-order-summary input {
+    font-size: 16px;
   }
   .studio-shipping-row {
     grid-template-columns: 1fr;

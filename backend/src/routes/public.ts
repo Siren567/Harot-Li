@@ -7,6 +7,7 @@ export const publicRouter = Router();
 
 function mapMainCategoryToStudio(mainCategoryId?: string | null) {
   const id = String(mainCategoryId ?? "").toLowerCase();
+  if (id.includes("couple") || id.includes("זוג")) return "couple";
   if (id.includes("bracelet") || id.includes("צמיד")) return "bracelets";
   if (id.includes("key") || id.includes("מחזיק")) return "keychains";
   if (id.includes("necklace") || id.includes("שרשר")) return "necklaces";
@@ -16,6 +17,7 @@ function mapMainCategoryToStudio(mainCategoryId?: string | null) {
 function mapMainCategoryToStudioByText(rawSlug = "", rawName = "") {
   const s = String(rawSlug).toLowerCase();
   const n = String(rawName).toLowerCase();
+  if (s.includes("couple") || n.includes("זוג")) return "couple";
   if (s.includes("bracelet") || n.includes("צמיד")) return "bracelets";
   if (s.includes("key") || n.includes("מחזיק")) return "keychains";
   if (s.includes("necklace") || n.includes("שרשר")) return "necklaces";
@@ -133,6 +135,7 @@ publicRouter.get("/products", async (_req, res) => {
           pendantType: true,
           material: true,
           stock: true,
+          lowThreshold: true,
           priceOverride: true,
           isActive: true,
         },
@@ -164,10 +167,12 @@ publicRouter.get("/products", async (_req, res) => {
       const variants = variantsByProductId.get(p.id) ?? [];
       const activeVariants = variants.filter((v) => v.isActive);
       const totalStock = activeVariants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
+      const variantLowThresholds = activeVariants.map((v) => Number((v as { lowThreshold?: number }).lowThreshold) || 5);
+      const computedLow =
+        variantLowThresholds.length > 0 ? Math.min(...variantLowThresholds) : typeof pAny.low_threshold === "number" ? pAny.low_threshold : 5;
       const subcategoryLabels = pickSubcategoryLabels([
         ...subRows.map((s) => s?.name),
         ...subRows.map((s) => s?.slug),
-        ...(p.subcategory_ids ?? []),
         pAny.subcategoryName,
         pAny.subcategoryLabel,
       ]);
@@ -199,7 +204,6 @@ publicRouter.get("/products", async (_req, res) => {
           [
             ...subRows.map((s) => s?.name),
             ...subRows.map((s) => s?.slug),
-            ...(p.subcategory_ids ?? []),
             pAny.subcategoryName,
             pAny.subcategoryLabel,
           ],
@@ -213,13 +217,14 @@ publicRouter.get("/products", async (_req, res) => {
         studioColors: mapStudioColors(p.available_colors),
         allowCustomerImageUpload: Boolean(p.allow_customer_image_upload),
         stock: totalStock,
-        lowThreshold: typeof p.low_threshold === "number" ? p.low_threshold : 5,
+        lowThreshold: computedLow,
         variants: activeVariants.map((v) => ({
           id: v.id,
           color: v.color,
           pendantType: v.pendantType,
           material: v.material,
           stock: Number(v.stock) || 0,
+          lowThreshold: Number((v as { lowThreshold?: number }).lowThreshold) || 5,
           price: Number(((v.priceOverride ?? effectivePriceAgorot) / 100).toFixed(2)),
           isActive: v.isActive,
         })),
@@ -257,6 +262,38 @@ publicRouter.get("/site", async (_req, res) => {
     console.warn("[GET /api/public/site] site_settings lookup failed:", err?.message);
   }
   res.json({ whatsapp: whatsapp ?? "" });
+});
+
+// GET /api/public/order-status?orderNumber=... — public order lookup (no auth).
+publicRouter.get("/order-status", async (req, res) => {
+  const raw = typeof req.query.orderNumber === "string" ? req.query.orderNumber : "";
+  const orderNumber = raw.trim().replace(/^#+/, "").replace(/\s+/g, "");
+  if (!orderNumber || orderNumber.length > 80) {
+    return res.status(400).json({ error: "INVALID_ORDER_NUMBER" });
+  }
+  try {
+    const order = await prisma.order.findUnique({
+      where: { orderNumber },
+      select: {
+        orderNumber: true,
+        status: true,
+        createdAt: true,
+        total: true,
+      },
+    });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    return res.json({
+      order: {
+        orderNumber: order.orderNumber,
+        status: order.status,
+        createdAt: order.createdAt.toISOString(),
+        totalAgorot: order.total,
+      },
+    });
+  } catch (err: any) {
+    console.error("[GET /api/public/order-status]", err?.message ?? err);
+    return res.status(500).json({ error: "SERVER_ERROR" });
+  }
 });
 
 // POST /api/public/marketing-events — stub accepts events and returns OK.

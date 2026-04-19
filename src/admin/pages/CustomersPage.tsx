@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "../ui/badge";
 import { useToast } from "../ui/toast";
 import { apiFetch } from "../lib/api";
+import { firstOrderLineProductName } from "../lib/orderLines";
 import {
   Calendar,
   ChevronLeft,
@@ -13,6 +14,7 @@ import {
   Filter,
   MessageSquarePlus,
   Pencil,
+  RefreshCw,
   Search,
   Star,
   UserRound,
@@ -473,28 +475,29 @@ export function CustomersPage() {
   const toast = useToast();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
+  const loadCustomers = useCallback(
+    async (silent?: boolean) => {
+      if (!silent) setLoading(true);
+      if (silent) setRefreshing(true);
       try {
         const out = await apiFetch<{ orders: any[] }>("/api/orders?limit=1000");
-        if (!mounted) return;
         const rows = Array.isArray(out?.orders) ? out.orders : [];
         const byCustomer = new Map<string, Customer>();
         for (const o of rows) {
           const customer = o?.customer ?? {};
           const email = String(customer.email ?? "").trim();
-          if (!email) continue;
-          const id = String(customer.id ?? email);
+          const id = String(customer.id ?? email).trim();
+          if (!id) continue;
+          const displayEmail = email || "—";
           const createdAt = String(customer.createdAt ?? o.createdAt ?? new Date().toISOString());
-          const fullName = String(customer.fullName ?? email.split("@")[0] ?? "לקוח");
+          const fullName = String(customer.fullName ?? (email ? email.split("@")[0] : "לקוח") ?? "לקוח");
           const phone = String(customer.phone ?? "—");
           const total = Number(o.total ?? 0);
           const orderDate = String(o.createdAt ?? createdAt);
           const existing = byCustomer.get(id);
-          const orderItems = Array.isArray(o.items) ? o.items : [];
-          const previewName = String(orderItems[0]?.name ?? "מוצר");
+          const previewName = firstOrderLineProductName(o);
           const orderEntry: CustomerOrder = {
             id: String(o.id ?? `${id}-${orderDate}`),
             orderNumber: String(o.orderNumber ?? "—"),
@@ -507,7 +510,7 @@ export function CustomersPage() {
             byCustomer.set(id, {
               id,
               fullName,
-              email,
+              email: displayEmail,
               phone,
               joinedAt: createdAt,
               ordersCount: 1,
@@ -542,18 +545,27 @@ export function CustomersPage() {
         });
         setCustomers(mapped);
       } catch {
-        if (mounted) {
-          setCustomers([]);
-          toast("טעינת לקוחות נכשלה", "error");
-        }
+        setCustomers([]);
+        toast("טעינת לקוחות נכשלה", "error");
       } finally {
-        if (mounted) setLoading(false);
+        setLoading(false);
+        setRefreshing(false);
       }
-    })();
-    return () => {
-      mounted = false;
+    },
+    [toast],
+  );
+
+  useEffect(() => {
+    void loadCustomers(false);
+  }, [loadCustomers]);
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") void loadCustomers(true);
     };
-  }, [toast]);
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [loadCustomers]);
 
   const now = Date.now();
   const monthAgo = now - 1000 * 60 * 60 * 24 * 30;
@@ -676,27 +688,52 @@ export function CustomersPage() {
             תובנות לקוח מהירות: הוצאה מצטברת, פעילות הזמנות ועיצובים שמורים — UI בלבד (דמו).
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => toast("ייצוא לקוחות (placeholder)", "info")}
-          style={{
-            background: "var(--input)",
-            border: "1px solid var(--border)",
-            color: "var(--foreground-secondary)",
-            borderRadius: "10px",
-            padding: "10px 12px",
-            fontSize: "12px",
-            fontWeight: 900,
-            cursor: "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "8px",
-            flexShrink: 0,
-          }}
-        >
-          <Download size={16} />
-          ייצוא לקוחות
-        </button>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => loadCustomers(true)}
+            disabled={refreshing}
+            style={{
+              background: "var(--input)",
+              border: "1px solid var(--border)",
+              color: "var(--foreground-secondary)",
+              borderRadius: "10px",
+              padding: "10px 12px",
+              fontSize: "12px",
+              fontWeight: 900,
+              cursor: refreshing ? "not-allowed" : "pointer",
+              opacity: refreshing ? 0.7 : 1,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              flexShrink: 0,
+            }}
+          >
+            <RefreshCw size={16} style={{ animation: refreshing ? "spin 0.9s linear infinite" : "none" }} />
+            {refreshing ? "מרענן…" : "רענון"}
+          </button>
+          <button
+            type="button"
+            onClick={() => toast("ייצוא לקוחות (placeholder)", "info")}
+            style={{
+              background: "var(--input)",
+              border: "1px solid var(--border)",
+              color: "var(--foreground-secondary)",
+              borderRadius: "10px",
+              padding: "10px 12px",
+              fontSize: "12px",
+              fontWeight: 900,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              flexShrink: 0,
+            }}
+          >
+            <Download size={16} />
+            ייצוא לקוחות
+          </button>
+        </div>
       </div>
 
       {/* Summary cards */}
@@ -1260,6 +1297,7 @@ export function CustomersPage() {
         onClose={() => setSelected(null)}
         onAddNote={() => toast("הוספת הערה (placeholder)", "success")}
       />
+      <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
     </div>
   );
 }

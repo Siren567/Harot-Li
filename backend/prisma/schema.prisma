@@ -187,6 +187,9 @@ model Product {
   isActive                 Boolean   @default(true)
   isFeatured               Boolean   @default(false)
   allowCustomerImageUpload Boolean   @default(false)
+  seoTitle                 String?
+  seoDescription           String?
+  seoKeywords              String?
   mainCategoryId           String?
   mainCategory             Category? @relation("ProductMainCategory", fields: [mainCategoryId], references: [id], onDelete: SetNull)
   createdAt                DateTime  @default(now())
@@ -239,6 +242,7 @@ model OrderItem {
   color         String?
   pendantShape  String?
   material      String?
+  customerImageUrl String?      @db.Text
   createdAt     DateTime        @default(now())
 
   @@index([orderId])

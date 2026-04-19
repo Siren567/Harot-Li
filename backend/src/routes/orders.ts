@@ -14,10 +14,11 @@ const OrderItemSchema = z.object({
   name: z.string().min(1).max(200),
   qty: z.number().int().min(1).max(999),
   unitPrice: z.number().int().min(0),
-  engravingText: z.string().max(400).optional().nullable(),
+  engravingText: z.string().max(4000).optional().nullable(),
   color: z.string().max(80).optional().nullable(),
   pendantShape: z.string().max(80).optional().nullable(),
   material: z.string().max(80).optional().nullable(),
+  customerImageUrl: z.string().max(3_000_000).optional().nullable(),
 });
 
 const CreateOrderSchema = z.object({
@@ -69,7 +70,7 @@ ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
     prevMonthStart.setDate(prevMonthStart.getDate() - 30);
 
     const [allOrders, recentOrders, allCustomers, newCustomersLast30, newCustomersPrev30, analyticsLast30, analyticsPrev30] = await Promise.all([
-      prisma.order.findMany({ include: { customer: true }, orderBy: { createdAt: "desc" } }),
+      prisma.order.findMany({ include: { customer: true, orderItems: true }, orderBy: { createdAt: "desc" } }),
       prisma.order.findMany({
         where: { createdAt: { gte: monthAgo } },
         include: { customer: true },
@@ -133,11 +134,17 @@ ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
     const totalSessionCountLast30 = analyticsLast30.reduce((sum, d) => sum + d.sessionCount, 0);
     const avgSessionSeconds = totalSessionCountLast30 > 0 ? Math.round(totalSessionSecondsLast30 / totalSessionCountLast30) : 0;
 
+    const lineItemsForStats = (o: any) => {
+      const rel = Array.isArray(o.orderItems) && o.orderItems.length ? o.orderItems : [];
+      if (rel.length) return rel;
+      return Array.isArray(o.items) ? (o.items as any[]) : [];
+    };
+
     const totalItemsSold = allOrders.reduce((sum: number, o: any) => {
-      const items = Array.isArray(o.items) ? (o.items as any[]) : [];
+      const items = lineItemsForStats(o);
       return (
         sum +
-        items.reduce((itemSum, it) => {
+        items.reduce((itemSum: number, it: any) => {
           const qty = Number(it?.qty ?? 0);
           return itemSum + (Number.isFinite(qty) ? qty : 0);
         }, 0)
@@ -147,9 +154,9 @@ ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
 
     const topProductsMap = new Map<string, number>();
     for (const o of allOrders as any[]) {
-      const items = Array.isArray(o.items) ? (o.items as any[]) : [];
+      const items = lineItemsForStats(o);
       for (const it of items) {
-        const name = String(it?.name ?? "").trim();
+        const name = String(it?.name ?? it?.nameSnapshot ?? "").trim();
         const qty = Number(it?.qty ?? 0);
         if (!name || !Number.isFinite(qty) || qty <= 0) continue;
         topProductsMap.set(name, (topProductsMap.get(name) ?? 0) + qty);
@@ -392,6 +399,7 @@ ordersRouter.post("/", async (req, res) => {
           color: r.item.color ?? null,
           pendantShape: r.item.pendantShape ?? null,
           material: r.item.material ?? null,
+          customerImageUrl: r.item.customerImageUrl ?? null,
         })),
       });
 
@@ -427,7 +435,12 @@ ordersRouter.post("/", async (req, res) => {
     if (String(e?.message || "").includes("variant_stock_nonneg")) {
       return res.status(409).json({ ok: false, reason: "OUT_OF_STOCK" });
     }
-    return res.status(500).json({ error: "SERVER_ERROR" });
+    console.error("[POST /api/orders] FAILED name=", e?.name);
+    console.error("[POST /api/orders] FAILED code=", e?.code);
+    console.error("[POST /api/orders] FAILED meta=", JSON.stringify(e?.meta ?? null));
+    console.error("[POST /api/orders] FAILED message=", String(e?.message ?? e));
+    console.error("[POST /api/orders] FAILED stack=", e?.stack);
+    return res.status(500).json({ error: "SERVER_ERROR", hint: String(e?.message ?? "").slice(0, 500) });
   }
 });
 

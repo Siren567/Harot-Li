@@ -20,6 +20,9 @@ export type ProductRow = {
   subcategory_ids?: string[];
   stock?: number;
   low_threshold?: number;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  seo_keywords?: string | null;
 };
 
 const ProductCreateSchema = z.object({
@@ -50,6 +53,9 @@ const ProductCreateSchema = z.object({
   subcategory_ids: z.array(z.string().min(1).max(120)).max(30).optional(),
   stock: z.number().int().min(0).max(1_000_000).optional(),
   low_threshold: z.number().int().min(0).max(1_000_000).optional(),
+  seo_title: z.string().max(200).optional().nullable(),
+  seo_description: z.string().max(500).optional().nullable(),
+  seo_keywords: z.string().max(1000).optional().nullable(),
 });
 
 const ProductUpdateSchema = ProductCreateSchema.partial();
@@ -113,6 +119,9 @@ function toProductRow(p: any): ProductRow {
     subcategory_ids: subcategoryIds,
     stock: totalStock,
     low_threshold: lowThreshold,
+    seo_title: p.seoTitle ?? null,
+    seo_description: p.seoDescription ?? null,
+    seo_keywords: p.seoKeywords ?? null,
   };
 }
 
@@ -257,6 +266,9 @@ export async function createProduct(input: unknown): Promise<ProductRow> {
       galleryImages: (v.gallery_images ?? []) as any,
       allowCustomerImageUpload: v.allow_customer_image_upload ?? false,
       mainCategoryId: mainCategoryExists ? v.main_category_id! : null,
+      seoTitle: v.seo_title ?? null,
+      seoDescription: v.seo_description ?? null,
+      seoKeywords: v.seo_keywords ?? null,
     },
   });
 
@@ -312,6 +324,9 @@ export async function updateProduct(id: string, input: unknown): Promise<Product
       : false;
     patch.mainCategoryId = exists ? v.main_category_id! : null;
   }
+  if (v.seo_title !== undefined) patch.seoTitle = v.seo_title ?? null;
+  if (v.seo_description !== undefined) patch.seoDescription = v.seo_description ?? null;
+  if (v.seo_keywords !== undefined) patch.seoKeywords = v.seo_keywords ?? null;
 
   const updated = await prisma.product.update({ where: { id }, data: patch });
 

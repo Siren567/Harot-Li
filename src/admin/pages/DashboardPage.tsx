@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   TrendingUp,
   ShoppingBag,
@@ -10,6 +10,7 @@ import {
   XCircle,
   MousePointerClick,
   Percent,
+  RefreshCw,
   RotateCcw,
   Timer,
 } from "lucide-react";
@@ -21,6 +22,7 @@ type PaymentStatusKey = "paid" | "unpaid";
 
 export function DashboardPage() {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [activeChart, setActiveChart] = useState<"orders" | "visits" | "newCustomers" | "revenue">("orders");
   const [snapshot, setSnapshot] = useState<{
     stats: {
@@ -62,53 +64,66 @@ export function DashboardPage() {
     stockAlerts: Array<{ id: string; name: string; sku: string; qty: number; kind: "out" | "low" }>;
   } | null>(null);
 
+  const emptySnapshot = useMemo(
+    () =>
+      ({
+        stats: {
+          totalRevenue: 0,
+          totalOrders: 0,
+          newCustomers: 0,
+          avgOrderValue: 0,
+          siteVisits: 0,
+          siteVisitsTrendPercent: 0,
+          conversionRatePercent: 0,
+          conversionRateTrendPercent: 0,
+          returningCustomersRatePercent: 0,
+          returningCustomersTrendPercent: 0,
+          avgSessionSeconds: 0,
+          avgSessionTrendPercent: 0,
+          pendingOrders: 0,
+          completedOrders: 0,
+          lowStockProducts: 0,
+          cancelledOrders: 0,
+          topProducts: [],
+          customersWithoutOrders: 0,
+        },
+        revenueTrendPercent: 0,
+        chartMonthLabel: "",
+        dailyRevenue: [],
+        dailyOrders: [],
+        dailySiteVisits: [],
+        dailyNewCustomers: [],
+        recentOrders: [],
+        stockAlerts: [],
+      }),
+    [],
+  );
+
+  const loadDashboard = useCallback(async (silent?: boolean) => {
+    if (!silent) setLoading(true);
+    if (silent) setRefreshing(true);
+    try {
+      const out = await apiFetch<any>("/api/orders/dashboard");
+      setSnapshot(out);
+    } catch {
+      setSnapshot(emptySnapshot);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [emptySnapshot]);
+
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const out = await apiFetch<any>("/api/orders/dashboard");
-        if (mounted) setSnapshot(out);
-      } catch {
-        if (mounted) {
-          setSnapshot({
-            stats: {
-              totalRevenue: 0,
-              totalOrders: 0,
-              newCustomers: 0,
-              avgOrderValue: 0,
-              siteVisits: 0,
-              siteVisitsTrendPercent: 0,
-              conversionRatePercent: 0,
-              conversionRateTrendPercent: 0,
-              returningCustomersRatePercent: 0,
-              returningCustomersTrendPercent: 0,
-              avgSessionSeconds: 0,
-              avgSessionTrendPercent: 0,
-              pendingOrders: 0,
-              completedOrders: 0,
-              lowStockProducts: 0,
-              cancelledOrders: 0,
-              topProducts: [],
-            customersWithoutOrders: 0,
-            },
-            revenueTrendPercent: 0,
-            chartMonthLabel: "",
-            dailyRevenue: [],
-            dailyOrders: [],
-            dailySiteVisits: [],
-            dailyNewCustomers: [],
-            recentOrders: [],
-            stockAlerts: [],
-          });
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
+    void loadDashboard(false);
+  }, [loadDashboard]);
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") void loadDashboard(true);
     };
-  }, []);
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [loadDashboard]);
 
   const stats = snapshot?.stats ?? {
     totalRevenue: 0,
@@ -304,11 +319,36 @@ export function DashboardPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      <div>
-        <h1 style={{ fontSize: "22px", fontWeight: 700, color: "var(--foreground)" }}>לוח בקרה</h1>
-        <p style={{ fontSize: "13px", color: "var(--muted-foreground)", marginTop: "4px" }}>
-          {loading ? "טוען נתונים..." : "תמונת מצב מהירה: הכנסות, הזמנות, מלאי ומוצרים מובילים."}
-        </p>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+        <div>
+          <h1 style={{ fontSize: "22px", fontWeight: 700, color: "var(--foreground)" }}>לוח בקרה</h1>
+          <p style={{ fontSize: "13px", color: "var(--muted-foreground)", marginTop: "4px" }}>
+            {loading ? "טוען נתונים..." : "תמונת מצב מהירה: הכנסות, הזמנות, מלאי ומוצרים מובילים."}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => loadDashboard(true)}
+          disabled={refreshing}
+          style={{
+            background: "var(--input)",
+            border: "1px solid var(--border)",
+            color: "var(--foreground-secondary)",
+            borderRadius: "10px",
+            padding: "10px 12px",
+            fontSize: "12px",
+            fontWeight: 800,
+            cursor: refreshing ? "not-allowed" : "pointer",
+            opacity: refreshing ? 0.7 : 1,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "8px",
+            flexShrink: 0,
+          }}
+        >
+          <RefreshCw size={16} style={{ animation: refreshing ? "spin 0.9s linear infinite" : "none" }} />
+          {refreshing ? "מרענן…" : "רענון"}
+        </button>
       </div>
 
       {/* KPI row (like old dashboard) */}
@@ -659,6 +699,7 @@ export function DashboardPage() {
         </div>
       </div>
 
+      <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
     </div>
   );
 }

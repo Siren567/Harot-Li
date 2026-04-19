@@ -2,8 +2,25 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import Icon from "./components/Icon";
 import { benefits, examples, featuredProducts, steps } from "./constants/mockData";
 import { getApiBaseUrl } from "./lib/apiBase";
+import { BrandWordmark } from "./lib/brand";
 
-type ModalType = "terms" | "privacy" | "usage" | "contact" | null;
+type ModalType = "terms" | "privacy" | "usage" | "contact" | "orderStatus" | null;
+
+type PublicOrderStatus = "NEW" | "PAID" | "FULFILLED" | "SHIPPED" | "COMPLETED" | "CANCELLED" | "REFUNDED";
+
+const ORDER_STATUS_LABEL: Record<PublicOrderStatus, string> = {
+  NEW: "התקבלה — ממתינה לתשלום",
+  PAID: "שולמה — בתהליך הכנה",
+  FULFILLED: "בהכנה",
+  SHIPPED: "נשלחה",
+  COMPLETED: "הושלמה",
+  CANCELLED: "בוטלה",
+  REFUNDED: "זוכתה",
+};
+
+function formatOrderShekels(agorot: number) {
+  return `₪${(Number(agorot || 0) / 100).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
 const navLinks = [
   { label: "דף הבית", href: "#top" },
   { label: "איך זה עובד", href: "#how" },
@@ -13,6 +30,15 @@ const navLinks = [
 const App = () => {
   const [openModal, setOpenModal] = useState<ModalType>(null);
   const [contactSent, setContactSent] = useState(false);
+  const [orderLookupInput, setOrderLookupInput] = useState("");
+  const [orderLookupLoading, setOrderLookupLoading] = useState(false);
+  const [orderLookupError, setOrderLookupError] = useState<string | null>(null);
+  const [orderLookupResult, setOrderLookupResult] = useState<{
+    orderNumber: string;
+    status: PublicOrderStatus;
+    createdAt: string;
+    totalAgorot: number;
+  } | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
   const [bootstrap, setBootstrap] = useState<any>(null);
 
@@ -104,11 +130,61 @@ const App = () => {
   const closeModal = () => {
     setOpenModal(null);
     setContactSent(false);
+    setOrderLookupInput("");
+    setOrderLookupLoading(false);
+    setOrderLookupError(null);
+    setOrderLookupResult(null);
   };
 
   const onContactSubmit: React.FormEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
     setContactSent(true);
+  };
+
+  const onOrderStatusSubmit: React.FormEventHandler<HTMLFormElement> = async (event) => {
+    event.preventDefault();
+    const raw = orderLookupInput.trim().replace(/^#+/, "");
+    if (!raw) {
+      setOrderLookupError("נא להזין מספר הזמנה");
+      setOrderLookupResult(null);
+      return;
+    }
+    setOrderLookupLoading(true);
+    setOrderLookupError(null);
+    setOrderLookupResult(null);
+    const apiBase = getApiBaseUrl();
+    try {
+      const res = await fetch(`${apiBase}/api/public/order-status?orderNumber=${encodeURIComponent(raw)}`);
+      let data: { order?: { orderNumber?: string; status?: string; createdAt?: string; totalAgorot?: number } } = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
+      if (res.status === 404) {
+        setOrderLookupError("לא נמצאה הזמנה עם מספר זה. בדקו את המספר או פנו אלינו ב״צור קשר״.");
+        return;
+      }
+      if (!res.ok) {
+        setOrderLookupError("לא ניתן לטעון את הסטטוס כרגע. נסו שוב מאוחר יותר.");
+        return;
+      }
+      const o = data?.order;
+      if (!o?.orderNumber || !o?.status) {
+        setOrderLookupError("תשובה לא צפויה מהשרת.");
+        return;
+      }
+      setOrderLookupResult({
+        orderNumber: o.orderNumber,
+        status: o.status as PublicOrderStatus,
+        createdAt: String(o.createdAt ?? ""),
+        totalAgorot: Number(o.totalAgorot) || 0,
+      });
+    } catch {
+      setOrderLookupError("שגיאת רשת. בדקו את החיבור ונסו שוב.");
+    } finally {
+      setOrderLookupLoading(false);
+    }
   };
 
   const openStudio = (event?: MouseEvent<HTMLElement>) => {
@@ -191,7 +267,7 @@ const App = () => {
       : featuredProducts
   ).slice(0, Number(topSellerSection.limit ?? 3));
 
-  const legalDefaults: Record<Exclude<ModalType, "contact" | null>, { title: string; html: string }> = {
+  const legalDefaults: Record<"terms" | "privacy" | "usage", { title: string; html: string }> = {
     terms: {
       title: "תקנון",
       html: `<p><strong>מבוא:</strong> התקנון נכתב בלשון זכר מטעמי נוחות וחל על שני המינים. שימוש באתר ו/או רכישת מוצר מהווה הסכמה מלאה לתקנון זה.</p>
@@ -260,7 +336,7 @@ const App = () => {
   };
 
   const legalContent =
-    openModal && openModal !== "contact"
+    openModal && openModal !== "contact" && openModal !== "orderStatus"
       ? {
           title: legalBySlug[openModal]?.title ?? legalDefaults[openModal].title,
           html:
@@ -270,14 +346,32 @@ const App = () => {
         }
       : null;
 
+  const modalTitleId =
+    openModal === "terms"
+      ? "modal-title-terms"
+      : openModal === "privacy"
+        ? "modal-title-privacy"
+        : openModal === "usage"
+          ? "modal-title-usage"
+          : openModal === "orderStatus"
+            ? "modal-title-order-status"
+            : "modal-title-contact";
+
+  const modalHeading =
+    openModal === "contact"
+      ? "צור קשר"
+      : openModal === "orderStatus"
+        ? "בדיקת סטטוס הזמנה"
+        : legalContent?.title ?? "מידע";
+
   return (
     <div dir="rtl" id="top">
       <a href="#main-content" className="skip-link">
         דלג לתוכן הראשי
       </a>
       <nav className="top-nav">
-        <a href="#top" className="nav-logo">
-          חרוט<span>לי</span>
+        <a href="#top" className="nav-logo" aria-label={`${footer.brandTitle || "חרוטלי"} — לראש הדף`}>
+          <BrandWordmark title={footer.brandTitle} />
         </a>
         <ul className="nav-menu">
           {navLinks.map((link) => (
@@ -501,7 +595,7 @@ const App = () => {
         <div className="footer-top">
           <div className="footer-brand">
             <div className="logo">
-              {footer.brandTitle ?? "חרוט"}<span>לי</span>
+              <BrandWordmark title={footer.brandTitle} />
             </div>
             <p>{footer.brandSubtitle ?? ""}</p>
           </div>
@@ -589,7 +683,17 @@ const App = () => {
               Build by S.G Digital
             </a>
           </div>
-          <a href={footer.statusLinkHref ?? "#"} className="footer-status-link">
+          <a
+            href={footer.statusLinkHref ?? "#"}
+            className="footer-status-link"
+            onClick={(event) => {
+              const href = String(footer.statusLinkHref ?? "").trim();
+              if (!href || href === "#") {
+                event.preventDefault();
+                setOpenModal("orderStatus");
+              }
+            }}
+          >
             {footer.statusLinkText ?? ""}
           </a>
         </div>
@@ -618,39 +722,69 @@ const App = () => {
             className="site-modal"
             role="dialog"
             aria-modal="true"
-            aria-labelledby={
-              openModal === "terms"
-                ? "modal-title-terms"
-                : openModal === "privacy"
-                  ? "modal-title-privacy"
-                  : openModal === "usage"
-                    ? "modal-title-usage"
-                    : "modal-title-contact"
-            }
+            aria-labelledby={modalTitleId}
             tabIndex={-1}
           >
             <div className="site-modal-header">
-              <h2
-                id={
-                  openModal === "terms"
-                    ? "modal-title-terms"
-                    : openModal === "privacy"
-                      ? "modal-title-privacy"
-                      : openModal === "usage"
-                        ? "modal-title-usage"
-                        : "modal-title-contact"
-                }
-              >
-                {openModal === "contact" ? "צור קשר" : legalContent?.title ?? "מידע"}
-              </h2>
+              <h2 id={modalTitleId}>{modalHeading}</h2>
               <button type="button" className="site-modal-close" onClick={closeModal} aria-label="סגור">
                 ×
               </button>
             </div>
 
             <div className="site-modal-body">
-              {openModal !== "contact" && legalContent ? (
+              {openModal !== "contact" && openModal !== "orderStatus" && legalContent ? (
                 <div dangerouslySetInnerHTML={{ __html: legalContent.html }} />
+              ) : null}
+
+              {openModal === "orderStatus" ? (
+                <form className="contact-form" onSubmit={onOrderStatusSubmit}>
+                  <p style={{ margin: 0, fontSize: "0.88rem", lineHeight: 1.5, color: "rgba(62, 39, 35, 0.75)" }}>
+                    הזינו את מספר ההזמנה כפי שמופיע באישור או במייל.
+                  </p>
+                  <label>
+                    מספר הזמנה
+                    <input
+                      type="text"
+                      value={orderLookupInput}
+                      onChange={(e) => {
+                        setOrderLookupInput(e.target.value);
+                        setOrderLookupError(null);
+                      }}
+                      placeholder="לדוגמה: HG-2026-12345"
+                      autoComplete="off"
+                      disabled={orderLookupLoading}
+                    />
+                  </label>
+                  {orderLookupError ? (
+                    <p style={{ margin: 0, color: "#b91c1c", fontSize: "0.85rem" }} role="alert">
+                      {orderLookupError}
+                    </p>
+                  ) : null}
+                  <button type="submit" className="contact-form-submit" disabled={orderLookupLoading}>
+                    {orderLookupLoading ? "בודקים…" : "בדיקה"}
+                  </button>
+                  {orderLookupResult ? (
+                    <div
+                      style={{
+                        marginTop: 4,
+                        padding: 14,
+                        borderRadius: 12,
+                        background: "rgba(139, 94, 60, 0.1)",
+                        border: "1px solid rgba(139, 94, 60, 0.2)",
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>הזמנה {orderLookupResult.orderNumber}</div>
+                      <p style={{ margin: "10px 0 0", fontSize: "0.9rem" }}>
+                        סטטוס:{" "}
+                        <strong>{ORDER_STATUS_LABEL[orderLookupResult.status] ?? orderLookupResult.status}</strong>
+                      </p>
+                      <p style={{ margin: "8px 0 0", fontSize: "0.85rem", color: "rgba(62, 39, 35, 0.8)" }}>
+                        סכום: {formatOrderShekels(orderLookupResult.totalAgorot)}
+                      </p>
+                    </div>
+                  ) : null}
+                </form>
               ) : null}
 
               {openModal === "contact" ? (

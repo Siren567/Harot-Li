@@ -1,9 +1,10 @@
- "use client";
+"use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../ui/badge";
 import { useToast } from "../ui/toast";
 import { apiFetch } from "../lib/api";
+import { InputGroup, SecondaryButton, TextInput } from "../ui/primitives";
 import {
   AlertTriangle,
   Boxes,
@@ -50,7 +51,46 @@ type ProductVariantApiRow = {
   pendantType?: string | null;
   material?: string | null;
   stock?: number;
+  priceOverride?: number | null;
 };
+
+/** Full variant row for editing (same shape as product editor previously used). */
+export type InventoryVariantFull = {
+  id: string;
+  productId: string;
+  color: string | null;
+  pendantType: string | null;
+  material: string | null;
+  stock: number;
+  priceOverride: number | null;
+  isActive: boolean;
+};
+
+function normalizeInventoryVariants(input: unknown): InventoryVariantFull[] {
+  if (!Array.isArray(input)) return [];
+  return input
+    .filter((row): row is Record<string, unknown> => Boolean(row) && typeof row === "object")
+    .map((row) => ({
+      id: String(row.id ?? ""),
+      productId: String(row.productId ?? ""),
+      color: typeof row.color === "string" ? row.color : null,
+      pendantType: typeof row.pendantType === "string" ? row.pendantType : null,
+      material: typeof row.material === "string" ? row.material : null,
+      stock: Number.isFinite(Number(row.stock)) ? Number(row.stock) : 0,
+      priceOverride: Number.isFinite(Number(row.priceOverride)) ? Number(row.priceOverride) : null,
+      isActive: row.isActive !== false,
+    }))
+    .filter((v) => v.id && v.productId);
+}
+
+function parseShekelsToAgorot(value: string): number | null {
+  const normalized = value.replace(",", ".").trim();
+  if (!normalized) return null;
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
+  const shekels = Number(normalized);
+  if (!Number.isFinite(shekels) || shekels < 0) return null;
+  return Math.round(shekels * 100);
+}
 
 function fmtMoney(v: number) {
   return `₪${(Number(v || 0) / 100).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
@@ -132,15 +172,90 @@ function SmallButton({
   );
 }
 
+type VariantDraft = {
+  color: string;
+  pendantType: string;
+  material: string;
+  stock: string;
+  priceOverride: string;
+};
+
 function Drawer({
   open,
   product,
+  variants,
   onClose,
+  onVariantsSaved,
 }: {
   open: boolean;
   product: InventoryProduct | null;
+  variants: InventoryVariantFull[];
   onClose: () => void;
+  onVariantsSaved: () => void | Promise<void>;
 }) {
+  const toast = useToast();
+  const [variantDrafts, setVariantDrafts] = useState<Record<string, VariantDraft>>({});
+  const [savingVariantId, setSavingVariantId] = useState<string | null>(null);
+
+  const variantsSyncKey = useMemo(
+    () => variants.map((v) => `${v.id}:${v.stock}:${v.priceOverride}:${v.color}:${v.pendantType}:${v.material}`).join("|"),
+    [variants]
+  );
+
+  useEffect(() => {
+    if (!open || !product) return;
+    const next: Record<string, VariantDraft> = {};
+    for (const v of variants) {
+      next[v.id] = {
+        color: v.color ?? "",
+        pendantType: v.pendantType ?? "",
+        material: v.material ?? "",
+        stock: String(v.stock ?? 0),
+        priceOverride:
+          v.priceOverride != null && Number.isFinite(v.priceOverride) ? (v.priceOverride / 100).toFixed(2) : "",
+      };
+    }
+    setVariantDrafts(next);
+  }, [open, product?.id, variantsSyncKey, variants]);
+
+  const updateDraft = useCallback((variantId: string, patch: Partial<VariantDraft>) => {
+    setVariantDrafts((prev) => {
+      const cur = prev[variantId];
+      if (!cur) return prev;
+      return { ...prev, [variantId]: { ...cur, ...patch } };
+    });
+  }, []);
+
+  async function saveVariant(variantId: string) {
+    const d = variantDrafts[variantId];
+    if (!d) return;
+    const stockNum = Math.max(0, Math.floor(Number(d.stock) || 0));
+    const priceAgorot = parseShekelsToAgorot(d.priceOverride.trim());
+    if (d.priceOverride.trim() && priceAgorot === null) {
+      toast("מחיר מיוחד לא תקין (לדוגמה 12.90)", "error");
+      return;
+    }
+    setSavingVariantId(variantId);
+    try {
+      await apiFetch(`/api/variants/${variantId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          color: d.color.trim() || null,
+          pendantType: d.pendantType.trim() || null,
+          material: d.material.trim() || null,
+          stock: stockNum,
+          priceOverride: d.priceOverride.trim() ? priceAgorot : null,
+        }),
+      });
+      toast("הוריאציה נשמרה", "success");
+      await onVariantsSaved();
+    } catch {
+      toast("שמירת וריאציה נכשלה", "error");
+    } finally {
+      setSavingVariantId(null);
+    }
+  }
+
   if (!open) return null;
   const s = product ? getStatus(product.stock, product.lowThreshold) : "in_stock";
   return (
@@ -154,13 +269,14 @@ function Drawer({
           top: 0,
           left: 0,
           height: "100svh",
-          width: "min(520px, 92vw)",
+          width: "min(780px, 94vw)",
           background: "var(--surface)",
           borderRight: "1px solid var(--border)",
           zIndex: 201,
           display: "flex",
           flexDirection: "column",
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         <div
           style={{
@@ -174,9 +290,9 @@ function Drawer({
           }}
         >
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: "14px", fontWeight: 800, color: "var(--foreground)" }}>פרטי מוצר</div>
+            <div style={{ fontSize: "14px", fontWeight: 800, color: "var(--foreground)" }}>מלאי — וריאציות</div>
             <div style={{ fontSize: "12px", color: "var(--muted-foreground)", marginTop: "2px" }}>
-              {product?.sku ?? "—"}
+              {product?.name ?? "—"} · {product?.sku ?? "—"}
             </div>
           </div>
           <button
@@ -201,41 +317,91 @@ function Drawer({
           </button>
         </div>
 
-        <div style={{ padding: "18px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div style={{ padding: "18px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px", flex: 1, minHeight: 0 }}>
           {product ? (
             <>
               <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
-                <div style={{ width: 110, height: 110, borderRadius: 14, overflow: "hidden", background: "var(--input)", border: "1px solid var(--border)", flexShrink: 0 }}>
+                <div style={{ width: 96, height: 96, borderRadius: 14, overflow: "hidden", background: "var(--input)", border: "1px solid var(--border)", flexShrink: 0 }}>
                   <img src={product.imageUrl} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 16, fontWeight: 900, color: "var(--foreground)", lineHeight: 1.2 }}>{product.name}</div>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: "var(--foreground)", lineHeight: 1.2 }}>{product.name}</div>
                   <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <Badge variant={statusVariant(s)}>{statusLabel(s)}</Badge>
                     {product.customizable ? <Badge variant="default">מותאם אישית</Badge> : <Badge variant="muted">לא מותאם אישית</Badge>}
                   </div>
-                  <div style={{ marginTop: 10, fontSize: 13, color: "var(--muted-foreground)" }}>
-                    קטגוריה: <span style={{ color: "var(--foreground-secondary)", fontWeight: 800 }}>{product.category}</span>
-                  </div>
-                  <div style={{ marginTop: 8, fontSize: 13, color: "var(--muted-foreground)" }}>
-                    מחיר: <span style={{ color: "var(--foreground-secondary)", fontWeight: 900 }}>{fmtMoney(product.price)}</span>
+                  <div style={{ marginTop: 8, fontSize: 12, color: "var(--muted-foreground)" }}>
+                    מחיר בסיס: <span style={{ color: "var(--foreground-secondary)", fontWeight: 900 }}>{fmtMoney(product.price)}</span>
                   </div>
                 </div>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 12, padding: 12 }}>
-                  <div style={{ fontSize: 11, color: "var(--muted-foreground)", fontWeight: 800 }}>מלאי נוכחי</div>
+                  <div style={{ fontSize: 11, color: "var(--muted-foreground)", fontWeight: 800 }}>מלאי כולל (לפי וריאציות)</div>
                   <div style={{ marginTop: 4, fontSize: 13, color: "var(--foreground-secondary)", fontWeight: 900 }}>{product.stock}</div>
                 </div>
                 <div style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 12, padding: 12 }}>
-                  <div style={{ fontSize: 11, color: "var(--muted-foreground)", fontWeight: 800 }}>התראת מלאי נמוך</div>
+                  <div style={{ fontSize: 11, color: "var(--muted-foreground)", fontWeight: 800 }}>התראת מלאי נמוך (בטבלה)</div>
                   <div style={{ marginTop: 4, fontSize: 13, color: "var(--foreground-secondary)", fontWeight: 900 }}>{product.lowThreshold}</div>
                 </div>
               </div>
 
-              <div style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 12, padding: 12, color: "var(--muted-foreground)", fontSize: 13, lineHeight: 1.6 }}>
-                דמו בלבד: בעמוד הראשי ניתן לערוך את `מלאי נוכחי` ו־`התראת מלאי נמוך` ישירות בטבלה.
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 900, color: "var(--foreground)", marginBottom: 10 }}>
+                  ווריאציות מוצר ({variants.length})
+                </div>
+                {variants.length === 0 ? (
+                  <div style={{ fontSize: 13, color: "var(--muted-foreground)", lineHeight: 1.6 }}>
+                    אין וריאציות למוצר זה — המלאי הכללי מנוהל בעמודת המלאי בטבלה.
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {variants.map((v) => {
+                      const d = variantDrafts[v.id];
+                      if (!d) return null;
+                      return (
+                        <div
+                          key={v.id}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(3, minmax(0, 1fr)) 88px 100px auto",
+                            gap: 8,
+                            alignItems: "end",
+                            background: "var(--input)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 12,
+                            padding: 12,
+                          }}
+                        >
+                          <InputGroup label="צבע">
+                            <TextInput value={d.color} onChange={(e) => updateDraft(v.id, { color: e.target.value })} />
+                          </InputGroup>
+                          <InputGroup label="סוג תליון">
+                            <TextInput value={d.pendantType} onChange={(e) => updateDraft(v.id, { pendantType: e.target.value })} />
+                          </InputGroup>
+                          <InputGroup label="חומר">
+                            <TextInput value={d.material} onChange={(e) => updateDraft(v.id, { material: e.target.value })} />
+                          </InputGroup>
+                          <InputGroup label="מלאי">
+                            <TextInput type="number" min={0} value={d.stock} onChange={(e) => updateDraft(v.id, { stock: e.target.value })} />
+                          </InputGroup>
+                          <InputGroup label="מחיר מיוחד (₪)">
+                            <TextInput placeholder="0.00" value={d.priceOverride} onChange={(e) => updateDraft(v.id, { priceOverride: e.target.value })} />
+                          </InputGroup>
+                          <SecondaryButton
+                            type="button"
+                            style={{ height: 40, alignSelf: "end" }}
+                            disabled={savingVariantId === v.id}
+                            onClick={() => saveVariant(v.id)}
+                          >
+                            {savingVariantId === v.id ? "שומר..." : "שמור"}
+                          </SecondaryButton>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </>
           ) : (
@@ -246,9 +412,6 @@ function Drawer({
         <div style={{ padding: "14px 18px", borderTop: "1px solid var(--border)", display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
           <SmallButton tone="primary" onClick={onClose}>
             סיום
-          </SmallButton>
-          <SmallButton tone="default" onClick={onClose}>
-            עדכון מלאי (placeholder)
           </SmallButton>
         </div>
       </aside>
@@ -289,6 +452,14 @@ export function InventoryPage() {
         acc[key].push(v);
         return acc;
       }, {});
+      const normalizedFull = normalizeInventoryVariants(variants);
+      const fullByProduct = normalizedFull.reduce<Record<string, InventoryVariantFull[]>>((acc, v) => {
+        const key = v.productId;
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(v);
+        return acc;
+      }, {});
+      setFullVariantsByProduct(fullByProduct);
       setProducts(
         rows.map((p) => ({
           variants: (byProduct[p.id] ?? []).map((v) => ({
@@ -315,6 +486,7 @@ export function InventoryPage() {
     } catch {
       toast("טעינת מלאי נכשלה", "error");
       setProducts([]);
+      setFullVariantsByProduct({});
     } finally {
       if (!silent) setLoading(false);
       if (silent) setRefreshing(false);
@@ -394,7 +566,12 @@ export function InventoryPage() {
   }
 
   const [drawerProductId, setDrawerProductId] = useState<string | null>(null);
+  const [fullVariantsByProduct, setFullVariantsByProduct] = useState<Record<string, InventoryVariantFull[]>>({});
   const drawerProduct = useMemo(() => (drawerProductId ? products.find((p) => p.id === drawerProductId) ?? null : null), [drawerProductId, products]);
+  const drawerVariants = useMemo(
+    () => (drawerProductId ? fullVariantsByProduct[drawerProductId] ?? [] : []),
+    [drawerProductId, fullVariantsByProduct]
+  );
 
   const [bulkStock, setBulkStock] = useState<number>(0);
 
@@ -954,7 +1131,7 @@ export function InventoryPage() {
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                             <SmallButton tone="default" onClick={() => setDrawerProductId(p.id)}>
                               <Edit3 size={16} />
-                              ערוך מוצר
+                              וריאציות ומלאי
                             </SmallButton>
                             <SmallButton tone="primary" onClick={() => setDrawerProductId(p.id)}>
                               <RefreshCw size={16} />
@@ -1083,7 +1260,13 @@ export function InventoryPage() {
       </div>
 
       <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
-      <Drawer open={Boolean(drawerProductId)} product={drawerProduct} onClose={() => setDrawerProductId(null)} />
+      <Drawer
+        open={Boolean(drawerProductId)}
+        product={drawerProduct}
+        variants={drawerVariants}
+        onClose={() => setDrawerProductId(null)}
+        onVariantsSaved={() => refreshInventory(true)}
+      />
     </div>
   );
 }

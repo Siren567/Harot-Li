@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "../ui/badge";
 import { apiFetch } from "../lib/api";
+import { getOrderLineItems } from "../lib/orderLines";
 import {
   ArrowUpRight,
   Calendar,
@@ -10,6 +11,7 @@ import {
   Eye,
   Filter,
   Pencil,
+  RefreshCw,
   Search,
   X,
 } from "lucide-react";
@@ -408,65 +410,72 @@ function Drawer({
 export function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadOrders = useCallback(async (silent?: boolean) => {
+    if (!silent) setLoading(true);
+    if (silent) setRefreshing(true);
+    try {
+      const out = await apiFetch<{ orders: any[] }>("/api/orders?limit=500");
+      const rows = Array.isArray(out?.orders) ? out.orders : [];
+      const mapped: Order[] = rows.map((o: any) => {
+        const lineItems = getOrderLineItems(o);
+        const raw: BackendOrderStatus = (o.status as BackendOrderStatus) ?? "NEW";
+        const uiStatus: OrderStatus =
+          raw === "COMPLETED" || raw === "PAID"
+            ? "completed"
+            : raw === "CANCELLED" || raw === "REFUNDED"
+              ? "cancelled"
+              : raw === "SHIPPED"
+                ? "shipped"
+                : raw === "FULFILLED"
+                  ? "ready"
+                  : "new";
+        return {
+          id: String(o.id ?? ""),
+          orderNumber: String(o.orderNumber ?? ""),
+          customerName: String(o.customer?.fullName ?? o.customer?.email ?? "לקוח"),
+          customerPhone: String(o.customer?.phone ?? "—"),
+          customerEmail: String(o.customer?.email ?? "—"),
+          createdAt: String(o.createdAt ?? new Date().toISOString()),
+          total: Number(o.total ?? 0),
+          paymentStatus: raw === "PAID" || raw === "COMPLETED" ? "paid" : raw === "CANCELLED" || raw === "REFUNDED" ? "failed" : "pending",
+          orderStatus: uiStatus,
+          rawStatus: raw,
+          designNumber: "—",
+          items: lineItems.map((it: any, idx: number) => ({
+            id: String(it?.id ?? `${o.id}-${idx}`),
+            name: String(it?.title ?? it?.nameSnapshot ?? it?.name ?? "מוצר"),
+            qty: Number(it?.qty ?? 1),
+            price: Number(it?.unitPrice ?? 0),
+          })),
+          engravingText: "",
+          pendantShape: "",
+          material: "",
+          color: "",
+          notes: "",
+        };
+      });
+      setOrders(mapped);
+    } catch {
+      setOrders([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const out = await apiFetch<{ orders: any[] }>("/api/orders?limit=500");
-        if (!mounted) return;
-        const rows = Array.isArray(out?.orders) ? out.orders : [];
-        const mapped: Order[] = rows.map((o: any) => {
-          const orderItems = Array.isArray(o.orderItems) ? o.orderItems : [];
-          const legacyItems = Array.isArray(o.items) ? o.items : [];
-          const items = orderItems.length ? orderItems : legacyItems;
-          const raw: BackendOrderStatus = (o.status as BackendOrderStatus) ?? "NEW";
-          const uiStatus: OrderStatus =
-            raw === "COMPLETED" || raw === "PAID"
-              ? "completed"
-              : raw === "CANCELLED" || raw === "REFUNDED"
-                ? "cancelled"
-                : raw === "SHIPPED"
-                  ? "shipped"
-                  : raw === "FULFILLED"
-                    ? "ready"
-                    : "new";
-          return {
-            id: String(o.id ?? ""),
-            orderNumber: String(o.orderNumber ?? ""),
-            customerName: String(o.customer?.fullName ?? o.customer?.email ?? "לקוח"),
-            customerPhone: String(o.customer?.phone ?? "—"),
-            customerEmail: String(o.customer?.email ?? "—"),
-            createdAt: String(o.createdAt ?? new Date().toISOString()),
-            total: Number(o.total ?? 0),
-            paymentStatus: raw === "PAID" || raw === "COMPLETED" ? "paid" : raw === "CANCELLED" || raw === "REFUNDED" ? "failed" : "pending",
-            orderStatus: uiStatus,
-            rawStatus: raw,
-            designNumber: "—",
-            items: items.map((it: any, idx: number) => ({
-              id: String(it?.id ?? `${o.id}-${idx}`),
-              name: String(it?.title ?? it?.name ?? "מוצר"),
-              qty: Number(it?.qty ?? 1),
-              price: Number(it?.unitPrice ?? 0),
-            })),
-            engravingText: "",
-            pendantShape: "",
-            material: "",
-            color: "",
-            notes: "",
-          };
-        });
-        setOrders(mapped);
-      } catch {
-        setOrders([]);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
+    void loadOrders(false);
+  }, [loadOrders]);
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "visible") void loadOrders(true);
     };
-  }, []);
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [loadOrders]);
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<OrderStatus | "all">("all");
@@ -541,25 +550,51 @@ export function OrdersPage() {
             ניהול הזמנות, סטטוסים ותשלומים — תצוגה נקייה ומוכנה לחיבור לבקאנד.
           </p>
         </div>
-        <button
-          style={{
-            background: "var(--input)",
-            border: "1px solid var(--border)",
-            color: "var(--foreground-secondary)",
-            borderRadius: "10px",
-            padding: "10px 12px",
-            fontSize: "12px",
-            fontWeight: 800,
-            cursor: "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "8px",
-            flexShrink: 0,
-          }}
-        >
-          <Download size={16} />
-          ייצוא הזמנות
-        </button>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => loadOrders(true)}
+            disabled={refreshing}
+            style={{
+              background: "var(--input)",
+              border: "1px solid var(--border)",
+              color: "var(--foreground-secondary)",
+              borderRadius: "10px",
+              padding: "10px 12px",
+              fontSize: "12px",
+              fontWeight: 800,
+              cursor: refreshing ? "not-allowed" : "pointer",
+              opacity: refreshing ? 0.7 : 1,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              flexShrink: 0,
+            }}
+          >
+            <RefreshCw size={16} style={{ animation: refreshing ? "spin 0.9s linear infinite" : "none" }} />
+            {refreshing ? "מרענן…" : "רענון"}
+          </button>
+          <button
+            type="button"
+            style={{
+              background: "var(--input)",
+              border: "1px solid var(--border)",
+              color: "var(--foreground-secondary)",
+              borderRadius: "10px",
+              padding: "10px 12px",
+              fontSize: "12px",
+              fontWeight: 800,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "8px",
+              flexShrink: 0,
+            }}
+          >
+            <Download size={16} />
+            ייצוא הזמנות
+          </button>
+        </div>
       </div>
 
       {/* Summary cards row */}
@@ -1054,6 +1089,7 @@ export function OrdersPage() {
           setSelected((cur) => (cur && cur.id === id ? { ...cur, rawStatus: next } : cur));
         }}
       />
+      <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
     </div>
   );
 }

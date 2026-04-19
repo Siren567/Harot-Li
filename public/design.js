@@ -1665,8 +1665,7 @@ function updatePreview() {
     userSize: c.size,
   });
   if (engraveCharHintEl) {
-    const hintN = fit.maxCharsHint || 0;
-    engraveCharHintEl.textContent = hintN ? `מקסימום מומלץ לתליון זה: ${hintN} תווים` : "";
+    engraveCharHintEl.textContent = "";
   }
   if (engraveFitErrorEl) {
     const showErr = Boolean(engravingText) && fit.invalid && previewType === "necklace" && state.previewMode === "after";
