@@ -360,6 +360,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               const label = cat?.label ?? (normalizeCategoryKey(catId) === "couple" ? "זוגיים" : catId);
               return (
                 <button
+                  type="button"
                   key={catId}
                   className={`studio-chip ${category === catId ? "active" : ""}`}
                   onClick={() => {
@@ -661,6 +662,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               <div className="studio-shipping-row">
                 {studioShippingMethods.map((method) => (
                   <button
+                    type="button"
                     key={method.id}
                     className={`studio-ship-card ${shippingId === method.id ? "active" : ""}`}
                     onClick={() => setShippingId(method.id)}
@@ -675,6 +677,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               <div className="studio-pay-row">
                 {studioPayments.map((payment) => (
                   <button
+                    type="button"
                     key={payment.id}
                     className={`studio-chip ${paymentId === payment.id ? "active" : ""}`}
                     onClick={() => setPaymentId(payment.id)}
@@ -733,7 +736,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             <h2>ההזמנה התקבלה בהצלחה</h2>
             <p>מספר הזמנה: {orderNumber ? `#${orderNumber}` : "—"}</p>
             <p>המוצר שלך ייכנס לייצור אישי ונעדכן אותך בכל שלב.</p>
-            <button className="studio-primary-btn" onClick={onBackToLanding}>
+            <button type="button" className="studio-primary-btn" onClick={onBackToLanding}>
               חזרה לדף הבית
             </button>
           </div>
@@ -750,7 +753,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         >
           צריכים עזרה?
         </a>
-        <button className="studio-secondary-btn studio-home-btn" onClick={onBackToLanding}>
+        <button type="button" className="studio-secondary-btn studio-home-btn" onClick={onBackToLanding}>
           חזרה לדף הבית
         </button>
       </footer>
