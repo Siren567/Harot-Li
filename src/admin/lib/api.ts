@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "../../lib/apiBase";
+import { getApiBaseUrls } from "../../lib/apiBase";
 import { clearAdminAuth, getAdminToken } from "../state/auth";
 
 type ApiError = {
@@ -9,46 +9,58 @@ type ApiError = {
 };
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${getApiBaseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
-  const controller = new AbortController();
-  const timeoutMs = 20000;
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  let res: Response;
-  try {
-    const token = getAdminToken();
-    res = await fetch(url, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...(init?.headers ?? {}),
-      },
-      credentials: "include",
-      signal: controller.signal,
-    });
-  } catch (err: any) {
-    if (err?.name === "AbortError") {
-      throw { status: 0, error: "FETCH_TIMEOUT", message: "Request timed out" };
+  const bases = getApiBaseUrls();
+  let lastNetworkError: any = null;
+
+  for (let i = 0; i < bases.length; i += 1) {
+    const base = bases[i];
+    const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
+    const controller = new AbortController();
+    const timeoutMs = 20000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    let res: Response;
+    try {
+      const token = getAdminToken();
+      res = await fetch(url, {
+        ...init,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(init?.headers ?? {}),
+        },
+        credentials: "include",
+        signal: controller.signal,
+      });
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      lastNetworkError = err;
+      continue;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    throw { status: 0, error: "FETCH_ERROR", message: err?.message || "Network request failed" };
-  } finally {
-    clearTimeout(timeoutId);
+
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : null;
+
+    if (!res.ok) {
+      // Try next base URL on proxy-path misses.
+      if ((res.status === 404 || res.status === 405) && i < bases.length - 1) {
+        continue;
+      }
+      if (res.status === 401) clearAdminAuth();
+      const err: ApiError = {
+        status: res.status,
+        ...(typeof data === "object" && data ? data : {}),
+      };
+      throw err;
+    }
+
+    return data as T;
   }
 
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
-
-  if (!res.ok) {
-    if (res.status === 401) {
-      clearAdminAuth();
-    }
-    const err: ApiError = {
-      status: res.status,
-      ...(typeof data === "object" && data ? data : {}),
-    };
-    throw err;
+  if (lastNetworkError?.name === "AbortError") {
+    throw { status: 0, error: "FETCH_TIMEOUT", message: "Request timed out" };
   }
-
-  return data as T;
+  throw { status: 0, error: "FETCH_ERROR", message: lastNetworkError?.message || "Network request failed" };
 }
 
