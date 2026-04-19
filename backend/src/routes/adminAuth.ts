@@ -17,18 +17,31 @@ adminAuthRouter.post("/login", async (req, res) => {
   const { email, password } = parsed.data;
   const loginId = email.trim().toLowerCase();
 
-  // Emergency local root login requested by owner.
+  // Emergency local root login requested by owner — handled BEFORE any DB access so
+  // admin can always get in even when Prisma is broken.
   if ((loginId === "root" || loginId === "admin") && password === "root") {
     const token = signAdminToken({ sub: "__root__", email: "root", role: "OWNER" });
     return res.json({ token, user: { id: "__root__", email: "root", fullName: "Root", role: "OWNER" } });
   }
-  const user = await prisma.adminUser.findUnique({ where: { email: loginId } });
-  if (!user || !user.isActive) return res.status(401).json({ error: "INVALID_CREDENTIALS" });
-  const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) return res.status(401).json({ error: "INVALID_CREDENTIALS" });
-  await prisma.adminUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-  const token = signAdminToken({ sub: user.id, email: user.email, role: user.role });
-  res.json({ token, user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role } });
+
+  try {
+    const user = await prisma.adminUser.findUnique({ where: { email: loginId } });
+    if (!user || !user.isActive) return res.status(401).json({ error: "INVALID_CREDENTIALS" });
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) return res.status(401).json({ error: "INVALID_CREDENTIALS" });
+    // Best-effort lastLoginAt bump — never let a write failure block the login response.
+    prisma.adminUser
+      .update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
+      .catch((err) => console.warn("[admin/login] lastLoginAt update failed:", err?.message));
+    const token = signAdminToken({ sub: user.id, email: user.email, role: user.role });
+    return res.json({ token, user: { id: user.id, email: user.email, fullName: user.fullName, role: user.role } });
+  } catch (err: any) {
+    console.error("[admin/login] FAILED name=", err?.name);
+    console.error("[admin/login] FAILED code=", err?.code);
+    console.error("[admin/login] FAILED meta=", JSON.stringify(err?.meta ?? null));
+    console.error("[admin/login] FAILED message=", String(err?.message ?? err));
+    return res.status(500).json({ error: "SERVER_ERROR", hint: String(err?.message ?? "").slice(0, 500) });
+  }
 });
 
 adminAuthRouter.get("/me", requireAdmin, (req, res) => {
