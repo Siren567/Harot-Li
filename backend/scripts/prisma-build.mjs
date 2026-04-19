@@ -17,12 +17,8 @@ function run(cmd, args) {
 
 const prismaCmd = bin("prisma");
 
+// Only generate the client at build time. Never touch the database from the build:
+// - No real Prisma migration folders exist (schema was applied via `db push` + hand-written SQL).
+// - `prisma migrate deploy` against Supabase takes an advisory lock and hangs the Vercel build.
+// Schema changes must be applied manually (and deliberately) out-of-band.
 run(prismaCmd, ["generate"]);
-
-if (process.env.DATABASE_URL && process.env.DATABASE_URL.trim()) {
-  run(prismaCmd, ["migrate", "deploy"]);
-} else {
-  // eslint-disable-next-line no-console
-  console.warn("[backend build] DATABASE_URL not set; skipping `prisma migrate deploy`.");
-}
-
