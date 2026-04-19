@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { listProducts } from "../services/products.service.js";
-import { getSupabaseAdminClient } from "../supabase/client.js";
 import { prisma } from "../db/prisma.js";
+import { getSupabaseAdminClient } from "../supabase/client.js";
 
 export const publicRouter = Router();
 
@@ -30,6 +30,15 @@ function mapSubcategoryLabel(raw?: string | null) {
   if (s.includes("men") || s.includes("גברים")) return "גברים";
   if (s.includes("women") || s.includes("נשים")) return "נשים";
   return source || null;
+}
+
+function mapAudienceKey(raw?: string | null): "men" | "women" | "couple" | null {
+  const source = String(raw ?? "").trim().toLowerCase();
+  if (!source) return null;
+  if (source.includes("couple") || source.includes("זוג")) return "couple";
+  if (source.includes("women") || source.includes("woman") || source.includes("נשים") || source.includes("אישה")) return "women";
+  if (source.includes("men") || source.includes("man") || source.includes("גברים") || source.includes("גבר")) return "men";
+  return null;
 }
 
 function pickSubcategoryLabel(inputs: Array<string | null | undefined>, productTitle?: string | null) {
@@ -98,22 +107,17 @@ publicRouter.get("/products", async (_req, res) => {
       }>
     >();
     if (ids.size > 0) {
-      try {
-        const sb = getSupabaseAdminClient();
-        const { data } = await sb
-          .from("categories")
-          .select("id,name,slug,parent_id")
-          .in("id", Array.from(ids));
-        for (const row of data ?? []) {
-          categoriesById.set(String(row.id), {
-            id: String(row.id),
-            name: String(row.name ?? ""),
-            slug: String(row.slug ?? ""),
-            parent_id: row.parent_id ? String(row.parent_id) : null,
-          });
-        }
-      } catch {
-        // Continue with best-effort mapping without categories table lookup.
+      const categories = await prisma.category.findMany({
+        where: { id: { in: Array.from(ids) } },
+        select: { id: true, name: true, slug: true, parentId: true },
+      });
+      for (const row of categories) {
+        categoriesById.set(String(row.id), {
+          id: String(row.id),
+          name: String(row.name ?? ""),
+          slug: String(row.slug ?? ""),
+          parent_id: row.parentId ? String(row.parentId) : null,
+        });
       }
     }
 
@@ -167,6 +171,18 @@ publicRouter.get("/products", async (_req, res) => {
         pAny.subcategoryName,
         pAny.subcategoryLabel,
       ]);
+      const audienceCandidates = [
+        ...subRows.map((s) => s?.slug ?? null),
+        ...subRows.map((s) => s?.name ?? null),
+        ...subcategoryLabels,
+        subRawFirst?.slug ?? null,
+        subRawFirst?.name ?? null,
+        pAny.subcategoryName ?? null,
+        pAny.subcategoryLabel ?? null,
+        p.title,
+      ];
+      const audienceKeys = Array.from(new Set(audienceCandidates.map((v) => mapAudienceKey(v)).filter(Boolean))) as Array<"men" | "women" | "couple">;
+      const primaryAudience = audienceKeys.length === 1 ? audienceKeys[0] : audienceKeys.includes("couple") ? "couple" : audienceKeys[0] ?? null;
       return {
         id: p.id,
         name: p.title,
@@ -190,6 +206,8 @@ publicRouter.get("/products", async (_req, res) => {
           p.title
         ),
         subcategoryLabels,
+        audience: primaryAudience,
+        audiences: audienceKeys,
         categoryName: effectiveMain?.name ?? null,
         subcategoryName: subRawFirst?.name ?? null,
         studioColors: mapStudioColors(p.available_colors),

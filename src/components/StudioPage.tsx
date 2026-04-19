@@ -36,6 +36,8 @@ type PublicProduct = {
   studioCategory: StudioCategoryId;
   subcategoryLabel: string | null;
   subcategoryLabels?: string[];
+  audience?: "men" | "women" | "couple" | null;
+  audiences?: Array<"men" | "women" | "couple">;
   studioColors: string[];
   stock: number;
   variants?: PublicVariant[];
@@ -153,15 +155,15 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   const meta = COLOR_META[key] ?? { name: key, swatch: "#c0c0c0" };
                   return { name: meta.name, swatch: meta.swatch, stock: Number(p.stock) || 0, price: Number(p.price) || 0 };
                 });
+          const explicitAudience =
+            p.audience === "men" || p.audience === "women" || p.audience === "couple" ? p.audience : null;
           return {
             id: p.id,
             category: p.studioCategory,
-            subcategory: inferSubcategoryFromTexts([
-              p.subcategoryLabel ?? "",
-              ...(Array.isArray(p.subcategoryLabels) ? p.subcategoryLabels : []),
-              p.name ?? "",
-              p.description ?? "",
-            ]),
+            // Prefer admin-defined audience from backend; use textual inference only as a safe fallback.
+            subcategory:
+              explicitAudience ??
+              inferSubcategoryFromTexts([p.subcategoryLabel ?? "", ...(Array.isArray(p.subcategoryLabels) ? p.subcategoryLabels : [])]),
             title: p.name,
             description: p.description || "",
             price: Number(p.price) || 0,
