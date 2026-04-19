@@ -11,6 +11,7 @@ type ApiError = {
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const bases = getApiBaseUrls();
   let lastNetworkError: any = null;
+  let lastHttpError: ApiError | null = null;
 
   for (let i = 0; i < bases.length; i += 1) {
     const base = bases[i];
@@ -40,24 +41,32 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     }
 
     const text = await res.text();
-    const data = text ? JSON.parse(text) : null;
+    let data: any = null;
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = null;
+      }
+    }
 
     if (!res.ok) {
-      // Try next base URL on proxy-path misses.
-      if ((res.status === 404 || res.status === 405) && i < bases.length - 1) {
+      // Try next base URL on proxy-path misses or redirects.
+      if ((res.status === 301 || res.status === 302 || res.status === 307 || res.status === 308 || res.status === 404 || res.status === 405) && i < bases.length - 1) {
         continue;
       }
       if (res.status === 401) clearAdminAuth();
-      const err: ApiError = {
+      lastHttpError = {
         status: res.status,
         ...(typeof data === "object" && data ? data : {}),
       };
-      throw err;
+      break;
     }
 
     return data as T;
   }
 
+  if (lastHttpError) throw lastHttpError;
   if (lastNetworkError?.name === "AbortError") {
     throw { status: 0, error: "FETCH_TIMEOUT", message: "Request timed out" };
   }
