@@ -1083,6 +1083,35 @@ textarea:focus-visible {
   gap: 10px;
 }
 
+.studio-checkout-form-address-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+.studio-checkout-form-notes {
+  grid-column: 1 / -1;
+}
+
+.studio-checkout-form textarea {
+  border: 1px solid #e9d9ca;
+  border-radius: 10px;
+  padding: 9px 10px;
+  font-family: inherit;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+@media (max-width: 520px) {
+  .studio-checkout-form-address-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .studio-checkout-col {
   display: flex;
   flex-direction: column;
@@ -1112,6 +1141,15 @@ textarea:focus-visible {
 .studio-ship-card.active {
   border-color: #9c6b46;
   background: #fbf5ef;
+}
+
+.studio-ship-card-detail {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  color: #7f6653;
+  line-height: 1.35;
+  font-weight: 500;
 }
 
 .studio-pay-row {
@@ -1280,6 +1318,7 @@ textarea:focus-visible {
     grid-template-columns: 1fr;
   }
   .studio-checkout-form input,
+  .studio-checkout-form textarea,
   .studio-order-summary input {
     font-size: 16px;
   }

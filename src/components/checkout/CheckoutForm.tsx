@@ -6,6 +6,10 @@ export type CheckoutFormData = {
   email: string;
   city: string;
   address: string;
+  floor: string;
+  apartment: string;
+  zipCode: string;
+  notes: string;
 };
 
 type CheckoutFormProps = {
@@ -23,6 +27,10 @@ function CheckoutForm({ onSubmit, id, className, disabled }: CheckoutFormProps) 
   const [email, setEmail] = useState("");
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
+  const [floor, setFloor] = useState("");
+  const [apartment, setApartment] = useState("");
+  const [zipCode, setZipCode] = useState("");
+  const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -42,30 +50,58 @@ function CheckoutForm({ onSubmit, id, className, disabled }: CheckoutFormProps) 
       return;
     }
     setError(null);
-    onSubmit({ fullName: n, phone: p, email: e, city: c, address: a });
+    onSubmit({
+      fullName: n,
+      phone: p,
+      email: e,
+      city: c,
+      address: a,
+      floor: floor.trim(),
+      apartment: apartment.trim(),
+      zipCode: zipCode.trim(),
+      notes: notes.trim(),
+    });
   }
 
   return (
     <form id={id} className={className} onSubmit={handleSubmit} noValidate>
       <label>
         שם מלא
-        <input name="fullName" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+        <input name="fullName" autoComplete="name" value={fullName} onChange={(ev) => setFullName(ev.target.value)} />
       </label>
       <label>
         טלפון
-        <input name="phone" type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+        <input name="phone" type="tel" autoComplete="tel" value={phone} onChange={(ev) => setPhone(ev.target.value)} />
       </label>
       <label>
         אימייל
-        <input name="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input name="email" type="email" autoComplete="email" value={email} onChange={(ev) => setEmail(ev.target.value)} />
       </label>
       <label>
         עיר
-        <input name="city" autoComplete="address-level2" value={city} onChange={(e) => setCity(e.target.value)} />
+        <input name="city" autoComplete="address-level2" value={city} onChange={(ev) => setCity(ev.target.value)} />
       </label>
       <label>
         כתובת
-        <input name="address" autoComplete="street-address" value={address} onChange={(e) => setAddress(e.target.value)} />
+        <input name="address" autoComplete="street-address" value={address} onChange={(ev) => setAddress(ev.target.value)} />
+      </label>
+      <div className="studio-checkout-form-address-row">
+        <label>
+          קומה
+          <input name="floor" autoComplete="off" value={floor} onChange={(ev) => setFloor(ev.target.value)} />
+        </label>
+        <label>
+          דירה
+          <input name="apartment" autoComplete="off" value={apartment} onChange={(ev) => setApartment(ev.target.value)} />
+        </label>
+        <label>
+          מיקוד
+          <input name="zipCode" autoComplete="postal-code" value={zipCode} onChange={(ev) => setZipCode(ev.target.value)} />
+        </label>
+      </div>
+      <label className="studio-checkout-form-notes">
+        הערות
+        <textarea name="notes" rows={3} value={notes} onChange={(ev) => setNotes(ev.target.value)} placeholder="הערות נוספות למשלוח או ליצירה" />
       </label>
       {error ? (
         <p role="alert" style={{ color: "#b42318", fontSize: "0.85rem", margin: 0, gridColumn: "1 / -1" }}>

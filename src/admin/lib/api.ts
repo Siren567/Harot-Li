@@ -11,8 +11,8 @@ type ApiError = {
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const isAdminLogin = normalizedPath === "/api/admin/auth/login";
-  const allBases = getApiBaseUrls();
-  const bases = isAdminLogin ? allBases.slice(0, 1) : allBases;
+  /** Never restrict to a single base: same-origin `/api` may be missing on static hosts while `/_/backend` works. */
+  const bases = getApiBaseUrls();
   let lastNetworkError: any = null;
   let lastHttpError: ApiError | null = null;
 
@@ -55,8 +55,11 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     }
 
     if (!res.ok) {
-      // Try next base URL on proxy-path misses or redirects.
-      if (!isAdminLogin && (res.status === 301 || res.status === 302 || res.status === 307 || res.status === 308 || res.status === 404 || res.status === 405) && i < bases.length - 1) {
+      // Try next base URL on proxy-path misses or redirects (including admin login when `/api` is not proxied).
+      if (
+        (res.status === 301 || res.status === 302 || res.status === 307 || res.status === 308 || res.status === 404 || res.status === 405) &&
+        i < bases.length - 1
+      ) {
         continue;
       }
       if (res.status === 401) {

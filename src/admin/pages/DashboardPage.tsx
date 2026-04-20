@@ -72,9 +72,15 @@ export function DashboardPage() {
     try {
       const out = await apiFetch<any>("/api/orders/dashboard");
       setSnapshot(out);
-    } catch {
+    } catch (e: any) {
       setSnapshot(null);
-      setLoadError("לא ניתן לטעון את נתוני הדאשבורד בזמן אמת.");
+      if (e?.status === 401) {
+        setLoadError("נדרשת התחברות מחדש לאדמין.");
+      } else if (e?.status === 0 || e?.error === "FETCH_TIMEOUT" || e?.error === "FETCH_ERROR") {
+        setLoadError("לא ניתן להגיע לשרת. בדקו חיבור לרשת או שהבקאנד זמין (בפיתוח מקומי: הרצת backend).");
+      } else {
+        setLoadError("לא ניתן לטעון את נתוני הדאשבורד בזמן אמת.");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);

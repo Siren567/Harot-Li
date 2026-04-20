@@ -390,7 +390,14 @@ export function ProductEditorPage() {
     } catch {
       setProducts([]);
       setVariantsByProduct({});
-      setProductsFetchError("אין חיבור לשרת המוצרים כרגע. בדוק שה־Backend רץ על פורט 4000 ונסה שוב.");
+      const isLocal =
+        typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+      setProductsFetchError(
+        isLocal
+          ? "אין חיבור לשרת המוצרים כרגע. ודאו שה־Backend רץ (למשל npm run dev ב-backend, פורט 4000) ונסו שוב."
+          : "אין חיבור לשרת המוצרים כרגע. ודאו שהשרת פעיל, ש־VITE_API_BASE_URL מוגדר אם צריך, ושהאחסון מפנה את /api או /_/backend לבקאנד."
+      );
       toast("טעינת מוצרים נכשלה", "error");
     } finally {
       if (opts?.silent) setRefreshing(false);

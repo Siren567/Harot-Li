@@ -67,6 +67,8 @@ model Order {
   status         OrderStatus @default(NEW)
   items          Json
   legacyItems    Json?
+  /// Snapshot: shipping method, address lines, checkout + design notes (studio).
+  deliveryDetails Json?
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

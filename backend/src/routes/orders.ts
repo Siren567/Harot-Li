@@ -28,10 +28,16 @@ const CreateOrderSchema = z.object({
     email: z.string().email(),
     city: z.string().max(80).optional().nullable(),
     address: z.string().max(200).optional().nullable(),
+    floor: z.string().max(40).optional().nullable(),
+    apartment: z.string().max(40).optional().nullable(),
+    zipCode: z.string().max(24).optional().nullable(),
+    notes: z.string().max(4000).optional().nullable(),
   }),
   items: z.array(OrderItemSchema).min(1),
   shippingFee: z.number().int().min(0),
   couponCode: z.string().optional().nullable(),
+  shippingMethodId: z.string().max(64).optional().nullable(),
+  orderNotes: z.string().max(4000).optional().nullable(),
 });
 
 function normalizeCode(code: string) {
@@ -366,7 +372,7 @@ ordersRouter.post("/", async (req, res) => {
     return res.status(400).json({ ok: false, error: "VALIDATION", details: parsed.error.flatten() });
   }
 
-  const { customer: inputCustomer, items, shippingFee, couponCode } = parsed.data;
+  const { customer: inputCustomer, items, shippingFee, couponCode, shippingMethodId, orderNotes } = parsed.data;
   const subtotal = items.reduce((sum, it) => sum + it.unitPrice * it.qty, 0);
   const itemsQuantity = items.reduce((sum, it) => sum + it.qty, 0);
 
@@ -453,6 +459,19 @@ ordersRouter.post("/", async (req, res) => {
 
       const orderNumber = await generateUniqueOrderNumber(tx);
 
+      const deliveryDetails = {
+        shippingMethodId: shippingMethodId?.trim() || null,
+        orderNotes: orderNotes?.trim() || null,
+        address: {
+          city: inputCustomer.city?.trim() || null,
+          street: inputCustomer.address?.trim() || null,
+          floor: inputCustomer.floor?.trim() || null,
+          apartment: inputCustomer.apartment?.trim() || null,
+          zipCode: inputCustomer.zipCode?.trim() || null,
+          checkoutNotes: inputCustomer.notes?.trim() || null,
+        },
+      };
+
       const order = await tx.order.create({
         data: {
           orderNumber,
@@ -463,6 +482,7 @@ ordersRouter.post("/", async (req, res) => {
           total,
           couponId: appliedCouponId,
           items: items as unknown as any, // kept for legacy readers; OrderItem rows are canonical
+          deliveryDetails: deliveryDetails as object,
         },
       });
 

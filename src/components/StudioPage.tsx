@@ -596,6 +596,8 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           body: JSON.stringify({
             customer,
             shippingFee: shipping.fee,
+            shippingMethodId: shippingId,
+            orderNotes: notes.trim() || null,
             couponCode: appliedCoupon?.code || null,
             items: [
               {
@@ -651,7 +653,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       shipping,
       apiBase,
       engravingSummary,
-      customerImageDataUrl
+      customerImageDataUrl,
+      notes,
+      shippingId
     ]
   );
 
@@ -1143,6 +1147,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     <strong>{method.label}</strong>
                     <span>{method.fee === 0 ? "חינם" : shekel(method.fee)}</span>
                     <small>{method.eta}</small>
+                    {"detail" in method && method.detail ? (
+                      <span className="studio-ship-card-detail">{method.detail}</span>
+                    ) : null}
                   </button>
                 ))}
               </div>
