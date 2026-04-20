@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { memo, useState, type FormEvent } from "react";
 
 export type CheckoutFormData = {
   fullName: string;
@@ -17,32 +17,13 @@ type CheckoutFormProps = {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export default function CheckoutForm({ onSubmit, id, className, disabled }: CheckoutFormProps) {
+function CheckoutForm({ onSubmit, id, className, disabled }: CheckoutFormProps) {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    console.log("[mount] CheckoutForm");
-    const onFocusIn = (e: FocusEvent) => {
-      const t = e.target as HTMLElement | null;
-      console.log("[focusin]", t?.tagName, (t as HTMLInputElement)?.name || t?.id || "");
-    };
-    const onFocusOut = (e: FocusEvent) => {
-      const t = e.target as HTMLElement | null;
-      console.log("[focusout]", t?.tagName, (t as HTMLInputElement)?.name || t?.id || "");
-    };
-    document.addEventListener("focusin", onFocusIn);
-    document.addEventListener("focusout", onFocusOut);
-    return () => {
-      console.log("[unmount] CheckoutForm");
-      document.removeEventListener("focusin", onFocusIn);
-      document.removeEventListener("focusout", onFocusOut);
-    };
-  }, []);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,3 +75,6 @@ export default function CheckoutForm({ onSubmit, id, className, disabled }: Chec
     </form>
   );
 }
+
+/** Avoid re-rendering while typing in sibling UI (e.g. coupon field in parent) so inputs keep focus. */
+export default memo(CheckoutForm);

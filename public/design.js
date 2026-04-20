@@ -67,14 +67,17 @@ function enrichMockCatalogItem(p) {
 }
 
 function buildApiBases() {
-  const host = window.location.hostname || "localhost";
+  const host = (window.location.hostname || "localhost").toLowerCase();
   const origin = window.location.origin || "";
   const isLocal = host === "localhost" || host === "127.0.0.1";
   if (isLocal) {
     return ["", origin, "http://localhost:4000", "http://localhost:4444", `http://${host}:4444`, `http://${host}:3000`];
   }
-  // Vercel multi-service backend prefix (avoid localhost calls in production).
-  return ["/_/backend", `${origin}/_/backend`];
+  const canonical = "https://www.harot-li.store/_/backend";
+  const onHarot = host === "www.harot-li.store" || host === "harot-li.store";
+  // Same-origin /api and /_/backend first; absolute www last (CORS-safe with credentials omitted in callers if needed).
+  if (onHarot) return ["", "/_/backend", `${origin}/_/backend`, canonical];
+  return ["/_/backend", canonical];
 }
 
 /** +972 55-943-3968 — ברירת מחדל לסטודיו; ה־API יכול לדרוס אם מוגדר בפאנל */
@@ -84,7 +87,7 @@ async function fetchWithTimeout(url, options = {}, ms = 5000) {
   const ctrl = new AbortController();
   const id = setTimeout(() => ctrl.abort(), ms);
   try {
-    return await fetch(url, { ...options, signal: ctrl.signal });
+    return await fetch(url, { credentials: "omit", ...options, signal: ctrl.signal });
   } finally {
     clearTimeout(id);
   }

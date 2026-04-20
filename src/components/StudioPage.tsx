@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { StudioSubcategory } from "../constants/studioData";
 import { getApiBaseUrl } from "../lib/apiBase";
 import { loadBootstrapOnce, loadPublicProductsOnce } from "../lib/studioDataLoader";
@@ -30,6 +30,8 @@ type PublicProduct = {
   price: number;
   image: string | null;
   images: string[];
+  /** Prisma main category id (tabs from bootstrap use this). */
+  mainCategoryId?: string | null;
   studioCategory: string;
   subcategoryLabel: string | null;
   subcategoryLabels?: string[];
@@ -57,6 +59,7 @@ type StudioColorRow = {
 
 type StudioRuntimeProduct = {
   id: string;
+  mainCategoryId: string | null;
   category: string;
   subcategory: StudioSubcategory;
   title: string;
@@ -333,10 +336,13 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     setDraggingId(id);
   }
 
+  // Only sync the textarea draft when switching which engraving box is active. Including `engravings`
+  // here re-ran the effect on every keystroke and could steal focus / reset caret in some cases.
   useEffect(() => {
-    const selected = engravings.find((item) => item.id === activeEngravingId) ?? engravings[0] ?? null;
+    const selected =
+      engravingsRef.current.find((item) => item.id === activeEngravingId) ?? engravingsRef.current[0] ?? null;
     setActiveTextDraft(selected?.text ?? "");
-  }, [activeEngravingId, engravings]);
+  }, [activeEngravingId]);
 
   useEffect(() => {
     if (!draggingId) return;
@@ -419,6 +425,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           const imgs = Array.isArray(p.images) ? p.images.filter(Boolean) : [];
           return {
             id: p.id,
+            mainCategoryId: typeof p.mainCategoryId === "string" && p.mainCategoryId ? p.mainCategoryId : null,
             category: p.studioCategory,
             subcategory: explicitAudience,
             title: p.name,
@@ -468,25 +475,40 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const galleryUrls = activeProduct?.images?.length ? activeProduct.images : activeProduct?.image ? [activeProduct.image] : [];
   const heroVisualUrl = galleryUrls[galleryPickIndex] ?? galleryUrls[0] ?? activeProduct?.image ?? null;
 
+  const normalizedTab = useMemo(() => {
+    const n = normalizeCategoryKey(category);
+    if (n === "bracelets" || n === "necklaces" || n === "keychains" || n === "other" || n === "couple") return n;
+    const hit = runtimeProducts.find((p) => p.mainCategoryId === category);
+    if (hit?.category) return normalizeCategoryKey(hit.category);
+    return n;
+  }, [category, runtimeProducts]);
+
+  const tabMatchesMainCategoryId = useMemo(
+    () => runtimeProducts.some((p) => p.mainCategoryId === category),
+    [category, runtimeProducts]
+  );
+
   const isGroupedMenWomenCouple = useMemo(() => {
-    const normalized = normalizeCategoryKey(category);
-    return normalized === "bracelets" || normalized === "necklaces";
-  }, [category]);
+    return normalizedTab === "bracelets" || normalizedTab === "necklaces";
+  }, [normalizedTab]);
 
   const filteredProducts = useMemo(() => {
-    const normalized = normalizeCategoryKey(category);
     return runtimeProducts.filter((p) => {
-      if (normalized === "couple") {
+      const inTab = tabMatchesMainCategoryId
+        ? p.mainCategoryId === category
+        : category === p.category || normalizeCategoryKey(p.category) === normalizedTab;
+
+      if (!inTab) return false;
+
+      if (normalizedTab === "couple") {
         return p.subcategory === "couple";
       }
-      if ((normalized === "bracelets" || normalized === "necklaces") && !p.subcategory) {
+      if ((normalizedTab === "bracelets" || normalizedTab === "necklaces") && !p.subcategory) {
         return false;
       }
-      if (category === p.category) return true;
-      if (normalizeCategoryKey(p.category) !== normalized) return false;
       return true;
     });
-  }, [category, runtimeProducts]);
+  }, [category, runtimeProducts, normalizedTab, tabMatchesMainCategoryId]);
 
   const groupedProducts = useMemo(() => {
     const men: StudioRuntimeProduct[] = [];
@@ -547,80 +569,93 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     setCouponMsg(null);
   }
 
-  async function submitOrder(customer: CheckoutFormData) {
-    if (submitting) return;
-    if (!activeProduct || !activeColor) {
-      setCouponMsg("לא נבחר מוצר תקין");
-      return;
-    }
-    if (!activeColor.variantId || !activeProduct.id) {
-      setCouponMsg("לא ניתן להשלים הזמנה ללא וריאציה תקינה");
-      return;
-    }
-    if (activeColor.stock <= 0 || activeProduct.totalStock <= 0) {
-      setCouponMsg("המוצר שנבחר אזל מהמלאי");
-      return;
-    }
-    if (qty > activeColor.stock) {
-      setCouponMsg(`הכמות שבחרת גבוהה מהמלאי הזמין (${activeColor.stock})`);
-      return;
-    }
-    setSubmitting(true);
-    setCouponMsg(null);
-    try {
-      const res = await fetch(`${apiBase}/api/orders`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          customer,
-          shippingFee: shipping.fee,
-          couponCode: appliedCoupon?.code || null,
-          items: [
-            {
-              name: `${activeProduct.title} (${activeColor.name})`,
-              productId: activeProduct.id,
-              variantId: activeColor.variantId,
-              qty,
-              unitPrice: Math.round((activeColor.price ?? activeProduct.price) * 100),
-              color: activeColor.name,
-              pendantShape: activeColor.pendantType ?? null,
-              material: activeColor.material ?? null,
-              engravingText: engravingSummary || null,
-              customerImageUrl: activeProduct.allowCustomerImageUpload ? customerImageDataUrl : null,
-            }
-          ]
-        })
-      });
-      let data: { ok?: boolean; order?: { orderNumber?: string }; message?: string; hint?: string } = {};
-      try {
-        const text = await res.text();
-        if (text) data = JSON.parse(text);
-      } catch {
-        data = {};
-      }
-      if (!res.ok || !data?.ok || !data.order?.orderNumber) {
-        const hint =
-          res.status === 500 || res.status === 0
-            ? " ודאו שהשרת (בקאנד) רץ ושמסד הנתונים מחובר."
-            : "";
-        setCouponMsg(
-          (data?.message || (res.status === 500 ? "שגיאת שרת" : "הזמנה נכשלה")) +
-            (data?.hint ? ` (${String(data.hint).slice(0, 120)})` : "") +
-            hint
-        );
+  const submitOrder = useCallback(
+    async (customer: CheckoutFormData) => {
+      if (submitting) return;
+      if (!activeProduct || !activeColor) {
+        setCouponMsg("לא נבחר מוצר תקין");
         return;
       }
-      setOrderNumber(data.order.orderNumber);
-      setStep(3);
-    } catch {
-      setCouponMsg(
-        "לא ניתן להתחבר לשרת. ודאו שהבקאנד רץ (למשל npm run dev ב-backend) ושהאתר נטען דרך npm run dev כדי ש־/api יעבוד."
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }
+      if (!activeColor.variantId || !activeProduct.id) {
+        setCouponMsg("לא ניתן להשלים הזמנה ללא וריאציה תקינה");
+        return;
+      }
+      if (activeColor.stock <= 0 || activeProduct.totalStock <= 0) {
+        setCouponMsg("המוצר שנבחר אזל מהמלאי");
+        return;
+      }
+      if (qty > activeColor.stock) {
+        setCouponMsg(`הכמות שבחרת גבוהה מהמלאי הזמין (${activeColor.stock})`);
+        return;
+      }
+      setSubmitting(true);
+      setCouponMsg(null);
+      try {
+        const res = await fetch(`${apiBase}/api/orders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            customer,
+            shippingFee: shipping.fee,
+            couponCode: appliedCoupon?.code || null,
+            items: [
+              {
+                name: `${activeProduct.title} (${activeColor.name})`,
+                productId: activeProduct.id,
+                variantId: activeColor.variantId,
+                qty,
+                unitPrice: Math.round((activeColor.price ?? activeProduct.price) * 100),
+                color: activeColor.name,
+                pendantShape: activeColor.pendantType ?? null,
+                material: activeColor.material ?? null,
+                engravingText: engravingSummary || null,
+                customerImageUrl: activeProduct.allowCustomerImageUpload ? customerImageDataUrl : null,
+              }
+            ]
+          })
+        });
+        let data: { ok?: boolean; order?: { orderNumber?: string }; message?: string; hint?: string } = {};
+        try {
+          const text = await res.text();
+          if (text) data = JSON.parse(text);
+        } catch {
+          data = {};
+        }
+        if (!res.ok || !data?.ok || !data.order?.orderNumber) {
+          const hint =
+            res.status === 500 || res.status === 0
+              ? " ודאו שהשרת (בקאנד) רץ ושמסד הנתונים מחובר."
+              : "";
+          setCouponMsg(
+            (data?.message || (res.status === 500 ? "שגיאת שרת" : "הזמנה נכשלה")) +
+              (data?.hint ? ` (${String(data.hint).slice(0, 120)})` : "") +
+              hint
+          );
+          return;
+        }
+        setOrderNumber(data.order.orderNumber);
+        setStep(3);
+      } catch {
+        setCouponMsg(
+          "לא ניתן להתחבר לשרת. ודאו שהבקאנד רץ (למשל npm run dev ב-backend) ושהאתר נטען דרך npm run dev כדי ש־/api יעבוד."
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [
+      submitting,
+      activeProduct,
+      activeColor,
+      qty,
+      appliedCoupon,
+      shipping,
+      apiBase,
+      engravingSummary,
+      customerImageDataUrl
+    ]
+  );
 
   const goNext = () => setStep((s) => Math.min(3, s + 1));
   const goBack = () => setStep((s) => Math.max(0, s - 1));

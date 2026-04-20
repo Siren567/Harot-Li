@@ -26,16 +26,14 @@ async function fetchJsonFirstOk(path: string): Promise<{ ok: boolean; data: any 
   for (let i = 0; i < bases.length; i += 1) {
     const url = joinApiUrl(bases[i], path);
     try {
-      const res = await fetch(url, { credentials: "include", cache: "no-store" });
+      const res = await fetch(url, { credentials: "omit", cache: "no-store", mode: "cors" });
       if (res.ok) {
         const data = await res.json();
         return { ok: true, data };
       }
-      if ((res.status === 404 || res.status === 405 || res.status === 301 || res.status === 302 || res.status === 307 || res.status === 308) && i < bases.length - 1) {
-        continue;
-      }
+      if (i < bases.length - 1) continue;
     } catch {
-      /* try next base */
+      if (i < bases.length - 1) continue;
     }
   }
   return { ok: false, data: null };

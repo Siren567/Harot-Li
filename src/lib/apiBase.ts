@@ -21,7 +21,8 @@ export function getApiBaseUrls() {
   // (harot-li.store was pointing only at www and broke studio/product loads from CORS / routing).
   const onHarotSite = host === "www.harot-li.store" || host === "harot-li.store";
 
-  if (onHarotSite) return ["/_/backend", canonicalBackend];
+  // Try same-origin /api first (some hosts proxy it), then /_/backend, then absolute www fallback.
+  if (onHarotSite) return ["", "/_/backend", canonicalBackend];
   return [canonicalBackend];
 }
 
@@ -33,7 +34,10 @@ export function joinApiUrl(base: string, path: string) {
   return `${b}${p}`;
 }
 
+/** Prefer a non-empty base for same-tab `fetch(\`\${apiBase}/api/...\`)` (checkout, coupons). Loaders still try every URL from {@link getApiBaseUrls}. */
 export function getApiBaseUrl() {
-  return getApiBaseUrls()[0];
+  const bases = getApiBaseUrls();
+  const firstNonEmpty = bases.find((b) => String(b || "").length > 0);
+  return firstNonEmpty ?? bases[0] ?? "";
 }
 
