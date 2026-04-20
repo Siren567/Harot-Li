@@ -950,13 +950,6 @@ textarea:focus-visible {
   font-weight: 600;
 }
 
-label > .studio-field-hint {
-  display: block;
-  margin-top: 6px;
-  margin-bottom: 0;
-  font-weight: 500;
-}
-
 .studio-customer-photo-actions {
   display: flex;
   flex-wrap: wrap;

@@ -246,7 +246,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [activeTextDraft, setActiveTextDraft] = useState("לנצח שלך");
   const [customerImageDataUrl, setCustomerImageDataUrl] = useState<string | null>(null);
   const customerImageInputRef = useRef<HTMLInputElement | null>(null);
-  const [galleryPickIndex, setGalleryPickIndex] = useState(0);
   const [galleryModalUrl, setGalleryModalUrl] = useState<string | null>(null);
   const [engraveFitError, setEngraveFitError] = useState<string | null>(null);
   const [rotation, setRotation] = useState(14);
@@ -442,7 +441,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         if (!mounted) return;
         setRuntimeProducts(mapped);
         setSelectedColorByProduct(Object.fromEntries(mapped.map((p) => [p.id, 0])));
-        setGalleryPickIndex(0);
         if (mapped.length > 0) setProductId((prev) => (prev && mapped.some((p) => p.id === prev) ? prev : mapped[0].id));
       } catch {
         if (!mounted) return;
@@ -459,7 +457,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   useEffect(() => {
     setCustomerImageDataUrl(null);
-    setGalleryPickIndex(0);
   }, [productId]);
 
   const activeProduct = useMemo(() => {
@@ -473,7 +470,8 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const pendantExtraClass = useMemo(() => pendantShapeClassName(activeColor?.pendantType), [activeColor?.pendantType]);
 
   const galleryUrls = activeProduct?.images?.length ? activeProduct.images : activeProduct?.image ? [activeProduct.image] : [];
-  const heroVisualUrl = galleryUrls[galleryPickIndex] ?? galleryUrls[0] ?? activeProduct?.image ?? null;
+  /** תמונת הרקע בתוך מודל החריטה — תמיד התמונה הראשית; שאר התמונות נצפות בגלריה למטה ובפופאפ בלבד. */
+  const engraveStageImageUrl = galleryUrls[0] ?? activeProduct?.image ?? null;
 
   const normalizedTab = useMemo(() => {
     const n = normalizeCategoryKey(category);
@@ -924,7 +922,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     if (activeEngraving) updateEngraving(activeEngraving.id, { text: value });
                   }}
                 />
-                <span className="studio-field-hint">Enter — שורה חדשה באותו בוקס</span>
               </label>
               <label>
                 פונט
@@ -1050,7 +1047,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               <div className="studio-preview-stage">
                 <div
                   ref={objectRef}
-                  className={`studio-3d-object ${activeProduct?.category ?? "other"} ${pendantExtraClass} ${heroVisualUrl ? "has-photo" : ""}`}
+                  className={`studio-3d-object ${activeProduct?.category ?? "other"} ${pendantExtraClass} ${engraveStageImageUrl ? "has-photo" : ""}`}
                   style={
                     {
                       transform: `rotateY(${rotation}deg) rotateX(8deg) scale(${zoom})`,
@@ -1058,7 +1055,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     } as CSSProperties
                   }
                 >
-                  {heroVisualUrl ? <img className="studio-3d-fill" src={heroVisualUrl} alt="" loading="eager" decoding="async" /> : null}
+                  {engraveStageImageUrl ? (
+                    <img className="studio-3d-fill" src={engraveStageImageUrl} alt="" loading="eager" decoding="async" />
+                  ) : null}
                   {customerImageDataUrl ? (
                     <img className="studio-customer-overlay" src={customerImageDataUrl} alt="" />
                   ) : null}
@@ -1086,17 +1085,15 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   })}
                 </div>
               </div>
-              {galleryUrls.length > 1 ? (
-                <div className="studio-subgallery" role="tablist" aria-label="תמונות מוצר">
+              {galleryUrls.length > 0 ? (
+                <div className="studio-subgallery" role="list" aria-label="גלריית תמונות המוצר">
                   {galleryUrls.map((url, idx) => (
                     <button
                       key={`${url}-${idx}`}
                       type="button"
-                      className={`studio-subgallery-thumb ${galleryPickIndex === idx ? "active" : ""}`}
-                      onClick={() => {
-                        setGalleryPickIndex(idx);
-                        setGalleryModalUrl(url);
-                      }}
+                      className={`studio-subgallery-thumb ${galleryModalUrl === url ? "active" : ""}`}
+                      onClick={() => setGalleryModalUrl(url)}
+                      aria-label={galleryUrls.length > 1 ? `פתיחת תמונה ${idx + 1} בגודל מלא` : "פתיחת תמונה בגודל מלא"}
                     >
                       <img src={url} alt="" loading="lazy" decoding="async" />
                     </button>
