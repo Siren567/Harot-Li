@@ -1027,6 +1027,13 @@ textarea:focus-visible {
   gap: 10px;
 }
 
+.studio-checkout-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
 .studio-shipping-row {
   grid-column: 1 / -1;
   display: grid;

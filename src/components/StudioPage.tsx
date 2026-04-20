@@ -959,81 +959,79 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       {step === 2 ? (
         <section className="studio-step-section studio-step-section--checkout">
           <h2>פרטים ותשלום</h2>
-          <CheckoutForm
-            id="studio-checkout-form"
-            className="studio-checkout-grid"
-            disabled={submitting || !canPurchase}
-            onSubmit={submitOrder}
-            extras={
-              <>
-                <div className="studio-shipping-row">
-                  {studioShippingMethods.map((method) => (
-                    <button
-                      type="button"
-                      key={method.id}
-                      className={`studio-ship-card ${shippingId === method.id ? "active" : ""}`}
-                      onClick={() => setShippingId(method.id)}
-                    >
-                      <strong>{method.label}</strong>
-                      <span>{method.fee === 0 ? "חינם" : shekel(method.fee)}</span>
-                      <small>{method.eta}</small>
-                    </button>
-                  ))}
-                </div>
-                <div className="studio-pay-row">
-                  {studioPayments.map((payment) => (
-                    <button
-                      type="button"
-                      key={payment.id}
-                      className={`studio-chip ${paymentId === payment.id ? "active" : ""}`}
-                      onClick={() => setPaymentId(payment.id)}
-                    >
-                      {payment.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            }
-            aside={
-              <aside className="studio-order-summary">
-                <h3>סיכום הזמנה</h3>
-                <p>{activeProduct?.title ?? "—"}</p>
-                <p>צבע: {activeColor?.name ?? "—"}</p>
-                <p>חריטה: {engravingSummary || "ללא טקסט"}</p>
-                <p>כמות: {qty}</p>
-                <p>משלוח: {shipping.label}</p>
-                {!canPurchase ? <p style={{ color: "#b42318", fontWeight: 700 }}>אזל מהמלאי - לא ניתן להשלים הזמנה</p> : null}
-                <hr />
-                <p>ביניים: {shekel(subtotal)}</p>
-                <p>משלוח: {effectiveShippingFee === 0 ? "חינם" : shekel(effectiveShippingFee)}</p>
-                {appliedCoupon ? <p>הנחה ({appliedCoupon.code}): -{shekel(discount)}</p> : null}
-                <strong>סה"כ לתשלום: {shekel(total)}</strong>
+          <div className="studio-checkout-grid">
+            <div className="studio-checkout-col">
+              <CheckoutForm
+                id="studio-checkout-form"
+                className="studio-checkout-form"
+                disabled={submitting || !canPurchase}
+                onSubmit={submitOrder}
+              />
+              <div className="studio-shipping-row">
+                {studioShippingMethods.map((method) => (
+                  <button
+                    type="button"
+                    key={method.id}
+                    className={`studio-ship-card ${shippingId === method.id ? "active" : ""}`}
+                    onClick={() => setShippingId(method.id)}
+                  >
+                    <strong>{method.label}</strong>
+                    <span>{method.fee === 0 ? "חינם" : shekel(method.fee)}</span>
+                    <small>{method.eta}</small>
+                  </button>
+                ))}
+              </div>
+              <div className="studio-pay-row">
+                {studioPayments.map((payment) => (
+                  <button
+                    type="button"
+                    key={payment.id}
+                    className={`studio-chip ${paymentId === payment.id ? "active" : ""}`}
+                    onClick={() => setPaymentId(payment.id)}
+                  >
+                    {payment.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <aside className="studio-order-summary">
+              <h3>סיכום הזמנה</h3>
+              <p>{activeProduct?.title ?? "—"}</p>
+              <p>צבע: {activeColor?.name ?? "—"}</p>
+              <p>חריטה: {engravingSummary || "ללא טקסט"}</p>
+              <p>כמות: {qty}</p>
+              <p>משלוח: {shipping.label}</p>
+              {!canPurchase ? <p style={{ color: "#b42318", fontWeight: 700 }}>אזל מהמלאי - לא ניתן להשלים הזמנה</p> : null}
+              <hr />
+              <p>ביניים: {shekel(subtotal)}</p>
+              <p>משלוח: {effectiveShippingFee === 0 ? "חינם" : shekel(effectiveShippingFee)}</p>
+              {appliedCoupon ? <p>הנחה ({appliedCoupon.code}): -{shekel(discount)}</p> : null}
+              <strong>סה"כ לתשלום: {shekel(total)}</strong>
 
-                <div style={{ marginTop: "12px" }}>
-                  <label style={{ display: "block", fontSize: "12px", opacity: 0.85 }}>
-                    קופון
-                    <input
-                      value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value)}
-                      placeholder="הכנס קוד קופון"
-                      style={{ marginTop: "6px" }}
-                    />
-                  </label>
-                  <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-                    <button type="button" className="studio-chip" onClick={applyCoupon} disabled={!couponCode.trim()}>
-                      החל קופון
+              <div style={{ marginTop: "12px" }}>
+                <label style={{ display: "block", fontSize: "12px", opacity: 0.85 }}>
+                  קופון
+                  <input
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value)}
+                    placeholder="הכנס קוד קופון"
+                    style={{ marginTop: "6px" }}
+                  />
+                </label>
+                <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                  <button type="button" className="studio-chip" onClick={applyCoupon} disabled={!couponCode.trim()}>
+                    החל קופון
+                  </button>
+                  {appliedCoupon ? (
+                    <button type="button" className="studio-chip light" onClick={clearCoupon}>
+                      הסר
                     </button>
-                    {appliedCoupon ? (
-                      <button type="button" className="studio-chip light" onClick={clearCoupon}>
-                        הסר
-                      </button>
-                    ) : null}
-                  </div>
-                  {couponMsg ? <p style={{ marginTop: "8px", fontSize: "12px", opacity: 0.85 }}>{couponMsg}</p> : null}
+                  ) : null}
                 </div>
-              </aside>
-            }
-          />
+                {couponMsg ? <p style={{ marginTop: "8px", fontSize: "12px", opacity: 0.85 }}>{couponMsg}</p> : null}
+              </div>
+            </aside>
+          </div>
         </section>
       ) : null}
 
