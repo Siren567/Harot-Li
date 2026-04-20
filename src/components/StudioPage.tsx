@@ -1,7 +1,8 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { StudioCategoryId, StudioSubcategory } from "../constants/studioData";
 import { getApiBaseUrl } from "../lib/apiBase";
 import { studioCategories, studioFonts, studioPayments, studioShippingMethods } from "../constants/studioData";
+import CheckoutForm, { type CheckoutFormData } from "./checkout/CheckoutForm";
 
 type StudioPageProps = {
   onBackToLanding: () => void;
@@ -202,67 +203,6 @@ function inferSubcategoryFromTexts(texts: string[]): StudioSubcategory {
   return null;
 }
 
-type CheckoutCustomer = {
-  fullName: string;
-  phone: string;
-  email: string;
-  city: string;
-  address: string;
-};
-
-type CheckoutFieldsProps = {
-  customer: CheckoutCustomer;
-  onChange: (patch: Partial<CheckoutCustomer>) => void;
-};
-
-const CheckoutFields = memo(function CheckoutFields({ customer, onChange }: CheckoutFieldsProps) {
-  return (
-    <>
-      <label>
-        שם מלא
-        <input
-          autoComplete="name"
-          value={customer.fullName}
-          onChange={(e) => onChange({ fullName: e.target.value })}
-        />
-      </label>
-      <label>
-        טלפון
-        <input
-          autoComplete="tel"
-          value={customer.phone}
-          onChange={(e) => onChange({ phone: e.target.value })}
-        />
-      </label>
-      <label>
-        אימייל
-        <input
-          autoComplete="email"
-          type="email"
-          value={customer.email}
-          onChange={(e) => onChange({ email: e.target.value })}
-        />
-      </label>
-      <label>
-        עיר
-        <input
-          autoComplete="address-level2"
-          value={customer.city}
-          onChange={(e) => onChange({ city: e.target.value })}
-        />
-      </label>
-      <label>
-        כתובת
-        <input
-          autoComplete="street-address"
-          value={customer.address}
-          onChange={(e) => onChange({ address: e.target.value })}
-        />
-      </label>
-    </>
-  );
-});
-
 const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [step, setStep] = useState(0);
   const [category, setCategory] = useState<string>("bracelets");
@@ -292,19 +232,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   const [shippingId, setShippingId] = useState("home");
   const [paymentId, setPaymentId] = useState("card");
-  const [customer, setCustomer] = useState<CheckoutCustomer>({
-    fullName: "",
-    phone: "",
-    email: "",
-    city: "",
-    address: ""
-  });
-  const updateCustomer = useCallback((patch: Partial<CheckoutCustomer>) => {
-    setCustomer((prev) => ({ ...prev, ...patch }));
-  }, []);
   const objectRef = useRef<HTMLDivElement | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const apiBase = getApiBaseUrl();
+  const apiBase = useMemo(() => getApiBaseUrl(), []);
 
   const activeEngraving = useMemo(
     () => engravings.find((item) => item.id === activeEngravingId) ?? engravings[0] ?? null,
@@ -348,14 +278,23 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   useEffect(() => {
     if (!draggingId) return;
+    let rafId: number | null = null;
+    let pending: { x: number; y: number } | null = null;
+    const flush = () => {
+      rafId = null;
+      if (!pending || !draggingId) return;
+      updateEngraving(draggingId, pending);
+      pending = null;
+    };
     const onMove = (event: PointerEvent) => {
       const target = objectRef.current;
       if (!target) return;
       const rect = target.getBoundingClientRect();
       if (!rect.width || !rect.height) return;
-      const x = ((event.clientX - rect.left) / rect.width) * 100 - 50;
-      const y = ((event.clientY - rect.top) / rect.height) * 100 - 50;
-      updateEngraving(draggingId, { x: clampPercent(x), y: clampPercent(y) });
+      const x = clampPercent(((event.clientX - rect.left) / rect.width) * 100 - 50);
+      const y = clampPercent(((event.clientY - rect.top) / rect.height) * 100 - 50);
+      pending = { x, y };
+      if (rafId == null) rafId = requestAnimationFrame(flush);
     };
     const onUp = () => setDraggingId(null);
     window.addEventListener("pointermove", onMove);
@@ -363,23 +302,32 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      if (rafId != null) cancelAnimationFrame(rafId);
     };
   }, [draggingId]);
 
   useEffect(() => {
     let mounted = true;
+    // Bootstrap (category order) is non-critical; load in parallel without blocking products.
+    fetch(`${apiBase}/api/content/bootstrap`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((bootstrap: { sections?: Array<{ key: string; body: any }> } | null) => {
+        if (!mounted || !bootstrap) return;
+        const topSellerSection = (bootstrap.sections ?? []).find((s) => s.key === "top_sellers_section");
+        const rawOrder = Array.isArray(topSellerSection?.body?.categoryOrder)
+          ? topSellerSection?.body?.categoryOrder
+          : DEFAULT_STUDIO_CATEGORY_ORDER;
+        const ordered = rawOrder.map((x: any) => (typeof x === "string" ? x : String(x?.id || ""))).filter(Boolean);
+        if (ordered.length === 0) return;
+        setCategoryOrder(ordered);
+        setCategory((prev) => (ordered.includes(prev) ? prev : ordered[0]));
+      })
+      .catch(() => undefined);
     (async () => {
       try {
-        const [res, bootstrapRes] = await Promise.all([
-          fetch(`${apiBase}/api/public/products`, { credentials: "include" }),
-          fetch(`${apiBase}/api/content/bootstrap`, { credentials: "include" }),
-        ]);
+        const res = await fetch(`${apiBase}/api/public/products`, { credentials: "include" });
         if (!res.ok) throw new Error("public-products");
         const data = (await res.json()) as { products?: PublicProduct[] };
-        const bootstrap = bootstrapRes.ok ? ((await bootstrapRes.json()) as { sections?: Array<{ key: string; body: any }> }) : null;
-        const topSellerSection = (bootstrap?.sections ?? []).find((s) => s.key === "top_sellers_section");
-        const rawOrder = Array.isArray(topSellerSection?.body?.categoryOrder) ? topSellerSection?.body?.categoryOrder : DEFAULT_STUDIO_CATEGORY_ORDER;
-        const ordered = rawOrder.map((x: any) => (typeof x === "string" ? x : String(x?.id || ""))).filter(Boolean);
         const rows = Array.isArray(data.products) ? data.products : [];
         const mapped: StudioRuntimeProduct[] = rows.map((p) => {
           const colors = buildStudioColors(p);
@@ -408,10 +356,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           };
         });
         if (!mounted) return;
-        setCategoryOrder(ordered);
-        if (ordered.length > 0) {
-          setCategory((prev) => (ordered.includes(prev) ? prev : ordered[0]));
-        }
         setRuntimeProducts(mapped);
         setSelectedColorByProduct(Object.fromEntries(mapped.map((p) => [p.id, 0])));
         setGalleryPickIndex(0);
@@ -486,7 +430,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           code,
           cartSubtotal: subtotal,
           itemsQuantity: qty,
-          customerEmail: customer.email || null
+          customerEmail: null
         })
       });
       const data = await res.json();
@@ -509,7 +453,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     setCouponMsg(null);
   }
 
-  async function submitOrder() {
+  async function submitOrder(customer: CheckoutFormData) {
     if (submitting) return;
     if (!activeProduct || !activeColor) {
       setCouponMsg("לא נבחר מוצר תקין");
@@ -517,10 +461,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     }
     if (activeColor.stock <= 0 || activeProduct.totalStock <= 0) {
       setCouponMsg("המוצר שנבחר אזל מהמלאי");
-      return;
-    }
-    if (!customer.fullName.trim() || !customer.phone.trim() || !customer.email.trim()) {
-      setCouponMsg("נא למלא שם מלא, טלפון ואימייל לפני תשלום");
       return;
     }
     setSubmitting(true);
@@ -1019,85 +959,81 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       {step === 2 ? (
         <section className="studio-step-section studio-step-section--checkout">
           <h2>פרטים ותשלום</h2>
-          <form
+          <CheckoutForm
             id="studio-checkout-form"
             className="studio-checkout-grid"
-            onSubmit={(e) => {
-              e.preventDefault();
-              submitOrder();
-            }}
-            noValidate
-          >
-            <div className="studio-checkout-form">
-              <CheckoutFields customer={customer} onChange={updateCustomer} />
-
-              <div className="studio-shipping-row">
-                {studioShippingMethods.map((method) => (
-                  <button
-                    type="button"
-                    key={method.id}
-                    className={`studio-ship-card ${shippingId === method.id ? "active" : ""}`}
-                    onClick={() => setShippingId(method.id)}
-                  >
-                    <strong>{method.label}</strong>
-                    <span>{method.fee === 0 ? "חינם" : shekel(method.fee)}</span>
-                    <small>{method.eta}</small>
-                  </button>
-                ))}
-              </div>
-
-              <div className="studio-pay-row">
-                {studioPayments.map((payment) => (
-                  <button
-                    type="button"
-                    key={payment.id}
-                    className={`studio-chip ${paymentId === payment.id ? "active" : ""}`}
-                    onClick={() => setPaymentId(payment.id)}
-                  >
-                    {payment.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <aside className="studio-order-summary">
-              <h3>סיכום הזמנה</h3>
-              <p>{activeProduct?.title ?? "—"}</p>
-              <p>צבע: {activeColor?.name ?? "—"}</p>
-              <p>חריטה: {engravingSummary || "ללא טקסט"}</p>
-              <p>כמות: {qty}</p>
-              <p>משלוח: {shipping.label}</p>
-              {!canPurchase ? <p style={{ color: "#b42318", fontWeight: 700 }}>אזל מהמלאי - לא ניתן להשלים הזמנה</p> : null}
-              <hr />
-              <p>ביניים: {shekel(subtotal)}</p>
-              <p>משלוח: {effectiveShippingFee === 0 ? "חינם" : shekel(effectiveShippingFee)}</p>
-              {appliedCoupon ? <p>הנחה ({appliedCoupon.code}): -{shekel(discount)}</p> : null}
-              <strong>סה"כ לתשלום: {shekel(total)}</strong>
-
-              <div style={{ marginTop: "12px" }}>
-                <label style={{ display: "block", fontSize: "12px", opacity: 0.85 }}>
-                  קופון
-                  <input
-                    value={couponCode}
-                    onChange={(e) => setCouponCode(e.target.value)}
-                    placeholder="הכנס קוד קופון"
-                    style={{ marginTop: "6px" }}
-                  />
-                </label>
-                <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-                  <button type="button" className="studio-chip" onClick={applyCoupon} disabled={!couponCode.trim()}>
-                    החל קופון
-                  </button>
-                  {appliedCoupon ? (
-                    <button type="button" className="studio-chip light" onClick={clearCoupon}>
-                      הסר
+            disabled={submitting || !canPurchase}
+            onSubmit={submitOrder}
+            extras={
+              <>
+                <div className="studio-shipping-row">
+                  {studioShippingMethods.map((method) => (
+                    <button
+                      type="button"
+                      key={method.id}
+                      className={`studio-ship-card ${shippingId === method.id ? "active" : ""}`}
+                      onClick={() => setShippingId(method.id)}
+                    >
+                      <strong>{method.label}</strong>
+                      <span>{method.fee === 0 ? "חינם" : shekel(method.fee)}</span>
+                      <small>{method.eta}</small>
                     </button>
-                  ) : null}
+                  ))}
                 </div>
-                {couponMsg ? <p style={{ marginTop: "8px", fontSize: "12px", opacity: 0.85 }}>{couponMsg}</p> : null}
-              </div>
-            </aside>
-          </form>
+                <div className="studio-pay-row">
+                  {studioPayments.map((payment) => (
+                    <button
+                      type="button"
+                      key={payment.id}
+                      className={`studio-chip ${paymentId === payment.id ? "active" : ""}`}
+                      onClick={() => setPaymentId(payment.id)}
+                    >
+                      {payment.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            }
+            aside={
+              <aside className="studio-order-summary">
+                <h3>סיכום הזמנה</h3>
+                <p>{activeProduct?.title ?? "—"}</p>
+                <p>צבע: {activeColor?.name ?? "—"}</p>
+                <p>חריטה: {engravingSummary || "ללא טקסט"}</p>
+                <p>כמות: {qty}</p>
+                <p>משלוח: {shipping.label}</p>
+                {!canPurchase ? <p style={{ color: "#b42318", fontWeight: 700 }}>אזל מהמלאי - לא ניתן להשלים הזמנה</p> : null}
+                <hr />
+                <p>ביניים: {shekel(subtotal)}</p>
+                <p>משלוח: {effectiveShippingFee === 0 ? "חינם" : shekel(effectiveShippingFee)}</p>
+                {appliedCoupon ? <p>הנחה ({appliedCoupon.code}): -{shekel(discount)}</p> : null}
+                <strong>סה"כ לתשלום: {shekel(total)}</strong>
+
+                <div style={{ marginTop: "12px" }}>
+                  <label style={{ display: "block", fontSize: "12px", opacity: 0.85 }}>
+                    קופון
+                    <input
+                      value={couponCode}
+                      onChange={(e) => setCouponCode(e.target.value)}
+                      placeholder="הכנס קוד קופון"
+                      style={{ marginTop: "6px" }}
+                    />
+                  </label>
+                  <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                    <button type="button" className="studio-chip" onClick={applyCoupon} disabled={!couponCode.trim()}>
+                      החל קופון
+                    </button>
+                    {appliedCoupon ? (
+                      <button type="button" className="studio-chip light" onClick={clearCoupon}>
+                        הסר
+                      </button>
+                    ) : null}
+                  </div>
+                  {couponMsg ? <p style={{ marginTop: "8px", fontSize: "12px", opacity: 0.85 }}>{couponMsg}</p> : null}
+                </div>
+              </aside>
+            }
+          />
         </section>
       ) : null}
 
