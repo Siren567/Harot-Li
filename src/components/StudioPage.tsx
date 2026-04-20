@@ -569,15 +569,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         );
         return;
       }
-      if (import.meta.env.DEV) {
-        const normalizedEmail = customer.email.trim().toLowerCase();
-        window.localStorage.setItem("debug:lastOrderNumber", data.order.orderNumber);
-        window.localStorage.setItem("debug:lastOrderCustomerEmail", normalizedEmail);
-        console.info("[sync-debug] checkout success", {
-          orderNumber: data.order.orderNumber,
-          normalizedEmail,
-        });
-      }
       setOrderNumber(data.order.orderNumber);
       setStep(3);
     } catch {

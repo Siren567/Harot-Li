@@ -447,52 +447,6 @@ ordersRouter.post("/", async (req, res) => {
   }
 });
 
-// Dev/admin-only verification route for sync troubleshooting.
-ordersRouter.get("/debug-sync", requireAdmin, async (_req, res) => {
-  if (!syncDebugEnabled) return res.status(404).json({ error: "NOT_FOUND" });
-  try {
-    const [latestOrders, latestCustomers] = await Promise.all([
-      prisma.order.findMany({
-        take: 5,
-        orderBy: { createdAt: "desc" },
-        include: { customer: true },
-      }),
-      prisma.customer.findMany({
-        take: 5,
-        orderBy: { createdAt: "desc" },
-        include: { orders: { take: 3, orderBy: { createdAt: "desc" } } },
-      }),
-    ]);
-    const linked = latestOrders.filter((o) => Boolean(o.customerId) && Boolean(o.customer?.id)).length;
-    syncDebugLog("debug-sync orders=", latestOrders.length, "customers=", latestCustomers.length, "linkedOrders=", linked);
-    return res.json({
-      ok: true,
-      latestOrders: latestOrders.map((o) => ({
-        id: o.id,
-        orderNumber: o.orderNumber,
-        customerId: o.customerId,
-        customerEmail: o.customer?.email ?? null,
-        createdAt: o.createdAt.toISOString(),
-      })),
-      latestCustomers: latestCustomers.map((c) => ({
-        id: c.id,
-        email: c.email,
-        ordersCount: c.orders.length,
-        lastOrderNumber: c.orders[0]?.orderNumber ?? null,
-        createdAt: c.createdAt.toISOString(),
-      })),
-      linkageSummary: {
-        latestOrdersCount: latestOrders.length,
-        latestCustomersCount: latestCustomers.length,
-        latestOrdersLinkedToCustomer: linked,
-      },
-    });
-  } catch (e: any) {
-    if (syncDebugEnabled) console.error("[sync-debug] debug-sync failed", e?.message ?? e);
-    return res.status(500).json({ error: "SERVER_ERROR" });
-  }
-});
-
 // --- Order status transitions ---
 const AllowedTransitions: Record<string, string[]> = {
   NEW:        ["PAID", "CANCELLED"],
