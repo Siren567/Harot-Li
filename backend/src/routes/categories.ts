@@ -540,7 +540,26 @@ categoriesRouter.patch("/:id", requireAdmin, async (req, res) => {
     }
   }
 
-  const nextSlug = data.slug !== undefined ? slugify(data.slug?.trim() ? data.slug : data.name ?? existing.name) : existing.slug;
+  // Slug: never overwrite a stable unique slug with a "base" slug derived from name when the
+  // client sends slug=null (empty field) but the name did not change — that caused 409 conflicts
+  // (e.g. qa-main-uuid shortened to qa-main) on saves that only toggled isActive.
+  const incomingName = data.name !== undefined ? data.name.trim() : existing.name;
+  const nameChanged = data.name !== undefined && incomingName !== existing.name;
+  let nextSlug = existing.slug;
+  if (data.slug !== undefined) {
+    const raw = data.slug;
+    if (raw != null && String(raw).trim().length > 0) {
+      nextSlug = slugify(String(raw).trim());
+    } else if (nameChanged) {
+      nextSlug = slugify(incomingName);
+    }
+  }
+  if (!nextSlug) nextSlug = existing.slug;
+  const slugNeedsDbUpdate = nextSlug !== existing.slug;
+  if (slugNeedsDbUpdate) {
+    const taken = await prisma.category.findFirst({ where: { slug: nextSlug, id: { not: id } } });
+    if (taken) return res.status(409).json({ error: "SLUG_EXISTS" });
+  }
 
   try {
     const category = await prisma.$transaction(async (tx) => {
@@ -548,7 +567,7 @@ categoriesRouter.patch("/:id", requireAdmin, async (req, res) => {
         where: { id },
         data: {
           ...(data.name !== undefined ? { name: data.name.trim() } : {}),
-          ...(data.slug !== undefined || data.name !== undefined ? { slug: nextSlug } : {}),
+          ...(slugNeedsDbUpdate ? { slug: nextSlug } : {}),
           ...(data.description !== undefined ? { description: data.description ?? null } : {}),
           ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl ?? null } : {}),
           ...(data.parentId !== undefined ? { parentId: nextParentId } : {}),
@@ -591,7 +610,7 @@ categoriesRouter.patch("/:id", requireAdmin, async (req, res) => {
       const updated: FlatCategory = {
         ...current,
         ...(data.name !== undefined ? { name: data.name.trim() } : {}),
-        ...(data.slug !== undefined || data.name !== undefined ? { slug: nextSlug } : {}),
+        ...(slugNeedsDbUpdate ? { slug: nextSlug } : {}),
         ...(data.description !== undefined ? { description: data.description ?? null } : {}),
         ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl ?? null } : {}),
         ...(data.parentId !== undefined ? { parentId: nextParentId } : {}),
@@ -655,32 +674,52 @@ categoriesRouter.post("/:id/toggle", requireAdmin, async (req, res) => {
 categoriesRouter.delete("/:id", requireAdmin, async (req, res) => {
   const id = req.params.id;
 
-  const existing = await prisma.category.findUnique({ where: { id } });
-  if (!existing) return res.status(404).json({ error: "NOT_FOUND" });
-
-  const children = await prisma.category.count({ where: { parentId: id } });
-  if (children > 0) return res.status(409).json({ error: "HAS_SUBCATEGORIES" });
-
-  const assignments = await prisma.categoryProduct.count({ where: { categoryId: id } });
-  if (assignments > 0) return res.status(409).json({ error: "HAS_PRODUCTS" });
-
+  let existing: { id: string } | null = null;
   try {
-    await prisma.category.delete({ where: { id } });
-    invalidatePublicProductsCache();
-    res.status(204).send();
-  } catch {
+    existing = await prisma.category.findUnique({ where: { id }, select: { id: true } });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[DELETE /api/categories/:id] findUnique failed", err);
+    existing = null;
+  }
+
+  if (existing) {
+    const children = await prisma.category.count({ where: { parentId: id } });
+    if (children > 0) return res.status(409).json({ error: "HAS_SUBCATEGORIES" });
+
+    const assignments = await prisma.categoryProduct.count({ where: { categoryId: id } });
+    if (assignments > 0) return res.status(409).json({ error: "HAS_PRODUCTS" });
+
     try {
-      const rows = await loadFallbackRows();
-      const exists = rows.some((r) => r.id === id);
-      if (!exists) return res.status(404).json({ error: "NOT_FOUND" });
-      const childrenFallback = rows.some((r) => r.parentId === id);
-      if (childrenFallback) return res.status(409).json({ error: "HAS_SUBCATEGORIES" });
-      const next = rows.filter((r) => r.id !== id);
-      await saveFallbackRows(next);
-      return res.status(204).send();
-    } catch {
+      await prisma.$transaction(async (tx) => {
+        await tx.product.updateMany({ where: { mainCategoryId: id }, data: { mainCategoryId: null } });
+        await tx.category.delete({ where: { id } });
+      });
+      invalidatePublicProductsCache();
+      return res.status(200).json({ deleted: true });
+    } catch (err: any) {
+      // eslint-disable-next-line no-console
+      console.error("[DELETE /api/categories/:id] prisma delete failed", err);
+      const code = String(err?.code ?? "");
+      if (code === "P2025") return res.status(404).json({ error: "NOT_FOUND" });
+      if (code === "P2003" || code === "P2014") {
+        return res.status(409).json({ error: "HAS_DEPENDENCIES", message: String(err?.message ?? "") });
+      }
       return res.status(500).json({ error: "SERVER_ERROR" });
     }
+  }
+
+  try {
+    const rows = await loadFallbackRows();
+    const exists = rows.some((r) => r.id === id);
+    if (!exists) return res.status(404).json({ error: "NOT_FOUND" });
+    const childrenFallback = rows.some((r) => r.parentId === id);
+    if (childrenFallback) return res.status(409).json({ error: "HAS_SUBCATEGORIES" });
+    const next = rows.filter((r) => r.id !== id);
+    await saveFallbackRows(next);
+    return res.status(200).json({ deleted: true });
+  } catch {
+    return res.status(500).json({ error: "SERVER_ERROR" });
   }
 });
 

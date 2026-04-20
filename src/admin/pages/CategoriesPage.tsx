@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../ui/badge";
 import { useToast } from "../ui/toast";
 import { apiFetch } from "../lib/api";
@@ -248,8 +248,7 @@ function Drawer({
       if (e?.error === "SLUG_EXISTS") toast("Slug כבר קיים", "error");
       else if (e?.error === "PARENT_NOT_FOUND") toast("קטגוריית האב שנבחרה לא קיימת", "error");
       else if (e?.error === "PARENT_NOT_MAIN") toast("אפשר לבחור כתבת-אב רק מקטגוריה ראשית", "error");
-      else if (e?.error === "HAS_SUBCATEGORIES") toast("לא ניתן למחוק קטגוריה שיש לה תתי-קטגוריות", "error");
-      else if (e?.error === "HAS_PRODUCTS") toast("לא ניתן למחוק קטגוריה עם שיוכי מוצרים", "error");
+      else if (e?.status === 409) toast(`קונפליקט בעדכון (${e?.error ?? "409"})`, "error");
       else toast("שמירה נכשלה", "error");
     } finally {
       setSaving(false);
@@ -532,6 +531,8 @@ export function CategoriesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Category | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const togglingLockRef = useRef(false);
 
   async function refresh() {
     setLoading(true);
@@ -658,13 +659,21 @@ export function CategoriesPage() {
   }
 
   async function toggle(c: Category) {
+    if (togglingLockRef.current) return;
+    togglingLockRef.current = true;
     try {
+      setTogglingId(c.id);
       await apiFetch<{ category: Category }>(`/api/categories/${c.id}/toggle`, { method: "POST", body: JSON.stringify({ isActive: !c.isActive }) });
       toast(!c.isActive ? "הקטגוריה הופעלה" : "הקטגוריה הושבתה", "success");
       await refresh();
     } catch (e: any) {
       if (e?.status === 401) toast("הסשן פג. יש להתחבר מחדש.", "warning");
+      else if (e?.status === 409) toast(e?.error === "SLUG_EXISTS" ? "Slug כבר קיים במערכת" : `השרת דחה את הפעולה (${e?.error ?? "409"})`, "error");
+      else if (e?.error === "INVALID_RESPONSE") toast(e?.message ?? "תשובת שרת לא תקינה", "error");
       else toast("הפעולה נכשלה", "error");
+    } finally {
+      togglingLockRef.current = false;
+      setTogglingId(null);
     }
   }
 
@@ -672,14 +681,19 @@ export function CategoriesPage() {
     const label = c.parentId ? "תת קטגוריה" : "קטגוריה";
     try {
       setDeleting(true);
-      await apiFetch(`/api/categories/${c.id}`, { method: "DELETE" });
+      const out = await apiFetch<{ deleted?: boolean }>(`/api/categories/${c.id}`, { method: "DELETE" });
+      if (!out?.deleted) {
+        throw { status: 500, error: "DELETE_FAILED" };
+      }
       toast(`${label} נמחקה`, "success");
       setPendingDelete(null);
       await refresh();
     } catch (e: any) {
       if (e?.error === "HAS_SUBCATEGORIES") toast("לא ניתן למחוק קטגוריה שיש לה תתי-קטגוריות", "error");
       else if (e?.error === "HAS_PRODUCTS") toast("לא ניתן למחוק קטגוריה עם שיוכי מוצרים", "error");
+      else if (e?.error === "HAS_DEPENDENCIES") toast("לא ניתן למחוק — יש עדיין תלות במסד הנתונים (מוצרים/קשרים).", "error");
       else if (e?.error === "NOT_FOUND") toast("הקטגוריה כבר לא קיימת", "warning");
+      else if (e?.error === "INVALID_RESPONSE") toast(e?.message ?? "תשובת שרת לא תקינה", "error");
       else if (e?.status === 401) toast("הסשן פג. יש להתחבר מחדש.", "warning");
       else toast("מחיקת קטגוריה נכשלה", "error");
     } finally {
@@ -810,8 +824,8 @@ export function CategoriesPage() {
                           <Plus size={14} />
                           הוסף תת קטגוריה
                         </SmallButton>
-                        <SmallButton tone="primary" onClick={() => toggle(main)}>
-                          {main.isActive ? "השבת" : "הפעל"}
+                        <SmallButton tone="primary" disabled={togglingId === main.id} onClick={() => toggle(main)}>
+                          {togglingId === main.id ? "מעדכן..." : main.isActive ? "השבת" : "הפעל"}
                         </SmallButton>
                         <SmallButton tone="danger" onClick={() => setPendingDelete(main)}>
                           <Trash2 size={14} />
@@ -856,8 +870,8 @@ export function CategoriesPage() {
                                 <SmallButton tone="default" onClick={() => openEdit(sub)}>
                                   עריכה
                                 </SmallButton>
-                                <SmallButton tone="primary" onClick={() => toggle(sub)}>
-                                  {sub.isActive ? "השבת" : "הפעל"}
+                                <SmallButton tone="primary" disabled={togglingId === sub.id} onClick={() => toggle(sub)}>
+                                  {togglingId === sub.id ? "מעדכן..." : sub.isActive ? "השבת" : "הפעל"}
                                 </SmallButton>
                                 <SmallButton tone="danger" onClick={() => setPendingDelete(sub)}>
                                   <Trash2 size={14} />
@@ -919,8 +933,8 @@ export function CategoriesPage() {
                         <SmallButton tone="default" onClick={() => openEdit(c)}>
                           עריכה
                         </SmallButton>
-                        <SmallButton tone="primary" onClick={() => toggle(c)}>
-                          {c.isActive ? "השבת" : "הפעל"}
+                        <SmallButton tone="primary" disabled={togglingId === c.id} onClick={() => toggle(c)}>
+                          {togglingId === c.id ? "מעדכן..." : c.isActive ? "השבת" : "הפעל"}
                         </SmallButton>
                         {!c.parentId ? (
                           <SmallButton tone="default" onClick={() => openCreateSub(c.id)}>

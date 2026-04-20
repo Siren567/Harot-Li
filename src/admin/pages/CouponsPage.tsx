@@ -14,6 +14,7 @@ import {
   Download,
   Eye,
   Filter,
+  Loader2,
   Pencil,
   Plus,
   Trash2,
@@ -578,7 +579,9 @@ export function CouponsPage() {
   const toast = useToast();
 
   const [loading, setLoading] = useState(true);
+  const [listRefreshing, setListRefreshing] = useState(false);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [rowBusy, setRowBusy] = useState<null | { id: string; kind: "toggle" | "delete" | "validate" }>(null);
 
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"all" | "active" | "inactive" | "expired" | "scheduled">("all");
@@ -588,8 +591,10 @@ export function CouponsPage() {
   const [drawerMode, setDrawerMode] = useState<"create" | "edit">("create");
   const [editing, setEditing] = useState<Coupon | null>(null);
 
-  async function refresh() {
-    setLoading(true);
+  async function refresh(opts?: { soft?: boolean }) {
+    const soft = Boolean(opts?.soft && coupons.length > 0);
+    if (soft) setListRefreshing(true);
+    else setLoading(true);
     try {
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
@@ -600,7 +605,8 @@ export function CouponsPage() {
     } catch (e: any) {
       toast("טעינת קופונים נכשלה", "error");
     } finally {
-      setLoading(false);
+      if (soft) setListRefreshing(false);
+      else setLoading(false);
     }
   }
 
@@ -610,7 +616,7 @@ export function CouponsPage() {
   }, []);
 
   useEffect(() => {
-    const t = window.setTimeout(() => refresh(), 250);
+    const t = window.setTimeout(() => refresh({ soft: true }), 250);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q, status, type]);
@@ -637,27 +643,48 @@ export function CouponsPage() {
     } else if (editing) {
       await apiFetch<{ coupon: Coupon }>(`/api/coupons/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
     }
-    await refresh();
+    await refresh({ soft: coupons.length > 0 });
   }
 
   async function toggleActive(c: Coupon) {
+    setRowBusy({ id: c.id, kind: "toggle" });
     try {
       await apiFetch<{ coupon: Coupon }>(`/api/coupons/${c.id}`, { method: "PATCH", body: JSON.stringify({ isActive: !c.isActive }) });
       toast(!c.isActive ? "הקופון הופעל" : "הקופון הושבת", "success");
-      await refresh();
+      await refresh({ soft: true });
     } catch {
       toast("הפעולה נכשלה", "error");
+    } finally {
+      setRowBusy(null);
     }
   }
 
   async function remove(c: Coupon) {
     if (!confirm(`למחוק את הקופון ${c.code}?`)) return;
+    setRowBusy({ id: c.id, kind: "delete" });
     try {
       await apiFetch<void>(`/api/coupons/${c.id}`, { method: "DELETE" });
       toast("הקופון נמחק", "success");
-      await refresh();
+      await refresh({ soft: true });
     } catch {
       toast("מחיקה נכשלה", "error");
+    } finally {
+      setRowBusy(null);
+    }
+  }
+
+  async function runValidate(c: Coupon) {
+    setRowBusy({ id: c.id, kind: "validate" });
+    try {
+      const out = await apiFetch<any>("/api/coupons/validate", {
+        method: "POST",
+        body: JSON.stringify({ code: c.code, cartSubtotal: 30_000, itemsQuantity: 1, customerEmail: null }),
+      });
+      toast(out.ok ? "בדיקת קופון: תקין (דמו)" : `בדיקת קופון: ${out.message}`, out.ok ? "success" : "warning");
+    } catch {
+      toast("בדיקת קופון נכשלה", "error");
+    } finally {
+      setRowBusy(null);
     }
   }
 
@@ -730,7 +757,7 @@ export function CouponsPage() {
           </SecondaryButton>
         </div>
         <div style={{ marginTop: 10, fontSize: 12, color: "var(--muted-foreground)" }}>
-          {loading ? "טוען..." : `מציג ${coupons.length.toLocaleString("he-IL")} קופונים`}
+          {loading ? "טוען..." : listRefreshing ? "מעדכן רשימה…" : `מציג ${coupons.length.toLocaleString("he-IL")} קופונים`}
         </div>
       </Card>
 
@@ -741,11 +768,30 @@ export function CouponsPage() {
             <div style={{ fontSize: 13, fontWeight: 900, color: "var(--foreground)" }}>קופונים</div>
             <div style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 2 }}>ניהול קופונים פעילים/מתוזמנים/פגי תוקף.</div>
           </div>
-          <SmallButton tone="default" onClick={refresh} disabled={loading}>
-            <Filter size={16} />
+          <SmallButton tone="default" onClick={() => refresh({ soft: coupons.length > 0 })} disabled={loading || listRefreshing}>
+            <Filter size={16} style={{ animation: listRefreshing ? "spin 0.9s linear infinite" : "none" }} />
             רענון
           </SmallButton>
         </div>
+
+        {listRefreshing ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 16px",
+              fontSize: 12,
+              fontWeight: 700,
+              color: "var(--foreground-secondary)",
+              background: "rgba(201,169,110,0.1)",
+              borderBottom: "1px solid rgba(201,169,110,0.22)",
+            }}
+          >
+            <Loader2 size={16} style={{ animation: "spin 0.85s linear infinite", flexShrink: 0 }} />
+            מעדכן את הרשימה מהשרת…
+          </div>
+        ) : null}
 
         {loading ? (
           <div style={{ padding: 24, color: "var(--muted-foreground)", fontSize: 13 }}>טוען קופונים…</div>
@@ -765,8 +811,22 @@ export function CouponsPage() {
             </div>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, minWidth: 1180 }}>
+          <div style={{ position: "relative", overflowX: "auto" }}>
+            {listRefreshing ? (
+              <div
+                aria-busy="true"
+                aria-label="מעדכן"
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 3,
+                  background: "rgba(10, 10, 12, 0.35)",
+                  backdropFilter: "blur(1px)",
+                  pointerEvents: "none",
+                }}
+              />
+            ) : null}
+            <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, minWidth: 1180, position: "relative", zIndex: 1 }}>
               <thead>
                 <tr style={{ background: "rgba(255,255,255,0.02)" }}>
                   {["קוד", "סוג", "ערך", "סטטוס", "תוקף", "שימושים", "מינ׳ סל", "נוצר", "פעולות"].map((h) => (
@@ -816,35 +876,46 @@ export function CouponsPage() {
                     <td style={{ padding: "13px 14px", fontSize: 11, color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>{fmtDateTime(c.createdAt)}</td>
                     <td style={{ padding: "13px 14px" }} onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <SmallButton tone="default" onClick={() => openEdit(c)}>
-                          <Pencil size={16} />
-                          עריכה
-                        </SmallButton>
-                        <SmallButton tone="primary" onClick={() => toggleActive(c)}>
-                          <CheckCircle2 size={16} />
-                          {c.isActive ? "השבת" : "הפעל"}
-                        </SmallButton>
-                        <SmallButton tone="danger" onClick={() => remove(c)}>
-                          <Trash2 size={16} style={{ color: "var(--destructive)" }} />
-                          מחיקה
-                        </SmallButton>
-                        <SmallButton
-                          tone="default"
-                          onClick={async () => {
-                            try {
-                              const out = await apiFetch<any>("/api/coupons/validate", {
-                                method: "POST",
-                                body: JSON.stringify({ code: c.code, cartSubtotal: 30_000, itemsQuantity: 1, customerEmail: null }),
-                              });
-                              toast(out.ok ? "בדיקת קופון: תקין (דמו)" : `בדיקת קופון: ${out.message}`, out.ok ? "success" : "warning");
-                            } catch {
-                              toast("בדיקת קופון נכשלה", "error");
-                            }
-                          }}
-                        >
-                          <Eye size={16} />
-                          בדיקה
-                        </SmallButton>
+                        {(() => {
+                          const rowLocked = rowBusy?.id === c.id;
+                          const spin = { animation: "spin 0.85s linear infinite" as const };
+                          return (
+                            <>
+                              <SmallButton tone="default" disabled={rowLocked} onClick={() => openEdit(c)}>
+                                <Pencil size={16} />
+                                עריכה
+                              </SmallButton>
+                              <SmallButton
+                                tone="primary"
+                                disabled={rowLocked}
+                                onClick={() => toggleActive(c)}
+                              >
+                                {rowBusy?.id === c.id && rowBusy.kind === "toggle" ? (
+                                  <Loader2 size={16} style={spin} />
+                                ) : (
+                                  <CheckCircle2 size={16} />
+                                )}
+                                {rowBusy?.id === c.id && rowBusy.kind === "toggle" ? "מעבד…" : c.isActive ? "השבת" : "הפעל"}
+                              </SmallButton>
+                              <SmallButton tone="danger" disabled={rowLocked} onClick={() => remove(c)}>
+                                {rowBusy?.id === c.id && rowBusy.kind === "delete" ? (
+                                  <Loader2 size={16} style={spin} />
+                                ) : (
+                                  <Trash2 size={16} style={{ color: "var(--destructive)" }} />
+                                )}
+                                {rowBusy?.id === c.id && rowBusy.kind === "delete" ? "מוחק…" : "מחיקה"}
+                              </SmallButton>
+                              <SmallButton tone="default" disabled={rowLocked} onClick={() => runValidate(c)}>
+                                {rowBusy?.id === c.id && rowBusy.kind === "validate" ? (
+                                  <Loader2 size={16} style={spin} />
+                                ) : (
+                                  <Eye size={16} />
+                                )}
+                                {rowBusy?.id === c.id && rowBusy.kind === "validate" ? "בודק…" : "בדיקה"}
+                              </SmallButton>
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>
@@ -860,7 +931,7 @@ export function CouponsPage() {
               עמוד {page.toLocaleString("he-IL")} מתוך {pageCount.toLocaleString("he-IL")}
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <SmallButton disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+              <SmallButton disabled={page <= 1 || listRefreshing} onClick={() => setPage((p) => Math.max(1, p - 1))}>
                 <ChevronRight size={16} />
                 הקודם
               </SmallButton>
@@ -890,7 +961,7 @@ export function CouponsPage() {
                   </button>
                 );
               })}
-              <SmallButton disabled={page >= pageCount} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>
+              <SmallButton disabled={page >= pageCount || listRefreshing} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>
                 הבא
                 <ChevronLeft size={16} />
               </SmallButton>
@@ -906,6 +977,7 @@ export function CouponsPage() {
         onClose={() => setDrawerOpen(false)}
         onSave={onSave}
       />
+      <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
     </div>
   );
 }

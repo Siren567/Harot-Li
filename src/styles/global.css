@@ -436,18 +436,21 @@ textarea:focus-visible {
 }
 
 .studio-top-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   align-items: center;
   direction: ltr;
 }
 
-.studio-top-next {
-  justify-self: start;
+.studio-top-back {
+  margin-inline-start: auto;
 }
 
-.studio-top-back {
-  justify-self: end;
+.studio-top-fit {
+  font-size: 0.82rem;
+  padding: 8px 12px;
+  white-space: nowrap;
 }
 
 .studio-progress {
@@ -921,8 +924,8 @@ textarea:focus-visible {
   padding: 0;
   background: #fff;
   cursor: pointer;
-  width: 96px;
-  height: 96px;
+  width: 112px;
+  height: 112px;
   overflow: hidden;
   flex-shrink: 0;
   transition: border-color .15s ease, box-shadow .15s ease;
@@ -945,6 +948,13 @@ textarea:focus-visible {
   color: #7f6653;
   margin-bottom: 6px;
   font-weight: 600;
+}
+
+label > .studio-field-hint {
+  display: block;
+  margin-top: 6px;
+  margin-bottom: 0;
+  font-weight: 500;
 }
 
 .studio-customer-photo-actions {
@@ -982,6 +992,59 @@ textarea:focus-visible {
 .studio-engrave-text.is-active {
   outline: 1px dashed rgba(38, 28, 18, .4);
   outline-offset: 4px;
+}
+
+.studio-engrave-fit-error {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(180, 35, 24, 0.08);
+  border: 1px solid rgba(180, 35, 24, 0.35);
+  color: #7a1e15;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.studio-gallery-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(28, 18, 12, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  cursor: zoom-out;
+}
+
+.studio-gallery-lightbox__img {
+  max-width: min(92vw, 920px);
+  max-height: 86vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  cursor: default;
+}
+
+.studio-gallery-lightbox__close {
+  position: absolute;
+  top: 16px;
+  inset-inline-end: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 248, 240, 0.85);
+  background: rgba(44, 27, 16, 0.55);
+  color: #fff;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  padding: 0;
 }
 
 .studio-engraving-tools {
@@ -1206,8 +1269,14 @@ textarea:focus-visible {
     gap: 8px;
   }
   .studio-top-next,
+  .studio-top-back,
+  .studio-top-fit {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
   .studio-top-back {
-    justify-self: stretch;
+    margin-inline-start: 0;
+    flex-basis: 100%;
   }
   .studio-subcategory-tabs {
     gap: 18px;

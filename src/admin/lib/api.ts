@@ -45,11 +45,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
     const text = await res.text();
     let data: any = null;
+    let jsonParseFailed = false;
     if (text) {
       try {
         data = JSON.parse(text);
       } catch {
-        data = null;
+        jsonParseFailed = true;
       }
     }
 
@@ -69,6 +70,14 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
         ...(typeof data === "object" && data ? data : {}),
       };
       break;
+    }
+
+    if (jsonParseFailed) {
+      throw {
+        status: res.status,
+        error: "INVALID_RESPONSE",
+        message: "השרת החזיר תשובה שאינה JSON (למשל דף שגיאה או HTML במקום API)",
+      };
     }
 
     return data as T;

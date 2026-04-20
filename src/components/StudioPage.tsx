@@ -167,11 +167,47 @@ function pendantShapeClassName(pendantType: string | null | undefined): string {
   return "";
 }
 
-function autoEngraveFontPx(text: string, baseSize: number): number {
-  const len = text.length;
-  if (len <= 14) return baseSize;
-  if (len <= 32) return Math.max(11, baseSize - Math.round((len - 14) * 0.65));
-  return Math.max(9, Math.min(baseSize, Math.round(200 / Math.sqrt(len + 4))));
+const ENGRAVE_MIN_PX = 8;
+const ENGRAVE_MAX_PX = 44;
+
+function canvasFontString(fontId: string, fontSize: number, weight = 600) {
+  const fam =
+    fontId === "assistant"
+      ? "Assistant, Arial, sans-serif"
+      : fontId === "david"
+        ? '"David Libre", Georgia, serif'
+        : "Heebo, Arial, sans-serif";
+  return `${weight} ${fontSize}px ${fam}`;
+}
+
+function measureLineWidthPx(line: string, fontSize: number, fontId: string): number {
+  if (typeof document === "undefined") return 0;
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return 99999;
+  ctx.font = canvasFontString(fontId, fontSize);
+  return ctx.measureText(line || " ").width;
+}
+
+function widestLinePx(text: string, fontSize: number, fontId: string): number {
+  const lines = String(text ?? "").split("\n");
+  let w = 0;
+  for (const line of lines) w = Math.max(w, measureLineWidthPx(line, fontSize, fontId));
+  return w;
+}
+
+function lineBlockHeightPx(text: string, fontSize: number): number {
+  const n = Math.max(1, String(text ?? "").split("\n").length);
+  return n * fontSize * 1.22;
+}
+
+/** Largest font size in [minPx, maxPx] that fits width+height; returns minPx-1 if none fit. */
+function fitFontSizeToBox(text: string, fontId: string, maxWidthPx: number, maxHeightPx: number, startHigh: number): number {
+  const hi = Math.min(ENGRAVE_MAX_PX, Math.max(ENGRAVE_MIN_PX, Math.round(startHigh)));
+  for (let s = hi; s >= ENGRAVE_MIN_PX; s -= 1) {
+    if (widestLinePx(text, s, fontId) <= maxWidthPx && lineBlockHeightPx(text, s) <= maxHeightPx) return s;
+  }
+  return ENGRAVE_MIN_PX - 1;
 }
 
 const DEFAULT_STUDIO_CATEGORY_ORDER: string[] = studioCategories.map((c) => c.id);
@@ -201,11 +237,15 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [engravings, setEngravings] = useState<EngravingItem[]>([
     { id: "engraving-1", text: "לנצח שלך", font: "heebo", size: 28, x: 0, y: 0 },
   ]);
+  const engravingsRef = useRef(engravings);
+  engravingsRef.current = engravings;
   const [activeEngravingId, setActiveEngravingId] = useState("engraving-1");
   const [activeTextDraft, setActiveTextDraft] = useState("לנצח שלך");
   const [customerImageDataUrl, setCustomerImageDataUrl] = useState<string | null>(null);
   const customerImageInputRef = useRef<HTMLInputElement | null>(null);
   const [galleryPickIndex, setGalleryPickIndex] = useState(0);
+  const [galleryModalUrl, setGalleryModalUrl] = useState<string | null>(null);
+  const [engraveFitError, setEngraveFitError] = useState<string | null>(null);
   const [rotation, setRotation] = useState(14);
   const [zoom, setZoom] = useState(1);
   const [qty, setQty] = useState(1);
@@ -237,8 +277,13 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   function addEngraving() {
     const id = `engraving-${Date.now()}`;
-    setEngravings((prev) => [...prev, { id, text: "💛", font: "heebo", size: 26, x: 0, y: 0 }]);
-    setActiveEngravingId(id);
+    setEngravings((prev) => {
+      const idx = prev.length;
+      const y = clampPercent(-18 + idx * 12);
+      const next = [...prev, { id, text: "שורה חדשה", font: "heebo", size: 26, x: 0, y }];
+      queueMicrotask(() => setActiveEngravingId(id));
+      return next;
+    });
   }
 
   function removeActiveEngraving() {
@@ -250,6 +295,37 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   function clampPercent(value: number) {
     return Math.max(-45, Math.min(45, value));
+  }
+
+  function autoFitEngravingSizes() {
+    setEngraveFitError(null);
+    const el = objectRef.current;
+    if (!el || typeof document === "undefined") {
+      setEngraveFitError("לא ניתן לחשב התאמה כרגע — נסה שוב בעוד רגע.");
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    if (!rect.width || !rect.height) {
+      setEngraveFitError("לא ניתן לחשב התאמה כרגע.");
+      return;
+    }
+    const maxW = rect.width * 0.8;
+    const items = engravingsRef.current;
+    const n = Math.max(1, items.length);
+    const maxHPer = (rect.height * 0.48) / n;
+
+    const updates = new Map<string, number>();
+    for (const item of items) {
+      const fitted = fitFontSizeToBox(item.text || " ", item.font, maxW, maxHPer, item.size);
+      if (fitted < ENGRAVE_MIN_PX) {
+        setEngraveFitError(
+          "הטקסט ארוך מדי גם בגודל המינימלי על התכשיט. יש לקצר, לרדת שורה (Enter), או לפצל למספר שדות."
+        );
+        return;
+      }
+      updates.set(item.id, fitted);
+    }
+    setEngravings((prev) => prev.map((it) => (updates.has(it.id) ? { ...it, size: updates.get(it.id)! } : it)));
   }
 
   function startDragEngraving(id: string) {
@@ -291,6 +367,20 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       if (rafId != null) cancelAnimationFrame(rafId);
     };
   }, [draggingId]);
+
+  useEffect(() => {
+    if (!galleryModalUrl) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setGalleryModalUrl(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [galleryModalUrl]);
 
   useEffect(() => {
     let mounted = true;
@@ -544,6 +634,11 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     <div className="studio-shell" dir="rtl">
       <header className="studio-topbar">
         <div className="studio-top-actions">
+          {step === 1 ? (
+            <button type="button" className="studio-secondary-btn studio-top-fit" onClick={autoFitEngravingSizes}>
+              התאמת טקסט לתכשיט
+            </button>
+          ) : null}
           <button
             type={step === 2 ? "submit" : "button"}
             form={step === 2 ? "studio-checkout-form" : undefined}
@@ -785,20 +880,25 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               <label>
                 טקסט לחריטה (הבוקס הפעיל)
                 <textarea
-                  rows={3}
+                  rows={4}
                   value={activeTextDraft}
                   onChange={(e) => {
                     const value = e.target.value;
+                    setEngraveFitError(null);
                     setActiveTextDraft(value);
                     if (activeEngraving) updateEngraving(activeEngraving.id, { text: value });
                   }}
                 />
+                <span className="studio-field-hint">Enter — שורה חדשה באותו בוקס</span>
               </label>
               <label>
                 פונט
                 <select
                   value={activeEngraving?.font ?? "heebo"}
-                  onChange={(e) => activeEngraving && updateEngraving(activeEngraving.id, { font: e.target.value })}
+                  onChange={(e) => {
+                    setEngraveFitError(null);
+                    activeEngraving && updateEngraving(activeEngraving.id, { font: e.target.value });
+                  }}
                 >
                   {studioFonts.map((f) => (
                     <option key={f.id} value={f.id}>
@@ -808,13 +908,16 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 </select>
               </label>
               <label>
-                גודל טקסט (בסיס)
+                גודל טקסט (חריטה)
                 <input
                   type="range"
-                  min={18}
-                  max={44}
+                  min={ENGRAVE_MIN_PX}
+                  max={ENGRAVE_MAX_PX}
                   value={activeEngraving?.size ?? 28}
-                  onChange={(e) => activeEngraving && updateEngraving(activeEngraving.id, { size: Number(e.target.value) })}
+                  onChange={(e) => {
+                    setEngraveFitError(null);
+                    activeEngraving && updateEngraving(activeEngraving.id, { size: Number(e.target.value) });
+                  }}
                 />
               </label>
               <div className="studio-engraving-tools">
@@ -824,7 +927,15 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 <button type="button" className="studio-chip light" onClick={removeActiveEngraving} disabled={engravings.length <= 1}>
                   מחק בוקס נבחר
                 </button>
+                <button type="button" className="studio-chip light" onClick={autoFitEngravingSizes} title="מקטין או מגדיל כך שכל הטקסט ייכנס לתכשיט">
+                  התאמת גודל אוטומטית
+                </button>
               </div>
+              {engraveFitError ? (
+                <p className="studio-engrave-fit-error" role="alert">
+                  {engraveFitError}
+                </p>
+              ) : null}
               <div className="studio-engraving-list">
                 {engravings.map((item, idx) => (
                   <button
@@ -918,7 +1029,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   ) : null}
                   {engravings.map((item) => {
                     const inkDark = activeColor?.colorKey !== "black";
-                    const px = autoEngraveFontPx(item.text || "", item.size);
+                    const px = Math.min(ENGRAVE_MAX_PX, Math.max(ENGRAVE_MIN_PX, Math.round(item.size)));
                     return (
                       <span
                         key={item.id}
@@ -934,7 +1045,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                         }
                         onPointerDown={() => startDragEngraving(item.id)}
                       >
-                        {item.text || "•"}
+                        {item.text !== "" ? item.text : "•"}
                       </span>
                     );
                   })}
@@ -947,7 +1058,10 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                       key={`${url}-${idx}`}
                       type="button"
                       className={`studio-subgallery-thumb ${galleryPickIndex === idx ? "active" : ""}`}
-                      onClick={() => setGalleryPickIndex(idx)}
+                      onClick={() => {
+                        setGalleryPickIndex(idx);
+                        setGalleryModalUrl(url);
+                      }}
                     >
                       <img src={url} alt="" loading="lazy" decoding="async" />
                     </button>
@@ -1077,6 +1191,34 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             </button>
           </div>
         </section>
+      ) : null}
+
+      {galleryModalUrl ? (
+        <div
+          className="studio-gallery-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label="תצוגת תמונה מוגדלת"
+          onClick={() => setGalleryModalUrl(null)}
+        >
+          <button
+            type="button"
+            className="studio-gallery-lightbox__close"
+            aria-label="סגירה"
+            onClick={(e) => {
+              e.stopPropagation();
+              setGalleryModalUrl(null);
+            }}
+          >
+            ×
+          </button>
+          <img
+            src={galleryModalUrl}
+            alt=""
+            className="studio-gallery-lightbox__img"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
       ) : null}
 
       <footer className="studio-nav-footer">
