@@ -178,6 +178,7 @@ type VariantDraft = {
   material: string;
   stock: string;
   priceOverride: string;
+  isActive: boolean;
 };
 
 function Drawer({
@@ -213,6 +214,7 @@ function Drawer({
         stock: String(v.stock ?? 0),
         priceOverride:
           v.priceOverride != null && Number.isFinite(v.priceOverride) ? (v.priceOverride / 100).toFixed(2) : "",
+        isActive: v.isActive !== false,
       };
     }
     setVariantDrafts(next);
@@ -245,6 +247,7 @@ function Drawer({
           material: d.material.trim() || null,
           stock: stockNum,
           priceOverride: d.priceOverride.trim() ? priceAgorot : null,
+          isActive: Boolean(d.isActive),
         }),
       });
       toast("הוריאציה נשמרה", "success");
@@ -365,7 +368,7 @@ function Drawer({
                           key={v.id}
                           style={{
                             display: "grid",
-                            gridTemplateColumns: "repeat(3, minmax(0, 1fr)) 88px 100px auto",
+                            gridTemplateColumns: "repeat(3, minmax(0, 1fr)) 88px 100px 88px auto",
                             gap: 8,
                             alignItems: "end",
                             background: "var(--input)",
@@ -388,6 +391,19 @@ function Drawer({
                           </InputGroup>
                           <InputGroup label="מחיר מיוחד (₪)">
                             <TextInput placeholder="0.00" value={d.priceOverride} onChange={(e) => updateDraft(v.id, { priceOverride: e.target.value })} />
+                          </InputGroup>
+                          <InputGroup label="סטטוס">
+                            <label style={{ display: "flex", alignItems: "center", gap: 8, height: 40 }}>
+                              <input
+                                type="checkbox"
+                                checked={Boolean(d.isActive)}
+                                onChange={(e) => updateDraft(v.id, { isActive: e.target.checked })}
+                                style={{ accentColor: "var(--primary)" }}
+                              />
+                              <span style={{ fontSize: 12, color: "var(--foreground-secondary)", fontWeight: 800 }}>
+                                {d.isActive ? "פעיל" : "כבוי"}
+                              </span>
+                            </label>
                           </InputGroup>
                           <SecondaryButton
                             type="button"

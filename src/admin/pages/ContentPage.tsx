@@ -12,7 +12,6 @@ import {
   Save,
   Trash2,
 } from "lucide-react";
-import { studioCategories, type StudioCategoryId } from "../../constants/studioData";
 
 type ContentSection = {
   id: string;
@@ -49,6 +48,14 @@ type Product = {
   is_active: boolean;
 };
 
+type CategoryNode = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+  subcategories?: CategoryNode[];
+};
+
 type TopSeller = {
   id: string;
   product_id: string;
@@ -63,6 +70,7 @@ type BootstrapResponse = {
   settings: SiteSetting[];
   legalPages: LegalPage[];
   topSellers: TopSeller[];
+  categories?: Array<{ id: string; name: string; isActive?: boolean }>;
 };
 
 const LEGAL_DEFAULTS: Record<"terms" | "privacy" | "usage", { title: string; html: string }> = {
@@ -145,16 +153,6 @@ function getSection(sections: ContentSection[], key: string): ContentSection | u
   return sections.find((s) => s.key === key);
 }
 
-const DEFAULT_STUDIO_CATEGORY_ORDER: StudioCategoryId[] = studioCategories.map((c) => c.id);
-
-function normalizeStudioCategoryOrder(input: unknown): StudioCategoryId[] {
-  const allowed = new Set<StudioCategoryId>(DEFAULT_STUDIO_CATEGORY_ORDER);
-  const parsed = Array.isArray(input) ? input.filter((x): x is StudioCategoryId => typeof x === "string" && allowed.has(x as StudioCategoryId)) : [];
-  const unique = parsed.filter((x, i) => parsed.indexOf(x) === i);
-  for (const id of DEFAULT_STUDIO_CATEGORY_ORDER) if (!unique.includes(id)) unique.push(id);
-  return unique;
-}
-
 export function ContentPage() {
   const toast = useToast();
 
@@ -165,6 +163,7 @@ export function ContentPage() {
   const [legalPages, setLegalPages] = useState<LegalPage[]>([]);
   const [topSellers, setTopSellers] = useState<TopSeller[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [studioMainCategories, setStudioMainCategories] = useState<Array<{ id: string; label: string }>>([]);
   const [productSearch, setProductSearch] = useState("");
   const [selectedTopSellerSlot, setSelectedTopSellerSlot] = useState(0);
 
@@ -181,14 +180,31 @@ export function ContentPage() {
   async function loadBootstrap() {
     setLoading(true);
     try {
-      const [boot, productsRes] = await Promise.all([
+      const [boot, productsRes, categoriesRes] = await Promise.all([
         apiFetch<BootstrapResponse>("/api/content/bootstrap"),
         apiFetch<{ products: Product[] }>("/api/products"),
+        apiFetch<{ categories: CategoryNode[] }>("/api/categories/tree"),
       ]);
       setSections(boot.sections);
       setLegalPages(boot.legalPages);
       setTopSellers((boot.topSellers ?? []).slice(0, 3));
       setProducts(productsRes.products.filter((p) => p.is_active));
+      const mains = Array.isArray(boot.categories)
+        ? (boot.categories as Array<{ id: string; name: string; isActive?: boolean }>)
+            .filter((c) => c?.isActive !== false && c?.id)
+            .map((c) => ({ id: c.id, label: c.name || c.id }))
+        : [];
+      if (mains.length > 0) {
+        setStudioMainCategories(mains);
+      } else {
+        const tree = categoriesRes.categories ?? [];
+        setStudioMainCategories(
+          tree
+            .filter((c) => c.isActive !== false)
+            .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+            .map((c) => ({ id: c.id, label: c.name }))
+        );
+      }
     } catch {
       toast("טעינת תוכן האתר נכשלה", "error");
     } finally {
@@ -224,7 +240,6 @@ export function ContentPage() {
           };
         return {
           ...base,
-          categoryOrder: normalizeStudioCategoryOrder((base as any).categoryOrder),
         };
       })()
     );
@@ -280,19 +295,22 @@ export function ContentPage() {
   }
 
   async function saveStudioCategoryOrder() {
-    await saveSection(
-      "top_sellers_section",
-      topSellerCfg.title ?? "נבחרים במיוחד",
-      {
-        ...topSellerCfg,
-        categoryOrder: normalizeStudioCategoryOrder(topSellerCfg.categoryOrder),
-        limit: 3,
-        isVisible: topSellerCfg.isVisible !== false,
-      },
-      true,
-      5,
-      { savingKey: "studio_category_order", successToast: "סדר הקטגוריות נשמר" }
-    );
+    setSavingKey("studio_category_order");
+    try {
+      for (let idx = 0; idx < studioMainCategories.length; idx += 1) {
+        const cat = studioMainCategories[idx];
+        await apiFetch(`/api/categories/${cat.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ sortOrder: idx }),
+        });
+      }
+      toast("סדר הקטגוריות נשמר", "success");
+      await loadBootstrap();
+    } catch {
+      toast("שמירת סדר הקטגוריות נכשלה", "error");
+    } finally {
+      setSavingKey(null);
+    }
   }
 
   async function saveTextSection(key: string) {
@@ -338,7 +356,7 @@ export function ContentPage() {
       await saveSection(
         "top_sellers_section",
         topSellerCfg.title ?? "נבחרים במיוחד",
-        { ...topSellerCfg, categoryOrder: normalizeStudioCategoryOrder(topSellerCfg.categoryOrder), limit: 3, isVisible: true },
+        { ...topSellerCfg, limit: 3, isVisible: true },
         true,
         5,
         { savingKey: "top_sellers", successToast: "מוצרי הבית נשמרו" }
@@ -408,14 +426,13 @@ export function ContentPage() {
   }
 
   function moveStudioCategory(index: number, dir: -1 | 1) {
-    setTopSellerCfg((prev: any) => {
-      const order = normalizeStudioCategoryOrder(prev?.categoryOrder);
+    setStudioMainCategories((prev) => {
       const nextIndex = index + dir;
-      if (nextIndex < 0 || nextIndex >= order.length) return prev;
-      const copy = [...order];
+      if (nextIndex < 0 || nextIndex >= prev.length) return prev;
+      const copy = [...prev];
       const [item] = copy.splice(index, 1);
       copy.splice(nextIndex, 0, item);
-      return { ...prev, categoryOrder: copy };
+      return copy;
     });
   }
 
@@ -476,18 +493,17 @@ export function ContentPage() {
         </p>
         <InputGroup label="קטגוריות (למעלה ↔ למטה)">
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {normalizeStudioCategoryOrder(topSellerCfg.categoryOrder).map((catId: StudioCategoryId, idx: number) => {
-              const meta = studioCategories.find((c) => c.id === catId);
+            {studioMainCategories.map((cat, idx: number) => {
               return (
-                <div key={catId} style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div key={cat.id} style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ fontSize: 12, fontWeight: 900, color: "var(--foreground-secondary)" }}>
-                    {idx + 1}. {meta?.label ?? catId}
+                    {idx + 1}. {cat.label}
                   </div>
                   <div style={{ display: "flex", gap: 6 }}>
                     <button type="button" onClick={() => moveStudioCategory(idx, -1)} style={iconBtnStyle()} disabled={idx === 0}>
                       <ArrowUp size={15} />
                     </button>
-                    <button type="button" onClick={() => moveStudioCategory(idx, 1)} style={iconBtnStyle()} disabled={idx === DEFAULT_STUDIO_CATEGORY_ORDER.length - 1}>
+                    <button type="button" onClick={() => moveStudioCategory(idx, 1)} style={iconBtnStyle()} disabled={idx === studioMainCategories.length - 1}>
                       <ArrowDown size={15} />
                     </button>
                   </div>

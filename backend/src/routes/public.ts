@@ -123,8 +123,8 @@ publicRouter.get("/products", async (_req, res) => {
         galleryImages: true,
         allowCustomerImageUpload: true,
         mainCategoryId: true,
-        mainCategory: { select: { id: true, name: true, slug: true, parentId: true } },
-        categories: { select: { category: { select: { id: true, name: true, slug: true, parentId: true } } } },
+        mainCategory: { select: { id: true, name: true, slug: true, parentId: true, isActive: true } },
+        categories: { select: { category: { select: { id: true, name: true, slug: true, parentId: true, isActive: true } } } },
         variants: {
           where: { isActive: true },
           orderBy: { createdAt: "asc" },
@@ -143,9 +143,9 @@ publicRouter.get("/products", async (_req, res) => {
       });
 
       const products = rows.map((p) => {
-      const allCategoryRows = (p.categories ?? []).map((x) => x.category).filter(Boolean);
-      const mainRaw = p.mainCategory ?? null;
-      const subRows = allCategoryRows.filter((c) => c.id !== p.mainCategoryId);
+      const allCategoryRows = (p.categories ?? []).map((x) => x.category).filter((c) => Boolean(c?.isActive));
+      const mainRaw = p.mainCategory?.isActive ? p.mainCategory : null;
+      const subRows = allCategoryRows.filter((c) => c.id !== p.mainCategoryId && c.isActive !== false);
       const subRawFirst = subRows[0] ?? null;
       const effectiveMain = mainRaw?.parentId ? allCategoryRows.find((c) => c.id === mainRaw.parentId) ?? mainRaw : mainRaw;
 

@@ -275,6 +275,39 @@ async function ensureNoCircularDepth2(categoryId: string, nextParentId: string |
   return { ok: true as const };
 }
 
+async function reassignProductsFromSubcategoryToParent(tx: any, subcategoryId: string, parentCategoryId: string) {
+  const affected = await tx.product.findMany({
+    where: {
+      OR: [
+        { mainCategoryId: subcategoryId },
+        { categories: { some: { categoryId: subcategoryId } } },
+      ],
+    },
+    select: { id: true },
+  });
+
+  const productIds: string[] = Array.from(
+    new Set(affected.map((p: { id: string }) => p.id).filter((id: string | undefined): id is string => Boolean(id)))
+  );
+  if (productIds.length === 0) return 0;
+
+  await tx.product.updateMany({
+    where: { id: { in: productIds }, mainCategoryId: subcategoryId },
+    data: { mainCategoryId: parentCategoryId },
+  });
+
+  await tx.categoryProduct.createMany({
+    data: productIds.map((productId: string) => ({ categoryId: parentCategoryId, productId })),
+    skipDuplicates: true,
+  });
+
+  await tx.categoryProduct.deleteMany({
+    where: { categoryId: subcategoryId, productId: { in: productIds } },
+  });
+
+  return productIds.length;
+}
+
 categoriesRouter.get("/", async (req, res) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   const type = typeof req.query.type === "string" ? req.query.type : "";
@@ -493,6 +526,9 @@ categoriesRouter.patch("/:id", requireAdmin, async (req, res) => {
           await tx.category.update({ where: { id: others[idx].id }, data: { sortOrder: idx } });
         }
       }
+      if (data.isActive === false && updated.parentId) {
+        await reassignProductsFromSubcategoryToParent(tx, updated.id, updated.parentId);
+      }
       return tx.category.findUniqueOrThrow({ where: { id: updated.id } });
     });
     res.json({ category });
@@ -542,6 +578,9 @@ categoriesRouter.post("/:id/toggle", requireAdmin, async (req, res) => {
       // default cascade: if main category toggled inactive -> inactivate subcategories too
       if (!isActive && !existing.parentId) {
         await tx.category.updateMany({ where: { parentId: id }, data: { isActive: false } });
+      }
+      if (!isActive && existing.parentId) {
+        await reassignProductsFromSubcategoryToParent(tx, id, existing.parentId);
       }
       return updated;
     });

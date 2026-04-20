@@ -13,6 +13,7 @@ import {
   Plus,
   X,
   Pencil,
+  Trash2,
 } from "lucide-react";
 
 type Category = {
@@ -608,6 +609,21 @@ export function CategoriesPage() {
     }
   }
 
+  async function removeCategory(c: Category) {
+    const label = c.parentId ? "תת קטגוריה" : "קטגוריה";
+    if (!confirm(`למחוק ${label} "${c.name}"?`)) return;
+    try {
+      await apiFetch(`/api/categories/${c.id}`, { method: "DELETE" });
+      toast(`${label} נמחקה`, "success");
+      await refresh();
+    } catch (e: any) {
+      if (e?.error === "HAS_SUBCATEGORIES") toast("לא ניתן למחוק קטגוריה שיש לה תתי-קטגוריות", "error");
+      else if (e?.error === "HAS_PRODUCTS") toast("לא ניתן למחוק קטגוריה עם שיוכי מוצרים", "error");
+      else if (e?.error === "NOT_FOUND") toast("הקטגוריה כבר לא קיימת", "warning");
+      else toast("מחיקת קטגוריה נכשלה", "error");
+    }
+  }
+
   const drawerInitial = useMemo(() => {
     if (drawerMode === "edit") return editing;
     if (prefillParentId) {
@@ -733,6 +749,10 @@ export function CategoriesPage() {
                         <SmallButton tone="primary" onClick={() => toggle(main)}>
                           {main.isActive ? "השבת" : "הפעל"}
                         </SmallButton>
+                        <SmallButton tone="danger" onClick={() => removeCategory(main)}>
+                          <Trash2 size={14} />
+                          מחק
+                        </SmallButton>
                       </div>
                     </div>
 
@@ -771,6 +791,10 @@ export function CategoriesPage() {
                                 </SmallButton>
                                 <SmallButton tone="primary" onClick={() => toggle(sub)}>
                                   {sub.isActive ? "השבת" : "הפעל"}
+                                </SmallButton>
+                                <SmallButton tone="danger" onClick={() => removeCategory(sub)}>
+                                  <Trash2 size={14} />
+                                  מחק
                                 </SmallButton>
                               </div>
                             </div>
@@ -826,11 +850,18 @@ export function CategoriesPage() {
                         <SmallButton tone="default" onClick={() => openEdit(c)}>
                           עריכה
                         </SmallButton>
+                        <SmallButton tone="primary" onClick={() => toggle(c)}>
+                          {c.isActive ? "השבת" : "הפעל"}
+                        </SmallButton>
                         {!c.parentId ? (
                           <SmallButton tone="default" onClick={() => openCreateSub(c.id)}>
                             הוסף תת קטגוריה
                           </SmallButton>
                         ) : null}
+                        <SmallButton tone="danger" onClick={() => removeCategory(c)}>
+                          <Trash2 size={14} />
+                          מחק
+                        </SmallButton>
                       </div>
                     </td>
                   </tr>
