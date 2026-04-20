@@ -238,7 +238,7 @@ ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
   }
 });
 
-async function generateUniqueOrderNumber() {
+async function generateUniqueOrderNumber(client: any = prisma) {
   // Human-readable number, unique-enforced by DB.
   // Format: HG-YYYYMMDD-<4 random digits>
   const d = new Date();
@@ -249,7 +249,7 @@ async function generateUniqueOrderNumber() {
   for (let i = 0; i < 12; i++) {
     const suffix = String(Math.floor(1000 + Math.random() * 9000));
     const orderNumber = `${prefix}${suffix}`;
-    const existing = await prisma.order.findUnique({ where: { orderNumber } });
+    const existing = await client.order.findUnique({ where: { orderNumber } });
     if (!existing) return orderNumber;
   }
   // fallback
@@ -284,7 +284,9 @@ async function resolveVariant(
 
 ordersRouter.post("/", async (req, res) => {
   const parsed = CreateOrderSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "VALIDATION", details: parsed.error.flatten() });
+  if (!parsed.success) {
+    return res.status(400).json({ ok: false, error: "VALIDATION", details: parsed.error.flatten() });
+  }
 
   const { customer: inputCustomer, items, shippingFee, couponCode } = parsed.data;
   const subtotal = items.reduce((sum, it) => sum + it.unitPrice * it.qty, 0);
@@ -294,14 +296,15 @@ ordersRouter.post("/", async (req, res) => {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      const normalizedEmail = inputCustomer.email.trim().toLowerCase();
       const customer = await tx.customer.upsert({
-        where: { email: inputCustomer.email },
+        where: { email: normalizedEmail },
         update: {
           fullName: inputCustomer.fullName ?? undefined,
           phone: inputCustomer.phone ?? undefined,
         },
         create: {
-          email: inputCustomer.email,
+          email: normalizedEmail,
           fullName: inputCustomer.fullName ?? null,
           phone: inputCustomer.phone ?? null,
         },
@@ -371,7 +374,7 @@ ordersRouter.post("/", async (req, res) => {
       const effectiveShippingFee = freeShipping ? 0 : shippingFee;
       const total = Math.max(0, subtotal + effectiveShippingFee - discountAmount);
 
-      const orderNumber = await generateUniqueOrderNumber();
+      const orderNumber = await generateUniqueOrderNumber(tx);
 
       const order = await tx.order.create({
         data: {
@@ -420,7 +423,7 @@ ordersRouter.post("/", async (req, res) => {
       }
 
       return { ok: true as const, order };
-    });
+    }, { timeout: 20000, maxWait: 10000 });
 
     if (!result.ok) {
       const reason = result.reason;
@@ -441,6 +444,52 @@ ordersRouter.post("/", async (req, res) => {
     console.error("[POST /api/orders] FAILED message=", String(e?.message ?? e));
     console.error("[POST /api/orders] FAILED stack=", e?.stack);
     return res.status(500).json({ error: "SERVER_ERROR", hint: String(e?.message ?? "").slice(0, 500) });
+  }
+});
+
+// Dev/admin-only verification route for sync troubleshooting.
+ordersRouter.get("/debug-sync", requireAdmin, async (_req, res) => {
+  if (!syncDebugEnabled) return res.status(404).json({ error: "NOT_FOUND" });
+  try {
+    const [latestOrders, latestCustomers] = await Promise.all([
+      prisma.order.findMany({
+        take: 5,
+        orderBy: { createdAt: "desc" },
+        include: { customer: true },
+      }),
+      prisma.customer.findMany({
+        take: 5,
+        orderBy: { createdAt: "desc" },
+        include: { orders: { take: 3, orderBy: { createdAt: "desc" } } },
+      }),
+    ]);
+    const linked = latestOrders.filter((o) => Boolean(o.customerId) && Boolean(o.customer?.id)).length;
+    syncDebugLog("debug-sync orders=", latestOrders.length, "customers=", latestCustomers.length, "linkedOrders=", linked);
+    return res.json({
+      ok: true,
+      latestOrders: latestOrders.map((o) => ({
+        id: o.id,
+        orderNumber: o.orderNumber,
+        customerId: o.customerId,
+        customerEmail: o.customer?.email ?? null,
+        createdAt: o.createdAt.toISOString(),
+      })),
+      latestCustomers: latestCustomers.map((c) => ({
+        id: c.id,
+        email: c.email,
+        ordersCount: c.orders.length,
+        lastOrderNumber: c.orders[0]?.orderNumber ?? null,
+        createdAt: c.createdAt.toISOString(),
+      })),
+      linkageSummary: {
+        latestOrdersCount: latestOrders.length,
+        latestCustomersCount: latestCustomers.length,
+        latestOrdersLinkedToCustomer: linked,
+      },
+    });
+  } catch (e: any) {
+    if (syncDebugEnabled) console.error("[sync-debug] debug-sync failed", e?.message ?? e);
+    return res.status(500).json({ error: "SERVER_ERROR" });
   }
 });
 

@@ -740,7 +740,7 @@ const App = () => {
               {openModal === "orderStatus" ? (
                 <form className="contact-form" onSubmit={onOrderStatusSubmit}>
                   <p style={{ margin: 0, fontSize: "0.88rem", lineHeight: 1.5, color: "rgba(62, 39, 35, 0.75)" }}>
-                    הזינו את מספר ההזמנה כפי שמופיע באישור או במייל.
+                    ניתן להזין את המספר המלא (כולל HG- ומקפים), רק ספרות בלי מקפים, או את הספרות האחרונות של המספר.
                   </p>
                   <label>
                     מספר הזמנה
@@ -751,7 +751,7 @@ const App = () => {
                         setOrderLookupInput(e.target.value);
                         setOrderLookupError(null);
                       }}
-                      placeholder="לדוגמה: HG-2026-12345"
+                      placeholder="לדוגמה: HG-20260419-8234 או 8234"
                       autoComplete="off"
                       disabled={orderLookupLoading}
                     />

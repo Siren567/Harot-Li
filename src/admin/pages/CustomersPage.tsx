@@ -543,6 +543,15 @@ export function CustomersPage() {
           else c.status = "new";
           return c;
         });
+        if (import.meta.env.DEV) {
+          const debugEmail = (window.localStorage.getItem("debug:lastOrderCustomerEmail") ?? "").trim().toLowerCase();
+          const hasDebugCustomer = debugEmail ? mapped.some((c) => c.email.trim().toLowerCase() === debugEmail) : false;
+          console.info("[sync-debug] admin customers loaded", {
+            count: mapped.length,
+            debugCustomerEmail: debugEmail || null,
+            debugCustomerPresent: hasDebugCustomer,
+          });
+        }
         setCustomers(mapped);
       } catch {
         setCustomers([]);

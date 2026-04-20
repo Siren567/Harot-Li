@@ -264,23 +264,74 @@ publicRouter.get("/site", async (_req, res) => {
   res.json({ whatsapp: whatsapp ?? "" });
 });
 
+const orderStatusSelect = {
+  orderNumber: true,
+  status: true,
+  createdAt: true,
+  total: true,
+} as const;
+
+function normalizeOrderLookupInput(raw: string) {
+  return raw.trim().replace(/^#+/u, "").replace(/\s+/g, "");
+}
+
+/** DB stores HG-YYYYMMDD-XXXX; users often paste digits-only or a short suffix. */
+async function findOrderForPublicLookup(rawInput: string) {
+  const q = normalizeOrderLookupInput(rawInput);
+  if (!q || q.length > 80) return null;
+
+  const byExact = await prisma.order.findUnique({ where: { orderNumber: q }, select: orderStatusSelect });
+  if (byExact) return byExact;
+
+  const byCi = await prisma.order.findFirst({
+    where: { orderNumber: { equals: q, mode: "insensitive" } },
+    select: orderStatusSelect,
+    orderBy: { createdAt: "desc" },
+  });
+  if (byCi) return byCi;
+
+  const qDigits = q.replace(/\D/g, "");
+  if (!qDigits || qDigits.length > 24) return null;
+
+  // Full digit-only match: e.g. 202604198234 vs HG-20260419-8234
+  if (qDigits.length >= 8) {
+    const fullRows = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "Order"
+      WHERE regexp_replace("orderNumber", '[^0-9]', '', 'g') = ${qDigits}
+      ORDER BY "createdAt" DESC
+      LIMIT 1
+    `;
+    if (fullRows[0]?.id) {
+      return prisma.order.findUnique({ where: { id: fullRows[0].id }, select: orderStatusSelect });
+    }
+  }
+
+  // Suffix on digit-only form (e.g. 2235 or 22235 — matches end of …20260222235)
+  if (qDigits.length >= 4 && qDigits.length <= 15) {
+    const sufRows = await prisma.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "Order"
+      WHERE char_length(regexp_replace("orderNumber", '[^0-9]', '', 'g')) >= char_length(${qDigits}::text)
+        AND RIGHT(regexp_replace("orderNumber", '[^0-9]', '', 'g'), char_length(${qDigits}::text)) = ${qDigits}
+      ORDER BY "createdAt" DESC
+      LIMIT 1
+    `;
+    if (sufRows[0]?.id) {
+      return prisma.order.findUnique({ where: { id: sufRows[0].id }, select: orderStatusSelect });
+    }
+  }
+
+  return null;
+}
+
 // GET /api/public/order-status?orderNumber=... — public order lookup (no auth).
 publicRouter.get("/order-status", async (req, res) => {
   const raw = typeof req.query.orderNumber === "string" ? req.query.orderNumber : "";
-  const orderNumber = raw.trim().replace(/^#+/, "").replace(/\s+/g, "");
-  if (!orderNumber || orderNumber.length > 80) {
+  const q = normalizeOrderLookupInput(raw);
+  if (!q || q.length > 80) {
     return res.status(400).json({ error: "INVALID_ORDER_NUMBER" });
   }
   try {
-    const order = await prisma.order.findUnique({
-      where: { orderNumber },
-      select: {
-        orderNumber: true,
-        status: true,
-        createdAt: true,
-        total: true,
-      },
-    });
+    const order = await findOrderForPublicLookup(raw);
     if (!order) return res.status(404).json({ error: "NOT_FOUND" });
     return res.json({
       order: {

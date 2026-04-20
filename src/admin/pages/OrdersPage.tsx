@@ -456,6 +456,15 @@ export function OrdersPage() {
           notes: "",
         };
       });
+      if (import.meta.env.DEV) {
+        const debugOrderNumber = window.localStorage.getItem("debug:lastOrderNumber") ?? "";
+        const hasDebugOrder = debugOrderNumber ? mapped.some((o) => o.orderNumber === debugOrderNumber) : false;
+        console.info("[sync-debug] admin orders loaded", {
+          count: mapped.length,
+          debugOrderNumber: debugOrderNumber || null,
+          debugOrderPresent: hasDebugOrder,
+        });
+      }
       setOrders(mapped);
     } catch {
       setOrders([]);

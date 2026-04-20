@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { StudioCategoryId, StudioSubcategory } from "../constants/studioData";
 import { getApiBaseUrl } from "../lib/apiBase";
 import { studioCategories, studioFonts, studioPayments, studioShippingMethods } from "../constants/studioData";
@@ -202,6 +202,67 @@ function inferSubcategoryFromTexts(texts: string[]): StudioSubcategory {
   return null;
 }
 
+type CheckoutCustomer = {
+  fullName: string;
+  phone: string;
+  email: string;
+  city: string;
+  address: string;
+};
+
+type CheckoutFieldsProps = {
+  customer: CheckoutCustomer;
+  onChange: (patch: Partial<CheckoutCustomer>) => void;
+};
+
+const CheckoutFields = memo(function CheckoutFields({ customer, onChange }: CheckoutFieldsProps) {
+  return (
+    <>
+      <label>
+        שם מלא
+        <input
+          autoComplete="name"
+          value={customer.fullName}
+          onChange={(e) => onChange({ fullName: e.target.value })}
+        />
+      </label>
+      <label>
+        טלפון
+        <input
+          autoComplete="tel"
+          value={customer.phone}
+          onChange={(e) => onChange({ phone: e.target.value })}
+        />
+      </label>
+      <label>
+        אימייל
+        <input
+          autoComplete="email"
+          type="email"
+          value={customer.email}
+          onChange={(e) => onChange({ email: e.target.value })}
+        />
+      </label>
+      <label>
+        עיר
+        <input
+          autoComplete="address-level2"
+          value={customer.city}
+          onChange={(e) => onChange({ city: e.target.value })}
+        />
+      </label>
+      <label>
+        כתובת
+        <input
+          autoComplete="street-address"
+          value={customer.address}
+          onChange={(e) => onChange({ address: e.target.value })}
+        />
+      </label>
+    </>
+  );
+});
+
 const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [step, setStep] = useState(0);
   const [category, setCategory] = useState<string>("bracelets");
@@ -231,13 +292,16 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   const [shippingId, setShippingId] = useState("home");
   const [paymentId, setPaymentId] = useState("card");
-  const [customer, setCustomer] = useState({
+  const [customer, setCustomer] = useState<CheckoutCustomer>({
     fullName: "",
     phone: "",
     email: "",
     city: "",
     address: ""
   });
+  const updateCustomer = useCallback((patch: Partial<CheckoutCustomer>) => {
+    setCustomer((prev) => ({ ...prev, ...patch }));
+  }, []);
   const objectRef = useRef<HTMLDivElement | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const apiBase = getApiBaseUrl();
@@ -504,6 +568,15 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             hint
         );
         return;
+      }
+      if (import.meta.env.DEV) {
+        const normalizedEmail = customer.email.trim().toLowerCase();
+        window.localStorage.setItem("debug:lastOrderNumber", data.order.orderNumber);
+        window.localStorage.setItem("debug:lastOrderCustomerEmail", normalizedEmail);
+        console.info("[sync-debug] checkout success", {
+          orderNumber: data.order.orderNumber,
+          normalizedEmail,
+        });
       }
       setOrderNumber(data.order.orderNumber);
       setStep(3);
@@ -965,26 +1038,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             noValidate
           >
             <div className="studio-checkout-form">
-              <label>
-                שם מלא
-                <input value={customer.fullName} onChange={(e) => setCustomer((s) => ({ ...s, fullName: e.target.value }))} />
-              </label>
-              <label>
-                טלפון
-                <input value={customer.phone} onChange={(e) => setCustomer((s) => ({ ...s, phone: e.target.value }))} />
-              </label>
-              <label>
-                אימייל
-                <input value={customer.email} onChange={(e) => setCustomer((s) => ({ ...s, email: e.target.value }))} />
-              </label>
-              <label>
-                עיר
-                <input value={customer.city} onChange={(e) => setCustomer((s) => ({ ...s, city: e.target.value }))} />
-              </label>
-              <label>
-                כתובת
-                <input value={customer.address} onChange={(e) => setCustomer((s) => ({ ...s, address: e.target.value }))} />
-              </label>
+              <CheckoutFields customer={customer} onChange={updateCustomer} />
 
               <div className="studio-shipping-row">
                 {studioShippingMethods.map((method) => (
