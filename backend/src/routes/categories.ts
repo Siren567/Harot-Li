@@ -464,19 +464,36 @@ categoriesRouter.patch("/:id", requireAdmin, async (req, res) => {
   const nextSlug = data.slug !== undefined ? slugify(data.slug?.trim() ? data.slug : data.name ?? existing.name) : existing.slug;
 
   try {
-    const category = await prisma.category.update({
-      where: { id },
-      data: {
-        ...(data.name !== undefined ? { name: data.name.trim() } : {}),
-        ...(data.slug !== undefined || data.name !== undefined ? { slug: nextSlug } : {}),
-        ...(data.description !== undefined ? { description: data.description ?? null } : {}),
-        ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl ?? null } : {}),
-        ...(data.parentId !== undefined ? { parentId: nextParentId } : {}),
-        ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
-        ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
-        ...(data.seoTitle !== undefined ? { seoTitle: data.seoTitle ?? null } : {}),
-        ...(data.seoDescription !== undefined ? { seoDescription: data.seoDescription ?? null } : {}),
-      },
+    const category = await prisma.$transaction(async (tx) => {
+      const updated = await tx.category.update({
+        where: { id },
+        data: {
+          ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+          ...(data.slug !== undefined || data.name !== undefined ? { slug: nextSlug } : {}),
+          ...(data.description !== undefined ? { description: data.description ?? null } : {}),
+          ...(data.imageUrl !== undefined ? { imageUrl: data.imageUrl ?? null } : {}),
+          ...(data.parentId !== undefined ? { parentId: nextParentId } : {}),
+          ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+          ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
+          ...(data.seoTitle !== undefined ? { seoTitle: data.seoTitle ?? null } : {}),
+          ...(data.seoDescription !== undefined ? { seoDescription: data.seoDescription ?? null } : {}),
+        },
+      });
+
+      if (data.sortOrder !== undefined) {
+        const siblings = await tx.category.findMany({
+          where: { parentId: updated.parentId },
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        });
+        const others = siblings.filter((c) => c.id !== updated.id);
+        const target = Math.max(0, Math.min(data.sortOrder, others.length));
+        others.splice(target, 0, updated);
+        for (let idx = 0; idx < others.length; idx += 1) {
+          if (others[idx].sortOrder === idx) continue;
+          await tx.category.update({ where: { id: others[idx].id }, data: { sortOrder: idx } });
+        }
+      }
+      return tx.category.findUniqueOrThrow({ where: { id: updated.id } });
     });
     res.json({ category });
   } catch (e: any) {

@@ -1,9 +1,12 @@
 import { Router } from "express";
-import { listProducts } from "../services/products.service.js";
 import { prisma } from "../db/prisma.js";
 import { getSupabaseAdminClient } from "../supabase/client.js";
 
 export const publicRouter = Router();
+const PRODUCTS_CACHE_TTL_MS = 30_000;
+let cachedProductsPayload: { products: any[] } | null = null;
+let cachedProductsUntil = 0;
+let productsInFlight: Promise<{ products: any[] }> | null = null;
 
 function mapMainCategoryToStudio(mainCategoryId?: string | null) {
   const id = String(mainCategoryId ?? "").toLowerCase();
@@ -85,96 +88,94 @@ function mapStudioColors(colors?: string[]) {
     .filter(Boolean) as string[];
 }
 
+function normalizeColorToken(raw?: string | null): "gold" | "silver" | "rose" | "black" | null {
+  const x = String(raw ?? "").trim().toLowerCase();
+  if (!x) return null;
+  if (x.includes("זהב") || x.includes("gold")) return "gold";
+  if (x.includes("כסף") || x.includes("silver")) return "silver";
+  if (x.includes("רוז") || x.includes("rose")) return "rose";
+  if (x.includes("שחור") || x.includes("black")) return "black";
+  return null;
+}
+
 publicRouter.get("/products", async (_req, res) => {
   try {
-    const rows = await listProducts({ active: true });
-    const ids = new Set<string>();
-    for (const p of rows) {
-      if (p.main_category_id) ids.add(String(p.main_category_id));
-      if ((p as any)?.category_id) ids.add(String((p as any).category_id));
-      for (const sid of p.subcategory_ids ?? []) ids.add(String(sid));
+    const now = Date.now();
+    if (cachedProductsPayload && now < cachedProductsUntil) {
+      return res.json(cachedProductsPayload);
+    }
+    if (productsInFlight) {
+      const payload = await productsInFlight;
+      return res.json(payload);
     }
 
-    const categoriesById = new Map<string, { id: string; name: string; slug: string; parent_id: string | null }>();
-    const variantsByProductId = new Map<
-      string,
-      Array<{
-        id: string;
-        color: string | null;
-        pendantType: string | null;
-        material: string | null;
-        stock: number;
-        priceOverride: number | null;
-        isActive: boolean;
-      }>
-    >();
-    if (ids.size > 0) {
-      const categories = await prisma.category.findMany({
-        where: { id: { in: Array.from(ids) } },
-        select: { id: true, name: true, slug: true, parentId: true },
-      });
-      for (const row of categories) {
-        categoriesById.set(String(row.id), {
-          id: String(row.id),
-          name: String(row.name ?? ""),
-          slug: String(row.slug ?? ""),
-          parent_id: row.parentId ? String(row.parentId) : null,
-        });
-      }
-    }
-
-    if (rows.length > 0) {
-      const productIds = rows.map((p) => p.id);
-      const variants = await prisma.productVariant.findMany({
-        where: { productId: { in: productIds } },
-        orderBy: { createdAt: "asc" },
-        select: {
-          id: true,
-          productId: true,
-          color: true,
-          pendantType: true,
-          material: true,
-          stock: true,
-          lowThreshold: true,
-          priceOverride: true,
-          isActive: true,
+    productsInFlight = (async () => {
+      const rows = await prisma.product.findMany({
+      where: { isActive: true },
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+        basePrice: true,
+        salePrice: true,
+        imageUrl: true,
+        galleryImages: true,
+        allowCustomerImageUpload: true,
+        mainCategoryId: true,
+        mainCategory: { select: { id: true, name: true, slug: true, parentId: true } },
+        categories: { select: { category: { select: { id: true, name: true, slug: true, parentId: true } } } },
+        variants: {
+          where: { isActive: true },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            color: true,
+            pendantType: true,
+            material: true,
+            stock: true,
+            lowThreshold: true,
+            priceOverride: true,
+            isActive: true,
+          },
         },
+      },
       });
-      for (const variant of variants) {
-        const key = variant.productId;
-        const existing = variantsByProductId.get(key) ?? [];
-        existing.push(variant);
-        variantsByProductId.set(key, existing);
-      }
-    }
 
-    const products = rows.map((p) => {
-      const legacyCategoryId = (p as any)?.category_id ? String((p as any).category_id) : null;
-      const mainRaw = p.main_category_id
-        ? categoriesById.get(String(p.main_category_id))
-        : legacyCategoryId
-          ? categoriesById.get(legacyCategoryId)
-          : null;
-      const subRows = (p.subcategory_ids ?? []).map((sid) => categoriesById.get(String(sid))).filter(Boolean);
+      const products = rows.map((p) => {
+      const allCategoryRows = (p.categories ?? []).map((x) => x.category).filter(Boolean);
+      const mainRaw = p.mainCategory ?? null;
+      const subRows = allCategoryRows.filter((c) => c.id !== p.mainCategoryId);
       const subRawFirst = subRows[0] ?? null;
-      const effectiveMain = mainRaw?.parent_id ? categoriesById.get(mainRaw.parent_id) ?? mainRaw : mainRaw;
+      const effectiveMain = mainRaw?.parentId ? allCategoryRows.find((c) => c.id === mainRaw.parentId) ?? mainRaw : mainRaw;
 
-      const image = p.image_url ?? (Array.isArray((p as any).images) ? (p as any).images[0] : null) ?? null;
-      const gallery = Array.isArray(p.gallery_images) ? p.gallery_images.filter(Boolean) : [];
+      const image = p.imageUrl ?? null;
+      const gallery = Array.isArray(p.galleryImages) ? p.galleryImages.filter(Boolean) : [];
       const images = Array.from(new Set([image, ...gallery].filter(Boolean))) as string[];
-      const effectivePriceAgorot = p.sale_price && p.sale_price > 0 && p.sale_price < p.price ? p.sale_price : p.price;
-      const pAny = p as any;
-      const variants = variantsByProductId.get(p.id) ?? [];
-      const activeVariants = variants.filter((v) => v.isActive);
+      const effectivePriceAgorot = p.salePrice && p.salePrice > 0 && p.salePrice < p.basePrice ? p.salePrice : p.basePrice;
+      const studioColors = mapStudioColors(
+        Array.from(
+          new Set(
+            (p.variants ?? [])
+              .map((v) => v.color)
+              .filter((v): v is string => typeof v === "string" && v.trim().length > 0),
+          ),
+        ),
+      );
+      const allowedColorKeys = new Set(studioColors);
+      // Strict product-scoped color filtering: never leak unrelated variant colors.
+      const activeVariants = (p.variants ?? []).filter((v) => {
+        const key = normalizeColorToken(v.color);
+        if (allowedColorKeys.size === 0) return true;
+        if (!key) return false;
+        return allowedColorKeys.has(key);
+      });
       const totalStock = activeVariants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
-      const variantLowThresholds = activeVariants.map((v) => Number((v as { lowThreshold?: number }).lowThreshold) || 5);
-      const computedLow =
-        variantLowThresholds.length > 0 ? Math.min(...variantLowThresholds) : typeof pAny.low_threshold === "number" ? pAny.low_threshold : 5;
+      const variantLowThresholds = activeVariants.map((v) => Number(v.lowThreshold) || 5);
+      const computedLow = variantLowThresholds.length > 0 ? Math.min(...variantLowThresholds) : 5;
       const subcategoryLabels = pickSubcategoryLabels([
-        ...subRows.map((s) => s?.name),
-        ...subRows.map((s) => s?.slug),
-        pAny.subcategoryName,
-        pAny.subcategoryLabel,
+        ...subRows.map((s) => s?.name ?? null),
+        ...subRows.map((s) => s?.slug ?? null),
       ]);
       const audienceCandidates = [
         ...subRows.map((s) => s?.slug ?? null),
@@ -182,8 +183,6 @@ publicRouter.get("/products", async (_req, res) => {
         ...subcategoryLabels,
         subRawFirst?.slug ?? null,
         subRawFirst?.name ?? null,
-        pAny.subcategoryName ?? null,
-        pAny.subcategoryLabel ?? null,
         p.title,
       ];
       const audienceKeys = Array.from(new Set(audienceCandidates.map((v) => mapAudienceKey(v)).filter(Boolean))) as Array<"men" | "women" | "couple">;
@@ -191,21 +190,19 @@ publicRouter.get("/products", async (_req, res) => {
       return {
         id: p.id,
         name: p.title,
-        description: "",
+        description: p.description ?? "",
         price: Number((effectivePriceAgorot / 100).toFixed(2)),
         image,
         images,
-        mainCategoryId: effectiveMain?.id ?? p.main_category_id ?? legacyCategoryId ?? null,
-        subcategoryIds: p.subcategory_ids ?? [],
+        mainCategoryId: effectiveMain?.id ?? p.mainCategoryId ?? null,
+        subcategoryIds: subRows.map((s) => s.id),
         studioCategory: effectiveMain
           ? mapMainCategoryToStudioByText(effectiveMain.slug, effectiveMain.name)
-          : mapMainCategoryToStudio(p.main_category_id),
+          : mapMainCategoryToStudio(p.mainCategoryId),
         subcategoryLabel: pickSubcategoryLabel(
           [
             ...subRows.map((s) => s?.name),
             ...subRows.map((s) => s?.slug),
-            pAny.subcategoryName,
-            pAny.subcategoryLabel,
           ],
           p.title
         ),
@@ -214,8 +211,8 @@ publicRouter.get("/products", async (_req, res) => {
         audiences: audienceKeys,
         categoryName: effectiveMain?.name ?? null,
         subcategoryName: subRawFirst?.name ?? null,
-        studioColors: mapStudioColors(p.available_colors),
-        allowCustomerImageUpload: Boolean(p.allow_customer_image_upload),
+        studioColors,
+        allowCustomerImageUpload: Boolean(p.allowCustomerImageUpload),
         stock: totalStock,
         lowThreshold: computedLow,
         variants: activeVariants.map((v) => ({
@@ -224,13 +221,18 @@ publicRouter.get("/products", async (_req, res) => {
           pendantType: v.pendantType,
           material: v.material,
           stock: Number(v.stock) || 0,
-          lowThreshold: Number((v as { lowThreshold?: number }).lowThreshold) || 5,
+          lowThreshold: Number(v.lowThreshold) || 5,
           price: Number(((v.priceOverride ?? effectivePriceAgorot) / 100).toFixed(2)),
           isActive: v.isActive,
         })),
       };
-    });
-    res.json({ products });
+      });
+      return { products };
+    })();
+    const payload = await productsInFlight;
+    cachedProductsPayload = payload;
+    cachedProductsUntil = Date.now() + PRODUCTS_CACHE_TTL_MS;
+    return res.json(payload);
   } catch (err: any) {
     // Log the full Prisma error (name + code + meta + message + stack) on separate lines
     // so Vercel keeps each field intact and we can see the schema-drift cause.
@@ -241,6 +243,8 @@ publicRouter.get("/products", async (_req, res) => {
     console.error("[GET /api/public/products] FAILED message=", String(err?.message ?? err));
     console.error("[GET /api/public/products] FAILED stack=", err?.stack);
     res.status(500).json({ error: "SERVER_ERROR", hint: String(err?.message ?? "").slice(0, 500) });
+  } finally {
+    productsInFlight = null;
   }
 });
 

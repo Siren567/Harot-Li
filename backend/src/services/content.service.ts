@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { getSupabaseAdminClient } from "../supabase/client.js";
+import { prisma } from "../db/prisma.js";
+import { listTopSellers } from "./topSellers.service.js";
 
 export type ContentSectionRow = {
   id: string;
@@ -228,13 +230,8 @@ export async function upsertSiteSetting(input: unknown): Promise<SiteSettingRow>
 }
 
 export async function listTopSellersWithProducts(): Promise<TopSellerWithProduct[]> {
-  const sb = getSupabaseAdminClient();
-  const { data, error } = await sb
-    .from("top_sellers")
-    .select("id, product_id, sort_order, badge_text, is_active, products(id, title, slug, image_url, price, is_active)")
-    .order("sort_order");
-  if (error) throw error;
-  return (data ?? []) as any;
+  const rows = await listTopSellers();
+  return rows.filter((row) => row.products !== null);
 }
 
 export async function getContentBootstrap() {
@@ -247,7 +244,7 @@ export async function getContentBootstrap() {
     listTopSellersWithProducts(),
   ]);
   const [sectionsR, settingsR, legalR, topR] = results;
-  const labels = ["sections", "settings", "legalPages", "topSellers"];
+  const labels = ["sections", "settings", "legalPages", "topSellers"] as const;
   results.forEach((r, i) => {
     if (r.status === "rejected") {
       console.warn(`[content/bootstrap] ${labels[i]} failed:`, (r.reason as any)?.message ?? r.reason);
@@ -257,11 +254,34 @@ export async function getContentBootstrap() {
   const settings = settingsR.status === "fulfilled" ? settingsR.value : [];
   const legalPages = legalR.status === "fulfilled" ? legalR.value : [];
   const topSellers = topR.status === "fulfilled" ? topR.value : [];
+  let categories: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    sortOrder: number;
+    isActive: boolean;
+  }> = [];
+  try {
+    categories = await prisma.category.findMany({
+      where: { parentId: null, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        sortOrder: true,
+        isActive: true,
+      },
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    });
+  } catch (err: any) {
+    console.warn("[content/bootstrap] categories failed:", err?.message ?? err);
+  }
   return {
     sections,
     settings,
     legalPages: legalPages.filter((p) => p.is_active),
     topSellers: topSellers.filter((x) => x.is_active),
+    categories,
   };
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { StudioCategoryId, StudioSubcategory } from "../constants/studioData";
+import type { StudioSubcategory } from "../constants/studioData";
 import { getApiBaseUrl } from "../lib/apiBase";
+import { loadBootstrapOnce, loadPublicProductsOnce } from "../lib/studioDataLoader";
 import { studioCategories, studioFonts, studioPayments, studioShippingMethods } from "../constants/studioData";
 import CheckoutForm, { type CheckoutFormData } from "./checkout/CheckoutForm";
 
@@ -29,7 +30,7 @@ type PublicProduct = {
   price: number;
   image: string | null;
   images: string[];
-  studioCategory: StudioCategoryId;
+  studioCategory: string;
   subcategoryLabel: string | null;
   subcategoryLabels?: string[];
   audience?: "men" | "women" | "couple" | null;
@@ -56,7 +57,7 @@ type StudioColorRow = {
 
 type StudioRuntimeProduct = {
   id: string;
-  category: StudioCategoryId;
+  category: string;
   subcategory: StudioSubcategory;
   title: string;
   description: string;
@@ -113,7 +114,11 @@ function buildStudioColors(p: PublicProduct): StudioColorRow[] {
   if (variants.length > 0) {
     const mapped: Array<StudioColorRow | null> = variants.map((v) => {
       const key = inferColorKeyFromLabel(v.color) ?? tokenToColorKey(String(v.color ?? ""));
-      if (allowed.size > 0 && key && !allowed.has(key)) return null;
+      // Keep color source-of-truth consistent with admin-assigned product colors.
+      if (allowed.size > 0) {
+        if (!key) return null;
+        if (!allowed.has(key)) return null;
+      }
       const meta = key ? COLOR_META[key] : { name: String(v.color || "צבע").trim() || "צבע", swatch: "#b8b8b8" };
       const row: StudioColorRow = {
         name: meta.name,
@@ -129,20 +134,6 @@ function buildStudioColors(p: PublicProduct): StudioColorRow[] {
     });
     const rows = mapped.filter((x): x is StudioColorRow => x !== null);
     if (rows.length > 0) return rows;
-    return variants.map((v) => {
-      const key = inferColorKeyFromLabel(v.color) ?? tokenToColorKey(String(v.color ?? ""));
-      const meta = key ? COLOR_META[key] : { name: String(v.color || "צבע").trim() || "צבע", swatch: "#b8b8b8" };
-      return {
-        name: meta.name,
-        swatch: meta.swatch,
-        variantId: v.id,
-        stock: Number(v.stock) || 0,
-        pendantType: v.pendantType ?? null,
-        material: v.material ?? null,
-        price: Number(v.price) || Number(p.price) || 0,
-        colorKey: key,
-      };
-    });
   }
 
   const onlyKeys = (p.studioColors ?? []).map((t) => tokenToColorKey(String(t))).filter((k): k is ColorKey => Boolean(k));
@@ -183,7 +174,7 @@ function autoEngraveFontPx(text: string, baseSize: number): number {
   return Math.max(9, Math.min(baseSize, Math.round(200 / Math.sqrt(len + 4))));
 }
 
-const DEFAULT_STUDIO_CATEGORY_ORDER: StudioCategoryId[] = studioCategories.map((c) => c.id);
+const DEFAULT_STUDIO_CATEGORY_ORDER: string[] = studioCategories.map((c) => c.id);
 
 function normalizeCategoryKey(raw: string) {
   const v = String(raw || "").trim().toLowerCase();
@@ -206,7 +197,10 @@ function inferSubcategoryFromTexts(texts: string[]): StudioSubcategory {
 const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [step, setStep] = useState(0);
   const [category, setCategory] = useState<string>("bracelets");
-  const [categoryOrder, setCategoryOrder] = useState<Array<StudioCategoryId | string>>(DEFAULT_STUDIO_CATEGORY_ORDER);
+  const [categoryOrder, setCategoryOrder] = useState<string[]>(DEFAULT_STUDIO_CATEGORY_ORDER);
+  const [categoryLabelById, setCategoryLabelById] = useState<Record<string, string>>(
+    Object.fromEntries(studioCategories.map((c) => [c.id, c.label]))
+  );
   const [runtimeProducts, setRuntimeProducts] = useState<StudioRuntimeProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productId, setProductId] = useState<string>("");
@@ -309,15 +303,24 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   useEffect(() => {
     let mounted = true;
     // Bootstrap (category order) is non-critical; load in parallel without blocking products.
-    fetch(`${apiBase}/api/content/bootstrap`, { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((bootstrap: { sections?: Array<{ key: string; body: any }> } | null) => {
+    loadBootstrapOnce(apiBase)
+      .then((bootstrap) => {
         if (!mounted || !bootstrap) return;
-        const topSellerSection = (bootstrap.sections ?? []).find((s) => s.key === "top_sellers_section");
-        const rawOrder = Array.isArray(topSellerSection?.body?.categoryOrder)
-          ? topSellerSection?.body?.categoryOrder
+        const dbCategories = Array.isArray((bootstrap as any)?.categories)
+          ? ((bootstrap as any).categories as Array<{ id?: string; name?: string; isActive?: boolean }>)
+          : [];
+        const activeDbCategories = dbCategories
+          .filter((c) => c?.isActive !== false && typeof c?.id === "string" && c.id)
+          .map((c) => ({ id: String(c.id), label: String(c.name || c.id) }));
+        if (activeDbCategories.length > 0) {
+          setCategoryLabelById((prev) => ({
+            ...prev,
+            ...Object.fromEntries(activeDbCategories.map((c) => [c.id, c.label])),
+          }));
+        }
+        const ordered = activeDbCategories.length > 0
+          ? activeDbCategories.map((c) => c.id)
           : DEFAULT_STUDIO_CATEGORY_ORDER;
-        const ordered = rawOrder.map((x: any) => (typeof x === "string" ? x : String(x?.id || ""))).filter(Boolean);
         if (ordered.length === 0) return;
         setCategoryOrder(ordered);
         setCategory((prev) => (ordered.includes(prev) ? prev : ordered[0]));
@@ -325,9 +328,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       .catch(() => undefined);
     (async () => {
       try {
-        const res = await fetch(`${apiBase}/api/public/products`, { credentials: "include" });
-        if (!res.ok) throw new Error("public-products");
-        const data = (await res.json()) as { products?: PublicProduct[] };
+        const data = await loadPublicProductsOnce(apiBase);
         const rows = Array.isArray(data.products) ? data.products : [];
         const mapped: StudioRuntimeProduct[] = rows.map((p) => {
           const colors = buildStudioColors(p);
@@ -391,22 +392,34 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const galleryUrls = activeProduct?.images?.length ? activeProduct.images : activeProduct?.image ? [activeProduct.image] : [];
   const heroVisualUrl = galleryUrls[galleryPickIndex] ?? galleryUrls[0] ?? activeProduct?.image ?? null;
 
+  const isGroupedMenWomenCouple = useMemo(() => {
+    const normalized = normalizeCategoryKey(category);
+    return normalized === "bracelets" || normalized === "necklaces";
+  }, [category]);
+
   const filteredProducts = useMemo(() => {
     const normalized = normalizeCategoryKey(category);
     return runtimeProducts.filter((p) => {
       if (normalized === "couple") {
         return p.subcategory === "couple";
       }
+      if (category === p.category) return true;
       if (normalizeCategoryKey(p.category) !== normalized) return false;
       return true;
     });
   }, [category, runtimeProducts]);
 
   const groupedProducts = useMemo(() => {
-    const men = filteredProducts.filter((p) => p.subcategory === "men");
-    const women = filteredProducts.filter((p) => p.subcategory === "women");
-    const couple = filteredProducts.filter((p) => p.subcategory === "couple");
-    const others = filteredProducts.filter((p) => p.subcategory !== "men" && p.subcategory !== "women" && p.subcategory !== "couple");
+    const men: StudioRuntimeProduct[] = [];
+    const women: StudioRuntimeProduct[] = [];
+    const couple: StudioRuntimeProduct[] = [];
+    const others: StudioRuntimeProduct[] = [];
+    for (const p of filteredProducts) {
+      if (p.subcategory === "men") men.push(p);
+      else if (p.subcategory === "women") women.push(p);
+      else if (p.subcategory === "couple") couple.push(p);
+      else others.push(p);
+    }
     return { men, women, couple, others };
   }, [filteredProducts]);
 
@@ -415,7 +428,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const discount = appliedCoupon?.discountAmount ?? 0;
   const effectiveShippingFee = appliedCoupon?.freeShipping ? 0 : shipping.fee;
   const total = Math.max(0, subtotal + effectiveShippingFee - discount);
-  const canPurchase = Boolean(activeProduct && activeColor && activeColor.stock > 0 && activeProduct.totalStock > 0);
+  const maxPurchasableQty = Math.max(1, Number(activeColor?.stock ?? 0));
+  const qtyInStock = Boolean(activeColor && qty <= (activeColor.stock || 0));
+  const canPurchase = Boolean(activeProduct && activeColor && activeColor.stock > 0 && activeProduct.totalStock > 0 && qtyInStock);
 
   async function applyCoupon() {
     const code = couponCode.trim();
@@ -459,8 +474,16 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       setCouponMsg("לא נבחר מוצר תקין");
       return;
     }
+    if (!activeColor.variantId || !activeProduct.id) {
+      setCouponMsg("לא ניתן להשלים הזמנה ללא וריאציה תקינה");
+      return;
+    }
     if (activeColor.stock <= 0 || activeProduct.totalStock <= 0) {
       setCouponMsg("המוצר שנבחר אזל מהמלאי");
+      return;
+    }
+    if (qty > activeColor.stock) {
+      setCouponMsg(`הכמות שבחרת גבוהה מהמלאי הזמין (${activeColor.stock})`);
       return;
     }
     setSubmitting(true);
@@ -478,7 +501,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             {
               name: `${activeProduct.title} (${activeColor.name})`,
               productId: activeProduct.id,
-              variantId: activeColor.variantId ?? null,
+              variantId: activeColor.variantId,
               qty,
               unitPrice: Math.round((activeColor.price ?? activeProduct.price) * 100),
               color: activeColor.name,
@@ -561,10 +584,8 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         <section className="studio-step-section">
           <h2>בוחרים מוצר להתחלה</h2>
           <div className="studio-chip-row">
-            {categoryOrder.map((catIdRaw) => {
-              const catId = String(catIdRaw);
-              const cat = studioCategories.find((x) => x.id === catId);
-              const label = cat?.label ?? (normalizeCategoryKey(catId) === "couple" ? "זוגיים" : catId);
+            {categoryOrder.map((catId) => {
+              const label = categoryLabelById[catId] ?? (normalizeCategoryKey(catId) === "couple" ? "זוגיים" : catId);
               return (
                 <button
                   type="button"
@@ -583,7 +604,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           <div className="studio-products-grid studio-products-grid--uniform">
             {loadingProducts ? <p>טוען מוצרים...</p> : null}
             {!loadingProducts && filteredProducts.length === 0 ? <p>אין מוצרים זמינים כרגע בקטגוריה זו.</p> : null}
-            {(["bracelets", "necklaces"].includes(normalizeCategoryKey(category))) && groupedProducts.men.length > 0 ? (
+            {isGroupedMenWomenCouple && groupedProducts.men.length > 0 ? (
               <>
                 <div className="studio-subsection-title">גברים</div>
                 {groupedProducts.men.map((product) => {
@@ -596,12 +617,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                       onClick={() => selectProductAndGoDesign(product.id)}
                     >
                       <span className="studio-product-category-label">
-                        {studioCategories.find((c) => c.id === product.category)?.label ?? "קטגוריה"}
+                        {categoryLabelById[product.category] ?? "קטגוריה"}
                       </span>
                       {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
                       {lowStock ? <span className="studio-stock-badge studio-stock-badge--low">מלאי מוגבל</span> : null}
                       <div className={`studio-product-thumb ${product.category}`}>
-                        {product.image ? <img src={product.image} alt={product.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                        {product.image ? <img src={product.image} alt={product.title} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
                       </div>
                       <h3>{product.title}</h3>
                       <strong className="studio-product-price">{shekel(product.price)}</strong>
@@ -628,7 +649,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 })}
               </>
             ) : null}
-            {(["bracelets", "necklaces"].includes(normalizeCategoryKey(category))) && groupedProducts.women.length > 0 ? (
+            {isGroupedMenWomenCouple && groupedProducts.women.length > 0 ? (
               <>
                 <div className="studio-subsection-divider" />
                 <div className="studio-subsection-title">נשים</div>
@@ -642,12 +663,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                       onClick={() => selectProductAndGoDesign(product.id)}
                     >
                       <span className="studio-product-category-label">
-                        {studioCategories.find((c) => c.id === product.category)?.label ?? "קטגוריה"}
+                        {categoryLabelById[product.category] ?? "קטגוריה"}
                       </span>
                       {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
                       {lowStock ? <span className="studio-stock-badge studio-stock-badge--low">מלאי מוגבל</span> : null}
                       <div className={`studio-product-thumb ${product.category}`}>
-                        {product.image ? <img src={product.image} alt={product.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                        {product.image ? <img src={product.image} alt={product.title} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
                       </div>
                       <h3>{product.title}</h3>
                       <strong className="studio-product-price">{shekel(product.price)}</strong>
@@ -674,7 +695,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 })}
               </>
             ) : null}
-            {(["bracelets", "necklaces"].includes(normalizeCategoryKey(category))) && groupedProducts.couple.length > 0 ? (
+            {isGroupedMenWomenCouple && groupedProducts.couple.length > 0 ? (
               <>
                 <div className="studio-subsection-divider" />
                 <div className="studio-subsection-title">זוגיים</div>
@@ -688,12 +709,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                       onClick={() => selectProductAndGoDesign(product.id)}
                     >
                       <span className="studio-product-category-label">
-                        {studioCategories.find((c) => c.id === product.category)?.label ?? "קטגוריה"}
+                        {categoryLabelById[product.category] ?? "קטגוריה"}
                       </span>
                       {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
                       {lowStock ? <span className="studio-stock-badge studio-stock-badge--low">מלאי מוגבל</span> : null}
                       <div className={`studio-product-thumb ${product.category}`}>
-                        {product.image ? <img src={product.image} alt={product.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                        {product.image ? <img src={product.image} alt={product.title} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
                       </div>
                       <h3>{product.title}</h3>
                       <strong className="studio-product-price">{shekel(product.price)}</strong>
@@ -720,7 +741,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 })}
               </>
             ) : null}
-            {(!["bracelets", "necklaces"].includes(normalizeCategoryKey(category)) ? filteredProducts : groupedProducts.others).map((product) => {
+            {(!isGroupedMenWomenCouple ? filteredProducts : groupedProducts.others).map((product) => {
               const outOfStock = product.totalStock <= 0;
               const lowStock = !outOfStock && product.totalStock > 0 && product.totalStock <= product.lowThreshold;
               return (
@@ -730,12 +751,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   onClick={() => selectProductAndGoDesign(product.id)}
                 >
                   <span className="studio-product-category-label">
-                    {studioCategories.find((c) => c.id === product.category)?.label ?? "קטגוריה"}
+                    {categoryLabelById[product.category] ?? "קטגוריה"}
                   </span>
                   {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
                   {lowStock ? <span className="studio-stock-badge studio-stock-badge--low">מלאי מוגבל</span> : null}
                   <div className={`studio-product-thumb ${product.category}`}>
-                    {product.image ? <img src={product.image} alt={product.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                    {product.image ? <img src={product.image} alt={product.title} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
                   </div>
                   <h3>{product.title}</h3>
                   <strong className="studio-product-price">{shekel(product.price)}</strong>
@@ -873,7 +894,16 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               ) : null}
               <label>
                 כמות
-                <input type="number" min={1} max={10} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))} />
+                <input
+                  type="number"
+                  min={1}
+                  max={maxPurchasableQty}
+                  value={qty}
+                  onChange={(e) => {
+                    const next = Math.max(1, Number(e.target.value) || 1);
+                    setQty(Math.min(maxPurchasableQty, next));
+                  }}
+                />
               </label>
               <label>
                 הערות להזמנה
@@ -893,7 +923,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     } as CSSProperties
                   }
                 >
-                  {heroVisualUrl ? <img className="studio-3d-fill" src={heroVisualUrl} alt="" /> : null}
+                  {heroVisualUrl ? <img className="studio-3d-fill" src={heroVisualUrl} alt="" loading="eager" decoding="async" /> : null}
                   {customerImageDataUrl ? (
                     <img className="studio-customer-overlay" src={customerImageDataUrl} alt="" />
                   ) : null}
@@ -930,7 +960,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                       className={`studio-subgallery-thumb ${galleryPickIndex === idx ? "active" : ""}`}
                       onClick={() => setGalleryPickIndex(idx)}
                     >
-                      <img src={url} alt="" />
+                      <img src={url} alt="" loading="lazy" decoding="async" />
                     </button>
                   ))}
                 </div>
@@ -1000,8 +1030,16 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               <p>צבע: {activeColor?.name ?? "—"}</p>
               <p>חריטה: {engravingSummary || "ללא טקסט"}</p>
               <p>כמות: {qty}</p>
+              {activeColor ? (
+                <p style={{ fontSize: "0.85rem", opacity: 0.85 }}>
+                  מלאי זמין לווריאציה: {activeColor.stock}
+                </p>
+              ) : null}
               <p>משלוח: {shipping.label}</p>
               {!canPurchase ? <p style={{ color: "#b42318", fontWeight: 700 }}>אזל מהמלאי - לא ניתן להשלים הזמנה</p> : null}
+              {activeColor && qty > activeColor.stock ? (
+                <p style={{ color: "#b42318", fontWeight: 700 }}>הכמות גבוהה מהמלאי הזמין</p>
+              ) : null}
               <hr />
               <p>ביניים: {shekel(subtotal)}</p>
               <p>משלוח: {effectiveShippingFee === 0 ? "חינם" : shekel(effectiveShippingFee)}</p>

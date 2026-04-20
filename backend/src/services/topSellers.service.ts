@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getSupabaseAdminClient } from "../supabase/client.js";
+import { prisma } from "../db/prisma.js";
 
 export type TopSellerRow = {
   id: string;
@@ -33,56 +33,74 @@ const TopSellersReplaceSchema = z.object({
 });
 
 export async function listTopSellers(): Promise<TopSellerRow[]> {
-  const sb = getSupabaseAdminClient();
-  const { data, error } = await sb
-    .from("top_sellers")
-    .select("id, product_id, sort_order, badge_text, is_active, created_at, updated_at, products(id, title, slug, image_url, price, is_active)")
-    .order("sort_order", { ascending: true });
-  if (error) throw error;
-  return (data ?? []) as any;
+  const rows = await prisma.homeFeaturedProduct.findMany({
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    include: {
+      product: {
+        select: { id: true, title: true, slug: true, imageUrl: true, basePrice: true, isActive: true },
+      },
+    },
+  });
+  return rows.map((row) => ({
+    id: row.id,
+    product_id: row.productId,
+    sort_order: row.sortOrder,
+    badge_text: row.badgeText ?? null,
+    is_active: row.isActive,
+    created_at: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
+    products: row.product
+      ? {
+          id: row.product.id,
+          title: row.product.title,
+          slug: row.product.slug,
+          image_url: row.product.imageUrl ?? null,
+          price: row.product.basePrice,
+          is_active: row.product.isActive,
+        }
+      : null,
+  }));
 }
 
 export async function replaceTopSellers(input: unknown): Promise<TopSellerRow[]> {
   const parsed = TopSellersReplaceSchema.safeParse(input);
   if (!parsed.success) throw { code: "VALIDATION", details: parsed.error.flatten() };
   const payload = parsed.data.items;
-  const sb = getSupabaseAdminClient();
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.homeFeaturedProduct.findMany({
+      select: { id: true, productId: true },
+    });
+    const currentByProduct = new Map(current.map((x) => [x.productId, x]));
+    const nextProductIds = new Set(payload.map((x) => x.product_id));
 
-  // 1) read current
-  const current = await listTopSellers();
-  const currentByProduct = new Map(current.map((x) => [x.product_id, x]));
-  const nextProductIds = new Set(payload.map((x) => x.product_id));
-
-  // 2) delete removed products
-  const toDeleteIds = current.filter((x) => !nextProductIds.has(x.product_id)).map((x) => x.id);
-  if (toDeleteIds.length > 0) {
-    const { error: delErr } = await sb.from("top_sellers").delete().in("id", toDeleteIds);
-    if (delErr) throw delErr;
-  }
-
-  // 3) upsert current/new
-  for (const item of payload) {
-    const exists = currentByProduct.get(item.product_id);
-    if (exists) {
-      const { error } = await sb
-        .from("top_sellers")
-        .update({
-          sort_order: item.sort_order,
-          badge_text: item.badge_text ?? null,
-          is_active: item.is_active ?? true,
-        })
-        .eq("id", exists.id);
-      if (error) throw error;
-    } else {
-      const { error } = await sb.from("top_sellers").insert({
-        product_id: item.product_id,
-        sort_order: item.sort_order,
-        badge_text: item.badge_text ?? null,
-        is_active: item.is_active ?? true,
-      });
-      if (error) throw error;
+    const toDeleteIds = current.filter((x) => !nextProductIds.has(x.productId)).map((x) => x.id);
+    if (toDeleteIds.length > 0) {
+      await tx.homeFeaturedProduct.deleteMany({ where: { id: { in: toDeleteIds } } });
     }
-  }
+
+    for (const item of payload) {
+      const exists = currentByProduct.get(item.product_id);
+      if (exists) {
+        await tx.homeFeaturedProduct.update({
+          where: { id: exists.id },
+          data: {
+            sortOrder: item.sort_order,
+            badgeText: item.badge_text ?? null,
+            isActive: item.is_active ?? true,
+          },
+        });
+      } else {
+        await tx.homeFeaturedProduct.create({
+          data: {
+            productId: item.product_id,
+            sortOrder: item.sort_order,
+            badgeText: item.badge_text ?? null,
+            isActive: item.is_active ?? true,
+          },
+        });
+      }
+    }
+  });
 
   return listTopSellers();
 }

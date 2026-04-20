@@ -353,7 +353,7 @@ function Drawer({
                 </div>
                 {variants.length === 0 ? (
                   <div style={{ fontSize: 13, color: "var(--muted-foreground)", lineHeight: 1.6 }}>
-                    אין וריאציות למוצר זה — המלאי הכללי מנוהל בעמודת המלאי בטבלה.
+                    אין וריאציות פעילות למוצר זה. הזמנות מהחנות דורשות וריאציה פעילה.
                   </div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -473,12 +473,7 @@ export function InventoryPage() {
           sku: p.slug || p.id,
           category: p.main_category_id || "ללא קטגוריה",
           customizable: Boolean(p.allow_customer_image_upload),
-          stock:
-            (byProduct[p.id] ?? []).length > 0
-              ? (byProduct[p.id] ?? []).reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
-              : Number.isFinite(Number(p.stock))
-                ? Math.max(0, Number(p.stock))
-                : 0,
+          stock: (byProduct[p.id] ?? []).reduce((sum, v) => sum + (Number(v.stock) || 0), 0),
           lowThreshold: Number.isFinite(Number(p.low_threshold)) ? Math.max(0, Number(p.low_threshold)) : 5,
           price: Number.isFinite(Number(p.price)) ? Number(p.price) : 0,
         }))
@@ -633,7 +628,6 @@ export function InventoryPage() {
       await apiFetch(`/api/products/${id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          stock: patch.stock,
           low_threshold: patch.lowThreshold,
         }),
       });
@@ -657,11 +651,7 @@ export function InventoryPage() {
           }
         }
       } else {
-        try {
-          await apiFetch(`/api/products/${id}`, { method: "PATCH", body: JSON.stringify({ stock: nextStock }) });
-        } catch {
-          // summary toast below
-        }
+        toast("למוצר ללא וריאציות אין מסלול עדכון מלאי. יש ליצור/להפעיל וריאציה תחילה.", "warning");
       }
       pulseRow(id);
     }
@@ -685,11 +675,7 @@ export function InventoryPage() {
           }
         }
       } else {
-        try {
-          await apiFetch(`/api/products/${id}`, { method: "PATCH", body: JSON.stringify({ stock: 0 }) });
-        } catch {
-          // handled with summary toast
-        }
+        toast("למוצר ללא וריאציות אין מסלול עדכון מלאי. יש ליצור/להפעיל וריאציה תחילה.", "warning");
       }
     }
     await refreshInventory(true);
@@ -705,7 +691,7 @@ export function InventoryPage() {
         <div>
           <h1 style={{ fontSize: "22px", fontWeight: 900, color: "var(--foreground)" }}>מלאי</h1>
           <p style={{ fontSize: "13px", color: "var(--muted-foreground)", marginTop: "3px", lineHeight: 1.6 }}>
-            תצוגה וניהול מלאי (דמו) — עריכה ישירה בטבלה, חיווי התראות ומבצעים מרוכזים.
+            ניהול מלאי חי לפי וריאציות פעילות — מחובר ישירות להזמנות ולחנות.
           </p>
         </div>
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-start" }}>
@@ -947,9 +933,9 @@ export function InventoryPage() {
         <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 900, color: "var(--foreground)" }}>טבלת מלאי</div>
-            <div style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 2 }}>עריכת כמות וסף ישירות בשדות — דמו בלבד</div>
+            <div style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 2 }}>עריכת כמות וסף ישירות על וריאציות פעילות</div>
           </div>
-          <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>עדכון אוטומטי (דמו)</div>
+          <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>עדכון אוטומטי</div>
         </div>
 
         {loading ? (
@@ -1215,7 +1201,7 @@ export function InventoryPage() {
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
           {lowStockProducts.length === 0 ? (
             <div style={{ background: "var(--input)", border: "1px solid var(--border)", borderRadius: 14, padding: 14, color: "var(--muted-foreground)", fontSize: 13 }}>
-              אין כרגע מלאי נמוך בדמו.
+              אין כרגע פריטי מלאי נמוך.
             </div>
           ) : (
             lowStockProducts.map((p) => (

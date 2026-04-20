@@ -9,8 +9,8 @@ import { requireAdmin } from "../lib/auth.js";
 export const ordersRouter = Router();
 
 const OrderItemSchema = z.object({
-  productId: z.string().min(1).max(120).optional().nullable(),
-  variantId: z.string().min(1).max(120).optional().nullable(),
+  productId: z.string().min(1).max(120),
+  variantId: z.string().min(1).max(120),
   name: z.string().min(1).max(200),
   qty: z.number().int().min(1).max(999),
   unitPrice: z.number().int().min(0),
@@ -69,7 +69,7 @@ ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
     const prevMonthStart = new Date(monthAgo);
     prevMonthStart.setDate(prevMonthStart.getDate() - 30);
 
-    const [allOrders, recentOrders, allCustomers, newCustomersLast30, newCustomersPrev30, analyticsLast30, analyticsPrev30] = await Promise.all([
+    const [allOrders, recentOrders, allCustomers, newCustomersLast30, newCustomersPrev30, analyticsLast30, analyticsPrev30, lowStockVariants] = await Promise.all([
       prisma.order.findMany({ include: { customer: true, orderItems: true }, orderBy: { createdAt: "desc" } }),
       prisma.order.findMany({
         where: { createdAt: { gte: monthAgo } },
@@ -79,18 +79,44 @@ ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
       prisma.customer.findMany(),
       prisma.customer.count({ where: { createdAt: { gte: monthAgo } } }),
       prisma.customer.count({ where: { createdAt: { gte: prevMonthStart, lt: monthAgo } } }),
-      getAnalyticsForRange(30),
-      getAnalyticsForRange(60),
+      getAnalyticsForRange(30).catch((err) => {
+        console.warn("[GET /api/orders/dashboard] analytics(30) fallback:", err?.message ?? err);
+        return Array.from({ length: 30 }, (_, idx) => {
+          const d = new Date();
+          d.setDate(d.getDate() - (29 - idx));
+          return { date: d.toISOString().slice(0, 10), visits: 0, sessionSeconds: 0, sessionCount: 0 };
+        });
+      }),
+      getAnalyticsForRange(60).catch((err) => {
+        console.warn("[GET /api/orders/dashboard] analytics(60) fallback:", err?.message ?? err);
+        return Array.from({ length: 60 }, (_, idx) => {
+          const d = new Date();
+          d.setDate(d.getDate() - (59 - idx));
+          return { date: d.toISOString().slice(0, 10), visits: 0, sessionSeconds: 0, sessionCount: 0 };
+        });
+      }),
+      prisma.productVariant.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          sku: true,
+          color: true,
+          stock: true,
+          lowThreshold: true,
+          product: { select: { title: true, isActive: true } },
+        },
+        orderBy: { stock: "asc" },
+      }),
     ]);
 
     const totalRevenue = allOrders.reduce((sum: number, o: any) => sum + o.total, 0);
     const totalOrders = allOrders.length;
     const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
 
-    const pendingOrders = allOrders.filter((o: any) => o.status === "NEW").length;
-    const completedOrders = allOrders.filter((o: any) => o.status === "PAID").length;
+    const pendingOrders = allOrders.filter((o: any) => ["NEW", "PAID", "FULFILLED", "SHIPPED"].includes(String(o.status))).length;
+    const completedOrders = allOrders.filter((o: any) => o.status === "COMPLETED").length;
     const cancelledOrders = allOrders.filter((o: any) => o.status === "CANCELLED").length;
-    const paidOrders = completedOrders;
+    const paidOrders = allOrders.filter((o: any) => o.status === "PAID" || o.status === "COMPLETED").length;
 
     const revenueLast30 = recentOrders.reduce((sum: number, o: any) => sum + o.total, 0);
     const prevOrders = allOrders.filter((o: any) => o.createdAt >= prevMonthStart && o.createdAt < monthAgo);
@@ -124,6 +150,14 @@ ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
       .slice(0, 30)
       .reduce((sum, d) => sum + d.visits, 0);
     const paidRatePercent = siteVisitsLast30 > 0 ? Number(((paidOrders / siteVisitsLast30) * 100).toFixed(1)) : 0;
+    const paidPrev30 = prevOrders.filter((o: any) => o.status === "PAID" || o.status === "COMPLETED").length;
+    const paidRatePrev30 = siteVisitsPrev30 > 0 ? Number(((paidPrev30 / siteVisitsPrev30) * 100).toFixed(1)) : 0;
+    const conversionRateTrendPercent =
+      paidRatePrev30 > 0
+        ? Math.round(((paidRatePercent - paidRatePrev30) / paidRatePrev30) * 100)
+        : paidRatePercent > 0
+          ? 100
+          : 0;
     const siteVisitsTrendPercent =
       siteVisitsPrev30 > 0
         ? Math.round(((siteVisitsLast30 - siteVisitsPrev30) / siteVisitsPrev30) * 100)
@@ -133,6 +167,36 @@ ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
     const totalSessionSecondsLast30 = analyticsLast30.reduce((sum, d) => sum + d.sessionSeconds, 0);
     const totalSessionCountLast30 = analyticsLast30.reduce((sum, d) => sum + d.sessionCount, 0);
     const avgSessionSeconds = totalSessionCountLast30 > 0 ? Math.round(totalSessionSecondsLast30 / totalSessionCountLast30) : 0;
+    const analyticsPrevWindow = analyticsPrev30.slice(0, 30);
+    const totalSessionSecondsPrev30 = analyticsPrevWindow.reduce((sum, d) => sum + d.sessionSeconds, 0);
+    const totalSessionCountPrev30 = analyticsPrevWindow.reduce((sum, d) => sum + d.sessionCount, 0);
+    const avgSessionPrev30 = totalSessionCountPrev30 > 0 ? Math.round(totalSessionSecondsPrev30 / totalSessionCountPrev30) : 0;
+    const avgSessionTrendPercent =
+      avgSessionPrev30 > 0
+        ? Math.round(((avgSessionSeconds - avgSessionPrev30) / avgSessionPrev30) * 100)
+        : avgSessionSeconds > 0
+          ? 100
+          : 0;
+    const returningPrevTotalCustomers = await prisma.customer.count({ where: { createdAt: { lt: monthAgo } } });
+    const prevOrdersForReturning = allOrders.filter((o: any) => o.createdAt < monthAgo);
+    const returningPrev = new Set(
+      Object.entries(
+        prevOrdersForReturning.reduce<Record<string, number>>((acc: Record<string, number>, o: any) => {
+          acc[o.customerId] = (acc[o.customerId] ?? 0) + 1;
+          return acc;
+        }, {})
+      )
+        .filter(([, count]: [string, any]) => Number(count) > 1)
+        .map(([customerId]) => customerId)
+    ).size;
+    const returningPrevRatePercent =
+      returningPrevTotalCustomers > 0 ? Number(((returningPrev / returningPrevTotalCustomers) * 100).toFixed(1)) : 0;
+    const returningCustomersTrendPercent =
+      returningPrevRatePercent > 0
+        ? Math.round(((returningCustomersRatePercent - returningPrevRatePercent) / returningPrevRatePercent) * 100)
+        : returningCustomersRatePercent > 0
+          ? 100
+          : 0;
 
     const lineItemsForStats = (o: any) => {
       const rel = Array.isArray(o.orderItems) && o.orderItems.length ? o.orderItems : [];
@@ -201,6 +265,21 @@ ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
       design: "—",
       createdAt: o.createdAt,
     }));
+    const stockAlertsAll = lowStockVariants
+      .filter((v) => v.product?.isActive)
+      .map((v) => {
+        const threshold = Number(v.lowThreshold) || 5;
+        const qty = Number(v.stock) || 0;
+        return {
+          id: v.id,
+          name: v.product?.title || "מוצר",
+          sku: v.sku || (v.color ? String(v.color) : "—"),
+          qty,
+          kind: qty <= 0 ? ("out" as const) : qty <= threshold ? ("low" as const) : null,
+        };
+      })
+      .filter((x) => x.kind !== null) as Array<{ id: string; name: string; sku: string; qty: number; kind: "out" | "low" }>;
+    const stockAlerts = stockAlertsAll.slice(0, 16);
 
     res.json({
       stats: {
@@ -211,14 +290,14 @@ ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
         siteVisits: siteVisitsLast30,
         siteVisitsTrendPercent,
         conversionRatePercent: paidRatePercent,
-        conversionRateTrendPercent: 0,
+        conversionRateTrendPercent,
         returningCustomersRatePercent,
-        returningCustomersTrendPercent: 0,
+        returningCustomersTrendPercent,
         avgSessionSeconds,
-        avgSessionTrendPercent: 0,
+        avgSessionTrendPercent,
         pendingOrders,
         completedOrders,
-        lowStockProducts: customersWithoutOrders,
+        lowStockProducts: stockAlertsAll.length,
         cancelledOrders,
         topProducts,
         customersWithoutOrders,
@@ -231,9 +310,14 @@ ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
       dailySiteVisits,
       dailyNewCustomers,
       recentOrders: recentOrdersPayload,
-      stockAlerts: [],
+      stockAlerts,
     });
-  } catch {
+  } catch (err: any) {
+    console.error("[GET /api/orders/dashboard] FAILED name=", err?.name);
+    console.error("[GET /api/orders/dashboard] FAILED code=", err?.code);
+    console.error("[GET /api/orders/dashboard] FAILED meta=", JSON.stringify(err?.meta ?? null));
+    console.error("[GET /api/orders/dashboard] FAILED message=", String(err?.message ?? err));
+    console.error("[GET /api/orders/dashboard] FAILED stack=", err?.stack);
     res.status(500).json({ error: "SERVER_ERROR" });
   }
 });
@@ -256,30 +340,24 @@ async function generateUniqueOrderNumber(client: any = prisma) {
   return `HG-${Date.now()}`;
 }
 
-// Resolve which variant should back an order line. Picks explicit variantId,
-// else best match on (productId, color, pendantType, material), else first variant.
+// Resolve and validate the exact purchased variant. No fallback-to-first behavior.
 async function resolveVariant(
   tx: any,
   item: z.infer<typeof OrderItemSchema>
-): Promise<{ variantId: string | null; productId: string | null }> {
-  if (item.variantId) {
-    const v = await tx.productVariant.findUnique({ where: { id: item.variantId } });
-    if (v) return { variantId: v.id, productId: v.productId };
-  }
-  const productId = item.productId?.trim() || null;
-  if (!productId) return { variantId: null, productId: null };
-  const variants = await tx.productVariant.findMany({
-    where: { productId, isActive: true },
-    orderBy: { createdAt: "asc" },
+): Promise<
+  | { ok: true; variantId: string; productId: string }
+  | { ok: false; reason: "VARIANT_NOT_FOUND" | "VARIANT_NOT_ACTIVE" | "VARIANT_PRODUCT_MISMATCH" }
+> {
+  const productId = item.productId.trim();
+  const variantId = item.variantId.trim();
+  const v = await tx.productVariant.findUnique({
+    where: { id: variantId },
+    select: { id: true, productId: true, isActive: true },
   });
-  if (variants.length === 0) return { variantId: null, productId };
-  const match = variants.find(
-    (v: any) =>
-      (item.color ? v.color === item.color : true) &&
-      (item.pendantShape ? v.pendantType === item.pendantShape : true) &&
-      (item.material ? v.material === item.material : true)
-  );
-  return { variantId: (match || variants[0]).id, productId };
+  if (!v) return { ok: false, reason: "VARIANT_NOT_FOUND" };
+  if (!v.isActive) return { ok: false, reason: "VARIANT_NOT_ACTIVE" };
+  if (v.productId !== productId) return { ok: false, reason: "VARIANT_PRODUCT_MISMATCH" };
+  return { ok: true, variantId: v.id, productId: v.productId };
 }
 
 ordersRouter.post("/", async (req, res) => {
@@ -296,6 +374,34 @@ ordersRouter.post("/", async (req, res) => {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      // Resolve variants + validate stock BEFORE any writes.
+      const resolved: Array<{ item: z.infer<typeof OrderItemSchema>; variantId: string; productId: string }> = [];
+      for (const item of items) {
+        const r = await resolveVariant(tx, item);
+        if (!r.ok) return { ok: false as const, reason: r.reason };
+        resolved.push({ item, variantId: r.variantId, productId: r.productId });
+      }
+
+      // Aggregate qty per variant (same variant might appear on multiple lines).
+      const variantDemand = new Map<string, number>();
+      for (const r of resolved) {
+        variantDemand.set(r.variantId, (variantDemand.get(r.variantId) ?? 0) + r.item.qty);
+      }
+
+      // Lock the variant rows so concurrent orders can't oversell.
+      const variantIds = Array.from(variantDemand.keys());
+      const locked: Array<{ id: string; stock: number; productId: string }> = await tx.$queryRawUnsafe(
+        `SELECT id, stock, "productId" FROM "ProductVariant" WHERE id = ANY($1) FOR UPDATE`,
+        variantIds
+      );
+      for (const v of locked) {
+        const needed = variantDemand.get(v.id) ?? 0;
+        if (v.stock < needed) {
+          return { ok: false as const, reason: "OUT_OF_STOCK" as const, variantId: v.id, available: v.stock };
+        }
+      }
+      if (locked.length !== variantIds.length) return { ok: false as const, reason: "VARIANT_NOT_FOUND" as const };
+
       const normalizedEmail = inputCustomer.email.trim().toLowerCase();
       const customer = await tx.customer.upsert({
         where: { email: normalizedEmail },
@@ -309,35 +415,6 @@ ordersRouter.post("/", async (req, res) => {
           phone: inputCustomer.phone ?? null,
         },
       });
-
-      // Resolve variants + validate stock BEFORE any writes.
-      const resolved: Array<{ item: z.infer<typeof OrderItemSchema>; variantId: string | null; productId: string | null }> = [];
-      for (const item of items) {
-        const r = await resolveVariant(tx, item);
-        resolved.push({ item, ...r });
-      }
-
-      // Aggregate qty per variant (same variant might appear on multiple lines).
-      const variantDemand = new Map<string, number>();
-      for (const r of resolved) {
-        if (!r.variantId) continue;
-        variantDemand.set(r.variantId, (variantDemand.get(r.variantId) ?? 0) + r.item.qty);
-      }
-
-      // Lock the variant rows so concurrent orders can't oversell.
-      if (variantDemand.size > 0) {
-        const variantIds = Array.from(variantDemand.keys());
-        const locked: Array<{ id: string; stock: number; productId: string }> = await tx.$queryRawUnsafe(
-          `SELECT id, stock, "productId" FROM "ProductVariant" WHERE id = ANY($1) FOR UPDATE`,
-          variantIds
-        );
-        for (const v of locked) {
-          const needed = variantDemand.get(v.id) ?? 0;
-          if (v.stock < needed) {
-            return { ok: false as const, reason: "OUT_OF_STOCK" as const, variantId: v.id, available: v.stock };
-          }
-        }
-      }
 
       // Coupon validation (unchanged).
       let discountAmount = 0;
@@ -428,7 +505,12 @@ ordersRouter.post("/", async (req, res) => {
     if (!result.ok) {
       const reason = result.reason;
       const status = reason === "OUT_OF_STOCK" ? 409 : 400;
-      const message = reason === "OUT_OF_STOCK" ? "אחד המוצרים אזל מהמלאי" : reasonToHebrew(reason as any);
+      const message =
+        reason === "OUT_OF_STOCK"
+          ? "אחד המוצרים אזל מהמלאי"
+          : reason === "VARIANT_NOT_FOUND" || reason === "VARIANT_NOT_ACTIVE" || reason === "VARIANT_PRODUCT_MISMATCH"
+            ? "פריט הזמנה לא תקין - נא לבחור וריאציה זמינה מחדש"
+            : reasonToHebrew(reason as any);
       return res.status(status).json({ ok: false, reason, message });
     }
 

@@ -3,6 +3,7 @@ import Icon from "./components/Icon";
 import { benefits, examples, featuredProducts, steps } from "./constants/mockData";
 import { getApiBaseUrl } from "./lib/apiBase";
 import { BrandWordmark } from "./lib/brand";
+import { loadBootstrapOnce } from "./lib/studioDataLoader";
 
 type ModalType = "terms" | "privacy" | "usage" | "contact" | "orderStatus" | null;
 
@@ -89,11 +90,7 @@ const App = () => {
   useEffect(() => {
     let mounted = true;
     const apiBase = getApiBaseUrl();
-    fetch(`${apiBase}/api/content/bootstrap`)
-      .then(async (res) => {
-        if (!res.ok) throw new Error("bootstrap");
-        return res.json();
-      })
+    loadBootstrapOnce(apiBase)
       .then((data) => {
         if (mounted) setBootstrap(data);
       })

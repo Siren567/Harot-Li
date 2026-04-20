@@ -23,6 +23,7 @@ type PaymentStatusKey = "paid" | "unpaid";
 export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeChart, setActiveChart] = useState<"orders" | "visits" | "newCustomers" | "revenue">("orders");
   const [snapshot, setSnapshot] = useState<{
     stats: {
@@ -64,54 +65,21 @@ export function DashboardPage() {
     stockAlerts: Array<{ id: string; name: string; sku: string; qty: number; kind: "out" | "low" }>;
   } | null>(null);
 
-  const emptySnapshot = useMemo(
-    () =>
-      ({
-        stats: {
-          totalRevenue: 0,
-          totalOrders: 0,
-          newCustomers: 0,
-          avgOrderValue: 0,
-          siteVisits: 0,
-          siteVisitsTrendPercent: 0,
-          conversionRatePercent: 0,
-          conversionRateTrendPercent: 0,
-          returningCustomersRatePercent: 0,
-          returningCustomersTrendPercent: 0,
-          avgSessionSeconds: 0,
-          avgSessionTrendPercent: 0,
-          pendingOrders: 0,
-          completedOrders: 0,
-          lowStockProducts: 0,
-          cancelledOrders: 0,
-          topProducts: [],
-          customersWithoutOrders: 0,
-        },
-        revenueTrendPercent: 0,
-        chartMonthLabel: "",
-        dailyRevenue: [],
-        dailyOrders: [],
-        dailySiteVisits: [],
-        dailyNewCustomers: [],
-        recentOrders: [],
-        stockAlerts: [],
-      }),
-    [],
-  );
-
   const loadDashboard = useCallback(async (silent?: boolean) => {
     if (!silent) setLoading(true);
     if (silent) setRefreshing(true);
+    setLoadError(null);
     try {
       const out = await apiFetch<any>("/api/orders/dashboard");
       setSnapshot(out);
     } catch {
-      setSnapshot(emptySnapshot);
+      setSnapshot(null);
+      setLoadError("לא ניתן לטעון את נתוני הדאשבורד בזמן אמת.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [emptySnapshot]);
+  }, []);
 
   useEffect(() => {
     void loadDashboard(false);
@@ -350,6 +318,11 @@ export function DashboardPage() {
           {refreshing ? "מרענן…" : "רענון"}
         </button>
       </div>
+      {loadError ? (
+        <div style={{ background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.35)", color: "var(--foreground)", borderRadius: "10px", padding: "10px 12px", fontSize: "12px", fontWeight: 600 }}>
+          {loadError}
+        </div>
+      ) : null}
 
       {/* KPI row (like old dashboard) */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "12px" }}>
@@ -426,7 +399,7 @@ export function DashboardPage() {
         {[
           { label: "ממתינות", value: stats.pendingOrders, icon: AlertTriangle, color: "var(--warning)" },
           { label: "הושלמו", value: stats.completedOrders, icon: CheckCircle2, color: "var(--success)" },
-          { label: "לקוחות ללא הזמנה", value: stats.lowStockProducts, icon: AlertTriangle, color: "var(--warning)" },
+          { label: "מוצרי מלאי נמוך", value: stats.lowStockProducts, icon: AlertTriangle, color: "var(--warning)" },
           { label: "בוטלו", value: stats.cancelledOrders, icon: XCircle, color: "var(--destructive)" },
         ].map((s) => (
           <div key={s.label} style={{ ...cardStyle, padding: "18px", display: "flex", alignItems: "center", gap: "12px" }}>

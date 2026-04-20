@@ -198,10 +198,24 @@ model Product {
   variants    ProductVariant[]
   categories  CategoryProduct[]
   orderItems  OrderItem[]
+  homeFeatured HomeFeaturedProduct[]
 
   @@index([isActive])
   @@index([isFeatured])
   @@index([mainCategoryId])
+}
+
+model HomeFeaturedProduct {
+  id        String   @id @default(uuid())
+  productId String   @unique
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sortOrder Int      @default(0)
+  badgeText String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sortOrder])
 }
 
 model ProductVariant {

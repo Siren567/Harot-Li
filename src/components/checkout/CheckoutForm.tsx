@@ -27,7 +27,21 @@ export default function CheckoutForm({ onSubmit, id, className, disabled }: Chec
 
   useEffect(() => {
     console.log("[mount] CheckoutForm");
-    return () => console.log("[unmount] CheckoutForm");
+    const onFocusIn = (e: FocusEvent) => {
+      const t = e.target as HTMLElement | null;
+      console.log("[focusin]", t?.tagName, (t as HTMLInputElement)?.name || t?.id || "");
+    };
+    const onFocusOut = (e: FocusEvent) => {
+      const t = e.target as HTMLElement | null;
+      console.log("[focusout]", t?.tagName, (t as HTMLInputElement)?.name || t?.id || "");
+    };
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+    return () => {
+      console.log("[unmount] CheckoutForm");
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
+    };
   }, []);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
