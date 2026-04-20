@@ -58,7 +58,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       if (!isAdminLogin && (res.status === 301 || res.status === 302 || res.status === 307 || res.status === 308 || res.status === 404 || res.status === 405) && i < bases.length - 1) {
         continue;
       }
-      if (res.status === 401) clearAdminAuth();
+      if (res.status === 401) {
+        clearAdminAuth();
+        if (!isAdminLogin && typeof window !== "undefined" && window.location.pathname.startsWith("/admin")) {
+          window.location.assign("/admin/login");
+        }
+      }
       lastHttpError = {
         status: res.status,
         ...(typeof data === "object" && data ? data : {}),

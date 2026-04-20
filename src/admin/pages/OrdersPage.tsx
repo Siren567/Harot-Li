@@ -408,6 +408,11 @@ function Drawer({
 }
 
 export function OrdersPage() {
+  const initialUrlState = useMemo(() => {
+    if (typeof window === "undefined") return { q: "", orderId: "" };
+    const params = new URLSearchParams(window.location.search);
+    return { q: params.get("q") ?? "", orderId: params.get("order") ?? "" };
+  }, []);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -477,11 +482,17 @@ export function OrdersPage() {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [loadOrders]);
 
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialUrlState.q);
   const [status, setStatus] = useState<OrderStatus | "all">("all");
   const [payment, setPayment] = useState<PaymentStatus | "all">("all");
   const [datePreset, setDatePreset] = useState<"all" | "today" | "7d" | "30d">("30d");
   const [selected, setSelected] = useState<Order | null>(null);
+
+  useEffect(() => {
+    if (!initialUrlState.orderId || orders.length === 0) return;
+    const matched = orders.find((o) => o.id === initialUrlState.orderId);
+    if (matched) setSelected(matched);
+  }, [initialUrlState.orderId, orders]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

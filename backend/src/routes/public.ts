@@ -8,6 +8,12 @@ let cachedProductsPayload: { products: any[] } | null = null;
 let cachedProductsUntil = 0;
 let productsInFlight: Promise<{ products: any[] }> | null = null;
 
+export function invalidatePublicProductsCache() {
+  cachedProductsPayload = null;
+  cachedProductsUntil = 0;
+  productsInFlight = null;
+}
+
 function mapMainCategoryToStudio(mainCategoryId?: string | null) {
   const id = String(mainCategoryId ?? "").toLowerCase();
   if (id.includes("couple") || id.includes("זוג")) return "couple";
@@ -46,22 +52,10 @@ function mapAudienceKey(raw?: string | null): "men" | "women" | "couple" | null 
   return null;
 }
 
-function pickSubcategoryLabel(inputs: Array<string | null | undefined>, productTitle?: string | null) {
+function pickSubcategoryLabel(inputs: Array<string | null | undefined>) {
   const labels = inputs.map((x) => mapSubcategoryLabel(x)).filter(Boolean) as string[];
-  const title = String(productTitle ?? "").toLowerCase();
-  if (title.includes("פרח")) return "נשים";
-  if (title.includes("זוג")) return "זוגיים";
   if (!labels.length) return null;
-  const hasCouple = labels.includes("זוגיים");
-  if (hasCouple) return "זוגיים";
-  const hasWomen = labels.includes("נשים");
-  const hasMen = labels.includes("גברים");
-  if (hasWomen && hasMen) {
-    if (title.includes("אישה") || title.includes("נשים") || title.includes("פרח") || title.includes("לב")) return "נשים";
-    if (title.includes("גבר") || title.includes("גברים") || title.includes("כדור")) return "גברים";
-    return "נשים";
-  }
-  return labels[0];
+  return labels[0] ?? null;
 }
 
 function pickSubcategoryLabels(inputs: Array<string | null | undefined>) {
@@ -145,7 +139,9 @@ publicRouter.get("/products", async (_req, res) => {
       const products = rows.map((p) => {
       const allCategoryRows = (p.categories ?? []).map((x) => x.category).filter((c) => Boolean(c?.isActive));
       const mainRaw = p.mainCategory?.isActive ? p.mainCategory : null;
-      const subRows = allCategoryRows.filter((c) => c.id !== p.mainCategoryId && c.isActive !== false);
+      const subRows = allCategoryRows
+        .filter((c) => c.id !== p.mainCategoryId && c.parentId === p.mainCategoryId && c.isActive !== false)
+        .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""), "he"));
       const subRawFirst = subRows[0] ?? null;
       const effectiveMain = mainRaw?.parentId ? allCategoryRows.find((c) => c.id === mainRaw.parentId) ?? mainRaw : mainRaw;
 
@@ -174,19 +170,11 @@ publicRouter.get("/products", async (_req, res) => {
       const variantLowThresholds = activeVariants.map((v) => Number(v.lowThreshold) || 5);
       const computedLow = variantLowThresholds.length > 0 ? Math.min(...variantLowThresholds) : 5;
       const subcategoryLabels = pickSubcategoryLabels([
-        ...subRows.map((s) => s?.name ?? null),
-        ...subRows.map((s) => s?.slug ?? null),
-      ]);
-      const audienceCandidates = [
-        ...subRows.map((s) => s?.slug ?? null),
-        ...subRows.map((s) => s?.name ?? null),
-        ...subcategoryLabels,
-        subRawFirst?.slug ?? null,
         subRawFirst?.name ?? null,
-        p.title,
-      ];
-      const audienceKeys = Array.from(new Set(audienceCandidates.map((v) => mapAudienceKey(v)).filter(Boolean))) as Array<"men" | "women" | "couple">;
-      const primaryAudience = audienceKeys.length === 1 ? audienceKeys[0] : audienceKeys.includes("couple") ? "couple" : audienceKeys[0] ?? null;
+        subRawFirst?.slug ?? null,
+      ]);
+      const primaryAudience = mapAudienceKey(subRawFirst?.slug) ?? mapAudienceKey(subRawFirst?.name);
+      const audienceKeys = primaryAudience ? [primaryAudience] : [];
       return {
         id: p.id,
         name: p.title,
@@ -195,16 +183,15 @@ publicRouter.get("/products", async (_req, res) => {
         image,
         images,
         mainCategoryId: effectiveMain?.id ?? p.mainCategoryId ?? null,
-        subcategoryIds: subRows.map((s) => s.id),
+        subcategoryIds: subRawFirst ? [subRawFirst.id] : [],
         studioCategory: effectiveMain
           ? mapMainCategoryToStudioByText(effectiveMain.slug, effectiveMain.name)
           : mapMainCategoryToStudio(p.mainCategoryId),
         subcategoryLabel: pickSubcategoryLabel(
           [
-            ...subRows.map((s) => s?.name),
-            ...subRows.map((s) => s?.slug),
-          ],
-          p.title
+            subRawFirst?.name,
+            subRawFirst?.slug,
+          ]
         ),
         subcategoryLabels,
         audience: primaryAudience,

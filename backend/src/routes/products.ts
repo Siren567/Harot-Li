@@ -6,6 +6,7 @@ import {
   updateProduct,
 } from "../services/products.service.js";
 import { requireAdmin } from "../lib/auth.js";
+import { invalidatePublicProductsCache } from "./public.js";
 
 export const productsRouter = Router();
 
@@ -25,6 +26,7 @@ productsRouter.get("/", async (req, res) => {
 productsRouter.post("/", requireAdmin, async (req, res) => {
   try {
     const product = await createProduct(req.body);
+    invalidatePublicProductsCache();
     res.status(201).json({ product });
   } catch (e: any) {
     if (e?.code === "VALIDATION") return res.status(400).json({ error: "VALIDATION", details: e.details });
@@ -36,6 +38,7 @@ productsRouter.post("/", requireAdmin, async (req, res) => {
 productsRouter.patch("/:id", requireAdmin, async (req, res) => {
   try {
     const product = await updateProduct(req.params.id, req.body);
+    invalidatePublicProductsCache();
     res.json({ product });
   } catch (e: any) {
     if (e?.code === "VALIDATION") return res.status(400).json({ error: "VALIDATION", details: e.details });
@@ -48,6 +51,7 @@ productsRouter.patch("/:id", requireAdmin, async (req, res) => {
 productsRouter.delete("/:id", requireAdmin, async (req, res) => {
   try {
     await deleteProduct(req.params.id);
+    invalidatePublicProductsCache();
     res.status(204).send();
   } catch {
     res.status(500).json({ error: "SERVER_ERROR" });

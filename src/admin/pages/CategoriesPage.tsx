@@ -29,6 +29,8 @@ type Category = {
   seoDescription: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Distinct products linked via mainCategoryId and/or CategoryProduct (from API tree). */
+  productCount?: number;
   subcategories?: Category[];
 };
 
@@ -241,6 +243,8 @@ function Drawer({
       toast(mode === "create" ? "הקטגוריה נוצרה בהצלחה" : "הקטגוריה עודכנה בהצלחה", "success");
       onClose();
     } catch (e: any) {
+      if (e?.status === 401) toast("הסשן פג. יש להתחבר מחדש.", "warning");
+      else
       if (e?.error === "SLUG_EXISTS") toast("Slug כבר קיים", "error");
       else if (e?.error === "PARENT_NOT_FOUND") toast("קטגוריית האב שנבחרה לא קיימת", "error");
       else if (e?.error === "PARENT_NOT_MAIN") toast("אפשר לבחור כתבת-אב רק מקטגוריה ראשית", "error");
@@ -458,6 +462,58 @@ function SmallButton({
   );
 }
 
+function ConfirmDialog({
+  open,
+  title,
+  description,
+  confirmLabel,
+  loading,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  loading?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <>
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 320 }} onClick={loading ? undefined : onCancel} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          position: "fixed",
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "min(520px, calc(100vw - 28px))",
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: 14,
+          zIndex: 321,
+          padding: 16,
+        }}
+      >
+        <div style={{ fontSize: 15, fontWeight: 900, color: "var(--foreground)" }}>{title}</div>
+        <div style={{ marginTop: 8, fontSize: 13, color: "var(--muted-foreground)", lineHeight: 1.5 }}>{description}</div>
+        <div style={{ marginTop: 14, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <SmallButton tone="default" onClick={onCancel} disabled={loading}>
+            ביטול
+          </SmallButton>
+          <SmallButton tone="danger" onClick={onConfirm} disabled={loading}>
+            {loading ? "מוחק..." : confirmLabel}
+          </SmallButton>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function CategoriesPage() {
   const toast = useToast();
 
@@ -474,6 +530,8 @@ export function CategoriesPage() {
   const [editing, setEditing] = useState<Category | null>(null);
   const [prefillParentId, setPrefillParentId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Category | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -605,22 +663,27 @@ export function CategoriesPage() {
       toast(!c.isActive ? "הקטגוריה הופעלה" : "הקטגוריה הושבתה", "success");
       await refresh();
     } catch (e: any) {
-      toast("הפעולה נכשלה", "error");
+      if (e?.status === 401) toast("הסשן פג. יש להתחבר מחדש.", "warning");
+      else toast("הפעולה נכשלה", "error");
     }
   }
 
   async function removeCategory(c: Category) {
     const label = c.parentId ? "תת קטגוריה" : "קטגוריה";
-    if (!confirm(`למחוק ${label} "${c.name}"?`)) return;
     try {
+      setDeleting(true);
       await apiFetch(`/api/categories/${c.id}`, { method: "DELETE" });
       toast(`${label} נמחקה`, "success");
+      setPendingDelete(null);
       await refresh();
     } catch (e: any) {
       if (e?.error === "HAS_SUBCATEGORIES") toast("לא ניתן למחוק קטגוריה שיש לה תתי-קטגוריות", "error");
       else if (e?.error === "HAS_PRODUCTS") toast("לא ניתן למחוק קטגוריה עם שיוכי מוצרים", "error");
       else if (e?.error === "NOT_FOUND") toast("הקטגוריה כבר לא קיימת", "warning");
+      else if (e?.status === 401) toast("הסשן פג. יש להתחבר מחדש.", "warning");
       else toast("מחיקת קטגוריה נכשלה", "error");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -733,7 +796,8 @@ export function CategoriesPage() {
                         <div style={{ fontSize: 14, fontWeight: 900 }}>{main.name}</div>
                         <div style={{ marginTop: 3, fontSize: 12, color: "var(--muted-foreground)" }}>{main.slug}</div>
                         <div style={{ marginTop: 6, fontSize: 11, color: "var(--muted-foreground)" }}>
-                          {(main.subcategories ?? []).length} תתי קטגוריות • 0 מוצרים
+                          {(main.subcategories ?? []).length} תתי קטגוריות •{" "}
+                          {Number(main.productCount ?? 0).toLocaleString("he-IL")} מוצרים
                         </div>
                       </button>
                       <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-start" }}>
@@ -749,7 +813,7 @@ export function CategoriesPage() {
                         <SmallButton tone="primary" onClick={() => toggle(main)}>
                           {main.isActive ? "השבת" : "הפעל"}
                         </SmallButton>
-                        <SmallButton tone="danger" onClick={() => removeCategory(main)}>
+                        <SmallButton tone="danger" onClick={() => setPendingDelete(main)}>
                           <Trash2 size={14} />
                           מחק
                         </SmallButton>
@@ -783,6 +847,9 @@ export function CategoriesPage() {
                               >
                                 <div style={{ fontSize: 12, fontWeight: 900 }}>{sub.name}</div>
                                 <div style={{ marginTop: 2, fontSize: 11, color: "var(--muted-foreground)" }}>{sub.slug}</div>
+                                <div style={{ marginTop: 4, fontSize: 10, color: "var(--muted-foreground)" }}>
+                                  {Number(sub.productCount ?? 0).toLocaleString("he-IL")} מוצרים
+                                </div>
                               </button>
                               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                                 {statusBadge(sub.isActive)}
@@ -792,7 +859,7 @@ export function CategoriesPage() {
                                 <SmallButton tone="primary" onClick={() => toggle(sub)}>
                                   {sub.isActive ? "השבת" : "הפעל"}
                                 </SmallButton>
-                                <SmallButton tone="danger" onClick={() => removeCategory(sub)}>
+                                <SmallButton tone="danger" onClick={() => setPendingDelete(sub)}>
                                   <Trash2 size={14} />
                                   מחק
                                 </SmallButton>
@@ -843,7 +910,9 @@ export function CategoriesPage() {
                     <td style={{ padding: "10px 12px", fontSize: 11, color: "var(--muted-foreground)" }}>{c.slug}</td>
                     <td style={{ padding: "10px 12px", fontSize: 11, color: "var(--muted-foreground)" }}>{typeLabel(c)}</td>
                     <td style={{ padding: "10px 12px", fontSize: 11, color: "var(--muted-foreground)" }}>{c.parentId ? parentMap.get(c.parentId) ?? "—" : "—"}</td>
-                    <td style={{ padding: "10px 12px", fontSize: 11, color: "var(--muted-foreground)" }}>0</td>
+                    <td style={{ padding: "10px 12px", fontSize: 11, color: "var(--muted-foreground)" }}>
+                      {Number(c.productCount ?? 0).toLocaleString("he-IL")}
+                    </td>
                     <td style={{ padding: "10px 12px" }}>{statusBadge(c.isActive)}</td>
                     <td style={{ padding: "10px 12px" }} onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -858,7 +927,7 @@ export function CategoriesPage() {
                             הוסף תת קטגוריה
                           </SmallButton>
                         ) : null}
-                        <SmallButton tone="danger" onClick={() => removeCategory(c)}>
+                        <SmallButton tone="danger" onClick={() => setPendingDelete(c)}>
                           <Trash2 size={14} />
                           מחק
                         </SmallButton>
@@ -879,6 +948,18 @@ export function CategoriesPage() {
         mains={mains}
         onClose={() => setDrawerOpen(false)}
         onSave={onSave}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title={pendingDelete ? `מחיקת ${pendingDelete.parentId ? "תת קטגוריה" : "קטגוריה"}` : ""}
+        description={pendingDelete ? `למחוק את "${pendingDelete.name}"? פעולה זו אינה הפיכה.` : ""}
+        confirmLabel="מחק"
+        loading={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (!pendingDelete) return;
+          removeCategory(pendingDelete);
+        }}
       />
     </div>
   );

@@ -186,14 +186,6 @@ function normalizeCategoryKey(raw: string) {
   return v;
 }
 
-function inferSubcategoryFromTexts(texts: string[]): StudioSubcategory {
-  const t = texts.join(" ").toLowerCase();
-  if (t.includes("זוג") || t.includes("couple")) return "couple";
-  if (t.includes("נשים") || t.includes("אישה") || t.includes("women") || t.includes("woman")) return "women";
-  if (t.includes("גברים") || t.includes("גבר") || t.includes("men") || t.includes("man")) return "men";
-  return null;
-}
-
 const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [step, setStep] = useState(0);
   const [category, setCategory] = useState<string>("bracelets");
@@ -338,13 +330,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           return {
             id: p.id,
             category: p.studioCategory,
-            subcategory:
-              explicitAudience ??
-              inferSubcategoryFromTexts([
-                p.subcategoryLabel ?? "",
-                ...(Array.isArray(p.subcategoryLabels) ? p.subcategoryLabels : []),
-                p.name ?? "",
-              ]),
+            subcategory: explicitAudience,
             title: p.name,
             description: p.description || "",
             price: Number(p.price) || 0,
@@ -402,6 +388,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     return runtimeProducts.filter((p) => {
       if (normalized === "couple") {
         return p.subcategory === "couple";
+      }
+      if ((normalized === "bracelets" || normalized === "necklaces") && !p.subcategory) {
+        return false;
       }
       if (category === p.category) return true;
       if (normalizeCategoryKey(p.category) !== normalized) return false;

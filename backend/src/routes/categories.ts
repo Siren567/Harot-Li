@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { getSupabaseAdminClient } from "../supabase/client.js";
 import { requireAdmin } from "../lib/auth.js";
+import { invalidatePublicProductsCache } from "./public.js";
 
 export const categoriesRouter = Router();
 
@@ -308,6 +309,41 @@ async function reassignProductsFromSubcategoryToParent(tx: any, subcategoryId: s
   return productIds.length;
 }
 
+/** Products tied to this main category: mainCategoryId or any CategoryProduct on main / its subs. */
+async function countProductsForMainCategory(mainId: string, subcategoryIds: string[]) {
+  const ids = [mainId, ...subcategoryIds];
+  return prisma.product.count({
+    where: {
+      OR: [{ mainCategoryId: mainId }, { categories: { some: { categoryId: { in: ids } } } }],
+    },
+  });
+}
+
+/** Products tied to this subcategory: mainCategoryId or CategoryProduct on sub. */
+async function countProductsForSubCategory(subId: string) {
+  return prisma.product.count({
+    where: {
+      OR: [{ mainCategoryId: subId }, { categories: { some: { categoryId: subId } } }],
+    },
+  });
+}
+
+async function attachProductCountsToCategoryTree(mains: Array<{ id: string; subcategories?: Array<{ id: string }> }>) {
+  return Promise.all(
+    mains.map(async (m) => {
+      const subIds = (m.subcategories ?? []).map((s) => s.id);
+      const mainProductCount = await countProductsForMainCategory(m.id, subIds);
+      const subcategories = await Promise.all(
+        (m.subcategories ?? []).map(async (s) => ({
+          ...s,
+          productCount: await countProductsForSubCategory(s.id),
+        }))
+      );
+      return { ...m, productCount: mainProductCount, subcategories };
+    })
+  );
+}
+
 categoriesRouter.get("/", async (req, res) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   const type = typeof req.query.type === "string" ? req.query.type : "";
@@ -356,7 +392,8 @@ categoriesRouter.get("/tree", async (_req, res) => {
       },
     });
 
-    res.json({ categories: mains });
+    const withCounts = await attachProductCountsToCategoryTree(mains);
+    res.json({ categories: withCounts });
   } catch (err: any) {
     console.error("[GET /api/categories/tree] FAILED name=", err?.name);
     console.error("[GET /api/categories/tree] FAILED code=", err?.code);
@@ -410,7 +447,15 @@ categoriesRouter.get("/:id", async (req, res) => {
     }
   }
 
-  res.json({ category: { ...category, productCount: 0 } });
+  let productCount = 0;
+  if (!category.parentId) {
+    const subIds = (category.subcategories ?? []).map((s) => s.id);
+    productCount = await countProductsForMainCategory(category.id, subIds);
+  } else {
+    productCount = await countProductsForSubCategory(category.id);
+  }
+
+  res.json({ category: { ...category, productCount } });
 });
 
 categoriesRouter.post("/", requireAdmin, async (req, res) => {
@@ -439,6 +484,7 @@ categoriesRouter.post("/", requireAdmin, async (req, res) => {
         seoDescription: data.seoDescription ?? null,
       },
     });
+    invalidatePublicProductsCache();
     res.status(201).json({ category });
   } catch (e: any) {
     if (String(e?.code) === "P2002") return res.status(409).json({ error: "SLUG_EXISTS" });
@@ -531,6 +577,7 @@ categoriesRouter.patch("/:id", requireAdmin, async (req, res) => {
       }
       return tx.category.findUniqueOrThrow({ where: { id: updated.id } });
     });
+    invalidatePublicProductsCache();
     res.json({ category });
   } catch (e: any) {
     if (String(e?.code) === "P2002") return res.status(409).json({ error: "SLUG_EXISTS" });
@@ -584,6 +631,7 @@ categoriesRouter.post("/:id/toggle", requireAdmin, async (req, res) => {
       }
       return updated;
     });
+    invalidatePublicProductsCache();
     res.json({ category: result });
   } catch {
     try {
@@ -618,6 +666,7 @@ categoriesRouter.delete("/:id", requireAdmin, async (req, res) => {
 
   try {
     await prisma.category.delete({ where: { id } });
+    invalidatePublicProductsCache();
     res.status(204).send();
   } catch {
     try {

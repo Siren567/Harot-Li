@@ -181,7 +181,7 @@ function toForm(p?: Product | null): ProductForm {
     allow_customer_image_upload: Boolean(p?.allow_customer_image_upload),
     gallery_images: Array.isArray(p?.gallery_images) ? p!.gallery_images : [],
     main_category_id: p?.main_category_id ?? "",
-    subcategory_ids: Array.isArray(p?.subcategory_ids) ? p!.subcategory_ids : [],
+    subcategory_ids: Array.isArray(p?.subcategory_ids) ? p!.subcategory_ids.slice(0, 1) : [],
     seo_title: p?.seo_title ?? "",
     seo_description: p?.seo_description ?? "",
     seo_keywords: p?.seo_keywords ?? "",
@@ -256,7 +256,9 @@ function normalizeProducts(input: unknown): Product[] {
       allow_customer_image_upload: Boolean(row.allow_customer_image_upload),
       gallery_images: Array.isArray(row.gallery_images) ? row.gallery_images.filter((x): x is string => typeof x === "string") : [],
       main_category_id: typeof row.main_category_id === "string" ? row.main_category_id : null,
-      subcategory_ids: Array.isArray(row.subcategory_ids) ? row.subcategory_ids.filter((x): x is string => typeof x === "string") : [],
+      subcategory_ids: Array.isArray(row.subcategory_ids)
+        ? row.subcategory_ids.filter((x): x is string => typeof x === "string").slice(0, 1)
+        : [],
       seo_title: typeof row.seo_title === "string" ? row.seo_title : null,
       seo_description: typeof row.seo_description === "string" ? row.seo_description : null,
       seo_keywords: typeof row.seo_keywords === "string" ? row.seo_keywords : null,
@@ -997,10 +999,10 @@ export function ProductEditorPage() {
                   ))}
               </SelectInput>
             </InputGroup>
-            <InputGroup label="תתי קטגוריות (אפשר לבחור כמה)">
+            <InputGroup label="תת קטגוריה (בחירה אחת בלבד)">
               {!form.main_category_id ? (
                 <div style={{ fontSize: 12, color: "var(--muted-foreground)", padding: "10px 12px", border: "1px dashed var(--border)", borderRadius: 10 }}>
-                  בחר קטגוריה ראשית כדי לבחור תתי קטגוריות
+                  בחר קטגוריה ראשית כדי לבחור תת קטגוריה
                 </div>
               ) : availableSubcategories.length === 0 ? (
                 <div style={{ fontSize: 12, color: "var(--muted-foreground)", padding: "10px 12px", border: "1px dashed var(--border)", borderRadius: 10 }}>
@@ -1019,9 +1021,7 @@ export function ProductEditorPage() {
                           onClick={() =>
                             setForm((prev) => ({
                               ...prev,
-                              subcategory_ids: checked
-                                ? prev.subcategory_ids.filter((id) => id !== sub.id)
-                                : [...prev.subcategory_ids, sub.id],
+                              subcategory_ids: checked ? [] : [sub.id],
                             }))
                           }
                           style={{

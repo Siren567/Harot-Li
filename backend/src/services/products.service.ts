@@ -226,19 +226,33 @@ async function syncVariantsFromMatrix(
 async function syncCategoryLinks(productId: string, mainCategoryId: string | null | undefined, subcategoryIds: string[] | undefined) {
   if (mainCategoryId === undefined && subcategoryIds === undefined) return;
   const desired = new Set<string>();
-  if (mainCategoryId) desired.add(mainCategoryId);
-  for (const id of subcategoryIds ?? []) if (id) desired.add(id);
+  const normalizedMain = typeof mainCategoryId === "string" && mainCategoryId.trim() ? mainCategoryId.trim() : null;
+  if (normalizedMain) desired.add(normalizedMain);
+
+  // Enforce a single subcategory per product to keep storefront segmentation deterministic.
+  const requestedSubs = Array.from(
+    new Set((subcategoryIds ?? []).map((id) => String(id || "").trim()).filter(Boolean))
+  );
+  const requestedPrimarySub = requestedSubs[0] ?? null;
 
   // Validate existence.
   const valid = await prisma.category.findMany({
-    where: { id: { in: Array.from(desired) } },
-    select: { id: true },
+    where: { id: { in: [...Array.from(desired), ...(requestedPrimarySub ? [requestedPrimarySub] : [])] } },
+    select: { id: true, parentId: true },
   });
-  const validSet = new Set(valid.map((c) => c.id));
+  const validById = new Map(valid.map((c) => [c.id, c]));
+
+  if (requestedPrimarySub) {
+    const sub = validById.get(requestedPrimarySub);
+    const subBelongsToMain = Boolean(sub?.parentId && normalizedMain && sub.parentId === normalizedMain);
+    if (subBelongsToMain) {
+      desired.add(requestedPrimarySub);
+    }
+  }
 
   await prisma.categoryProduct.deleteMany({ where: { productId } });
   for (const cid of desired) {
-    if (!validSet.has(cid)) continue;
+    if (!validById.has(cid)) continue;
     await prisma.categoryProduct.create({ data: { productId, categoryId: cid } });
   }
 }
