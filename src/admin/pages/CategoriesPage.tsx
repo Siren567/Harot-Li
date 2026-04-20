@@ -690,7 +690,8 @@ export function CategoriesPage() {
       await refresh();
     } catch (e: any) {
       if (e?.error === "HAS_SUBCATEGORIES") toast("לא ניתן למחוק קטגוריה שיש לה תתי-קטגוריות", "error");
-      else if (e?.error === "HAS_PRODUCTS") toast("לא ניתן למחוק קטגוריה עם שיוכי מוצרים", "error");
+      else if (e?.error === "HAS_PRODUCTS")
+        toast("לא ניתן למחוק קטגוריה ראשית שיש לה מוצרים משויכים. הסר שיוכים או צור תת־קטגוריה והעבר אליה.", "error");
       else if (e?.error === "HAS_DEPENDENCIES") toast("לא ניתן למחוק — יש עדיין תלות במסד הנתונים (מוצרים/קשרים).", "error");
       else if (e?.error === "NOT_FOUND") toast("הקטגוריה כבר לא קיימת", "warning");
       else if (e?.error === "INVALID_RESPONSE") toast(e?.message ?? "תשובת שרת לא תקינה", "error");

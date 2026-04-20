@@ -17,11 +17,20 @@ export function getApiBaseUrls() {
   if (isLocal) return ["http://localhost:4000"];
 
   const canonicalBackend = "https://www.harot-li.store/_/backend";
-  const onCanonical = host === "www.harot-li.store";
+  // Apex + www must prefer same-origin /_/backend so /api/* is not a cross-origin hop
+  // (harot-li.store was pointing only at www and broke studio/product loads from CORS / routing).
+  const onHarotSite = host === "www.harot-li.store" || host === "harot-li.store";
 
-  // Production should use one stable backend route to avoid method/path drift.
-  if (onCanonical) return ["/_/backend"];
+  if (onHarotSite) return ["/_/backend", canonicalBackend];
   return [canonicalBackend];
+}
+
+/** Join API path (always starts with /) to optional origin/prefix base. */
+export function joinApiUrl(base: string, path: string) {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  const b = (base || "").replace(/\/$/, "");
+  if (!b) return p;
+  return `${b}${p}`;
 }
 
 export function getApiBaseUrl() {

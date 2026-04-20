@@ -9,8 +9,8 @@ function apiBases() {
   const host = window.location.hostname || "";
   const isLocal = host === "localhost" || host === "127.0.0.1";
   if (isLocal) return ["http://localhost:4444", ""];
-  // In production use relative + common proxy prefixes only — avoid mixed-content dev URLs.
-  return ["", "/_/backend", "/backend"];
+  // Prefer /_/backend first: same-origin POST works; "" often hits static hosting → 405 on /api/*.
+  return ["/_/backend", "", "/backend"];
 }
 
 function sessionId() {

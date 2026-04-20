@@ -674,9 +674,9 @@ categoriesRouter.post("/:id/toggle", requireAdmin, async (req, res) => {
 categoriesRouter.delete("/:id", requireAdmin, async (req, res) => {
   const id = req.params.id;
 
-  let existing: { id: string } | null = null;
+  let existing: { id: string; parentId: string | null } | null = null;
   try {
-    existing = await prisma.category.findUnique({ where: { id }, select: { id: true } });
+    existing = await prisma.category.findUnique({ where: { id }, select: { id: true, parentId: true } });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("[DELETE /api/categories/:id] findUnique failed", err);
@@ -688,10 +688,19 @@ categoriesRouter.delete("/:id", requireAdmin, async (req, res) => {
     if (children > 0) return res.status(409).json({ error: "HAS_SUBCATEGORIES" });
 
     const assignments = await prisma.categoryProduct.count({ where: { categoryId: id } });
-    if (assignments > 0) return res.status(409).json({ error: "HAS_PRODUCTS" });
+    const isSubcategory = Boolean(existing.parentId);
+    // Main category: keep strict rule — must unlink products in admin first.
+    // Subcategory: allow delete by reassigning products to the parent main category (same as deactivate flow).
+    if (!isSubcategory && assignments > 0) {
+      return res.status(409).json({ error: "HAS_PRODUCTS" });
+    }
 
     try {
       await prisma.$transaction(async (tx) => {
+        if (isSubcategory && existing.parentId) {
+          await reassignProductsFromSubcategoryToParent(tx, id, existing.parentId);
+        }
+        await tx.categoryProduct.deleteMany({ where: { categoryId: id } });
         await tx.product.updateMany({ where: { mainCategoryId: id }, data: { mainCategoryId: null } });
         await tx.category.delete({ where: { id } });
       });

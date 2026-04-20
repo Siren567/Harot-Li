@@ -1,3 +1,5 @@
+import { getApiBaseUrls, joinApiUrl } from "./apiBase";
+
 type BootstrapResponse = { sections?: Array<{ key: string; body: any }> } | null;
 type ProductsResponse = { products?: any[] };
 
@@ -19,28 +21,52 @@ function getGlobalStudioDataCache(): GlobalStudioDataCache {
   return g.__harotliStudioDataCache!;
 }
 
-export function loadBootstrapOnce(apiBase: string) {
+async function fetchJsonFirstOk(path: string): Promise<{ ok: boolean; data: any }> {
+  const bases = getApiBaseUrls();
+  for (let i = 0; i < bases.length; i += 1) {
+    const url = joinApiUrl(bases[i], path);
+    try {
+      const res = await fetch(url, { credentials: "include", cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        return { ok: true, data };
+      }
+      if ((res.status === 404 || res.status === 405 || res.status === 301 || res.status === 302 || res.status === 307 || res.status === 308) && i < bases.length - 1) {
+        continue;
+      }
+    } catch {
+      /* try next base */
+    }
+  }
+  return { ok: false, data: null };
+}
+
+/** Cache key stable across bases order attempts (same logical resource). */
+function basesCacheKey(kind: "bootstrap" | "products") {
+  return `${kind}:${getApiBaseUrls().join("|")}`;
+}
+
+export function loadBootstrapOnce(_apiBase?: string) {
   const cache = getGlobalStudioDataCache().bootstrap;
-  const key = `${apiBase || ""}/api/content/bootstrap`;
+  const key = basesCacheKey("bootstrap");
   const existing = cache.get(key);
   if (existing && Date.now() - existing.createdAt < CLIENT_CACHE_TTL_MS) return existing.promise;
-  const req = fetch(key, { credentials: "include", cache: "no-store" })
-    .then((r) => (r.ok ? r.json() : null))
+  const req = fetchJsonFirstOk("/api/content/bootstrap")
+    .then((r) => (r.ok ? r.data : null))
     .catch(() => null);
   cache.set(key, { createdAt: Date.now(), promise: req });
   return req;
 }
 
-export function loadPublicProductsOnce(apiBase: string) {
+export function loadPublicProductsOnce(_apiBase?: string) {
   const cache = getGlobalStudioDataCache().products;
-  const key = `${apiBase || ""}/api/public/products`;
+  const key = basesCacheKey("products");
   const existing = cache.get(key);
   if (existing && Date.now() - existing.createdAt < CLIENT_CACHE_TTL_MS) return existing.promise;
-  const req = fetch(key, { credentials: "include", cache: "no-store" }).then(async (res) => {
-    if (!res.ok) throw new Error("public-products");
-    return (await res.json()) as ProductsResponse;
+  const req = fetchJsonFirstOk("/api/public/products").then(async (r) => {
+    if (!r.ok) throw new Error("public-products");
+    return r.data as ProductsResponse;
   });
   cache.set(key, { createdAt: Date.now(), promise: req });
   return req;
 }
-

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, ChevronDown, LogOut, User, Bell, AlertTriangle, ShoppingBag } from "lucide-react";
+import { ExternalLink, ChevronDown, LogOut, User, Bell, AlertTriangle, ShoppingBag, X } from "lucide-react";
 import { useToast } from "../ui/toast";
 import { clearAdminAuth } from "../state/auth";
 import { apiFetch } from "../lib/api";
@@ -20,6 +20,30 @@ type DashboardPayload = {
   stockAlerts?: Array<{ id: string; name: string; sku: string; qty: number; kind: "out" | "low" }>;
 };
 
+const DISMISSED_NOTIFS_KEY = "harotli_admin_dismissed_notification_ids_v1";
+const MAX_DISMISSED_IDS = 400;
+
+function readDismissedNotificationIds(): Set<string> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DISMISSED_NOTIFS_KEY) || "[]");
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((x): x is string => typeof x === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function addDismissedNotificationIds(ids: Iterable<string>) {
+  const merged = readDismissedNotificationIds();
+  for (const id of ids) merged.add(id);
+  const arr = [...merged].slice(-MAX_DISMISSED_IDS);
+  try {
+    localStorage.setItem(DISMISSED_NOTIFS_KEY, JSON.stringify(arr));
+  } catch {
+    // ignore
+  }
+}
+
 export function Topbar() {
   const toast = useToast();
   const [profileOpen, setProfileOpen] = useState(false);
@@ -29,6 +53,17 @@ export function Topbar() {
   const prevOrderIdsRef = useRef<Set<string>>(new Set());
   const prevStockKeysRef = useRef<Set<string>>(new Set());
   const seenKey = "harotli_admin_seen_notifications_v1";
+
+  const recomputeUnread = useCallback((items: NotificationItem[]) => {
+    let seenIds = new Set<string>();
+    try {
+      const parsed = JSON.parse(localStorage.getItem(seenKey) || "[]");
+      if (Array.isArray(parsed)) seenIds = new Set(parsed.filter((x): x is string => typeof x === "string"));
+    } catch {
+      // ignore
+    }
+    setUnreadCount(items.filter((n) => !seenIds.has(n.id)).length);
+  }, [seenKey]);
 
   const markAllSeen = useCallback(() => {
     const ids = notifications.map((n) => n.id);
@@ -67,7 +102,9 @@ export function Topbar() {
       const next = [...orderItems, ...stockItems]
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         .slice(0, 12);
-      setNotifications(next);
+      const dismissed = readDismissedNotificationIds();
+      const visible = next.filter((n) => !dismissed.has(n.id));
+      setNotifications(visible);
 
       const currentOrderIds = new Set(orderItems.map((x) => x.id));
       const currentStockKeys = new Set(stockItems.map((x) => x.id));
@@ -83,7 +120,7 @@ export function Topbar() {
       } catch {
         // ignore parse failures
       }
-      const unread = next.filter((n) => !seenIds.has(n.id)).length;
+      const unread = visible.filter((n) => !seenIds.has(n.id)).length;
       setUnreadCount(unread);
 
       if (!silent && (hasNewOrders || hasNewStock)) {
@@ -93,6 +130,36 @@ export function Topbar() {
       // keep bell quiet on transient failures
     }
   }, [toast]);
+
+  function dismissNotification(id: string) {
+    addDismissedNotificationIds([id]);
+    setNotifications((prev) => {
+      const next = prev.filter((n) => n.id !== id);
+      recomputeUnread(next);
+      return next;
+    });
+  }
+
+  function dismissAllNotifications() {
+    if (notifications.length === 0) return;
+    addDismissedNotificationIds(notifications.map((n) => n.id));
+    setNotifications([]);
+    setUnreadCount(0);
+    try {
+      localStorage.setItem(seenKey, JSON.stringify([]));
+    } catch {
+      // ignore
+    }
+  }
+
+  function restoreDismissedNotifications() {
+    try {
+      localStorage.removeItem(DISMISSED_NOTIFS_KEY);
+    } catch {
+      // ignore
+    }
+    void loadNotifications(true);
+  }
 
   const orderedNotifications = useMemo(() => notifications, [notifications]);
 
@@ -230,47 +297,104 @@ export function Topbar() {
                 animation: "fadeInDown 0.15s ease",
               }}
             >
-              <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
                 <span style={{ fontSize: 13, fontWeight: 800, color: "var(--foreground)" }}>התראות</span>
-                <button
-                  type="button"
-                  onClick={() => void loadNotifications(false)}
-                  style={{ background: "transparent", border: "none", color: "var(--primary)", cursor: "pointer", fontSize: 12, fontWeight: 700 }}
-                >
-                  רענון
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  {orderedNotifications.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => dismissAllNotifications()}
+                      style={{ background: "transparent", border: "none", color: "var(--muted-foreground)", cursor: "pointer", fontSize: 12, fontWeight: 700 }}
+                    >
+                      נקה רשימה
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void loadNotifications(false)}
+                    style={{ background: "transparent", border: "none", color: "var(--primary)", cursor: "pointer", fontSize: 12, fontWeight: 700 }}
+                  >
+                    רענון
+                  </button>
+                </div>
               </div>
               <div style={{ maxHeight: 360, overflowY: "auto" }}>
                 {orderedNotifications.length === 0 ? (
                   <div style={{ padding: "14px 12px", fontSize: 12, color: "var(--muted-foreground)" }}>אין התראות כרגע.</div>
                 ) : (
                   orderedNotifications.map((n) => (
-                    <a
+                    <div
                       key={n.id}
-                      href={n.href}
-                      onClick={() => setNotificationsOpen(false)}
                       style={{
                         display: "flex",
-                        gap: 10,
+                        gap: 6,
                         alignItems: "flex-start",
-                        padding: "10px 12px",
+                        padding: "8px 8px 8px 12px",
                         borderBottom: "1px solid var(--border)",
-                        textDecoration: "none",
-                        color: "inherit",
                       }}
                     >
-                      <span style={{ color: n.kind === "order" ? "var(--info)" : "var(--warning)", marginTop: 2 }}>
-                        {n.kind === "order" ? <ShoppingBag size={16} /> : <AlertTriangle size={16} />}
-                      </span>
-                      <span style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: "var(--foreground)" }}>{n.title}</div>
-                        <div style={{ marginTop: 2, fontSize: 11, color: "var(--muted-foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {n.subtitle}
-                        </div>
-                      </span>
-                    </a>
+                      <a
+                        href={n.href}
+                        onClick={() => setNotificationsOpen(false)}
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          display: "flex",
+                          gap: 10,
+                          alignItems: "flex-start",
+                          padding: "2px 0",
+                          textDecoration: "none",
+                          color: "inherit",
+                        }}
+                      >
+                        <span style={{ color: n.kind === "order" ? "var(--info)" : "var(--warning)", marginTop: 2, flexShrink: 0 }}>
+                          {n.kind === "order" ? <ShoppingBag size={16} /> : <AlertTriangle size={16} />}
+                        </span>
+                        <span style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 800, color: "var(--foreground)" }}>{n.title}</div>
+                          <div style={{ marginTop: 2, fontSize: 11, color: "var(--muted-foreground)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {n.subtitle}
+                          </div>
+                        </span>
+                      </a>
+                      <button
+                        type="button"
+                        aria-label="הסר מהרשימה"
+                        title="הסר מהרשימה (נשאר במערכת — רק מוסתר כאן)"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          dismissNotification(n.id);
+                        }}
+                        style={{
+                          flexShrink: 0,
+                          width: 30,
+                          height: 30,
+                          borderRadius: 8,
+                          border: "1px solid var(--border)",
+                          background: "var(--input)",
+                          color: "var(--muted-foreground)",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginTop: 1,
+                        }}
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
                   ))
                 )}
+              </div>
+              <div style={{ padding: "8px 12px", borderTop: "1px solid var(--border)", background: "rgba(255,255,255,0.02)" }}>
+                <button
+                  type="button"
+                  onClick={() => restoreDismissedNotifications()}
+                  style={{ background: "transparent", border: "none", color: "var(--muted-foreground)", cursor: "pointer", fontSize: 11, fontWeight: 600, width: "100%", textAlign: "center" }}
+                >
+                  הצג התראות שהוסרו מהרשימה
+                </button>
               </div>
             </div>
           </>
