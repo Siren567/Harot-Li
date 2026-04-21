@@ -1,5 +1,4 @@
 import { Router } from "express";
-import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { getSupabaseAdminClient } from "../supabase/client.js";
@@ -464,6 +463,12 @@ categoriesRouter.post("/", requireAdmin, async (req, res) => {
 
   const data = parsed.data;
   const slug = slugify(data.slug?.trim() ? data.slug : data.name);
+  console.log("[POST /api/categories] request", {
+    name: data.name,
+    slug,
+    parentId: data.parentId ?? null,
+    isActive: data.isActive ?? true,
+  });
 
   if (data.parentId) {
     const okParent = await ensureParentIsMain(data.parentId);
@@ -485,39 +490,15 @@ categoriesRouter.post("/", requireAdmin, async (req, res) => {
       },
     });
     invalidatePublicProductsCache();
+    console.log("[POST /api/categories] response", { ok: true, id: category.id, slug: category.slug });
     res.status(201).json({ category });
   } catch (e: any) {
+    console.error("[POST /api/categories] FAILED name=", e?.name);
+    console.error("[POST /api/categories] FAILED code=", e?.code);
+    console.error("[POST /api/categories] FAILED meta=", JSON.stringify(e?.meta ?? null));
+    console.error("[POST /api/categories] FAILED message=", String(e?.message ?? e));
     if (String(e?.code) === "P2002") return res.status(409).json({ error: "SLUG_EXISTS" });
-    try {
-      const rows = await loadFallbackRows();
-      const duplicate = rows.find((r) => r.slug === slug);
-      if (duplicate) return res.status(409).json({ error: "SLUG_EXISTS" });
-      if (data.parentId) {
-        const parent = rows.find((r) => r.id === data.parentId);
-        if (!parent) return res.status(400).json({ error: "PARENT_NOT_FOUND" });
-        if (parent.parentId) return res.status(400).json({ error: "PARENT_NOT_MAIN" });
-      }
-      const now = new Date().toISOString();
-      const category: FlatCategory = {
-        id: randomUUID(),
-        name: data.name.trim(),
-        slug,
-        description: data.description ?? null,
-        imageUrl: data.imageUrl ?? null,
-        parentId: data.parentId ?? null,
-        isActive: data.isActive ?? true,
-        sortOrder: data.sortOrder ?? 0,
-        seoTitle: data.seoTitle ?? null,
-        seoDescription: data.seoDescription ?? null,
-        createdAt: now,
-        updatedAt: now,
-      };
-      rows.push(category);
-      await saveFallbackRows(rows);
-      return res.status(201).json({ category });
-    } catch {
-      return res.status(500).json({ error: "SERVER_ERROR" });
-    }
+    return res.status(500).json({ error: "SERVER_ERROR" });
   }
 });
 
@@ -673,6 +654,7 @@ categoriesRouter.post("/:id/toggle", requireAdmin, async (req, res) => {
 
 categoriesRouter.delete("/:id", requireAdmin, async (req, res) => {
   const id = req.params.id;
+  console.log("[DELETE /api/categories/:id] request", { id });
 
   let existing: { id: string; parentId: string | null } | null = null;
   try {
@@ -708,6 +690,7 @@ categoriesRouter.delete("/:id", requireAdmin, async (req, res) => {
         await tx.category.delete({ where: { id } });
       });
       invalidatePublicProductsCache();
+      console.log("[DELETE /api/categories/:id] response", { ok: true, id, deleted: true });
       return res.status(200).json({ deleted: true });
     } catch (err: any) {
       // eslint-disable-next-line no-console
@@ -721,17 +704,6 @@ categoriesRouter.delete("/:id", requireAdmin, async (req, res) => {
     }
   }
 
-  try {
-    const rows = await loadFallbackRows();
-    const exists = rows.some((r) => r.id === id);
-    if (!exists) return res.status(404).json({ error: "NOT_FOUND" });
-    const childrenFallback = rows.some((r) => r.parentId === id);
-    if (childrenFallback) return res.status(409).json({ error: "HAS_SUBCATEGORIES" });
-    const next = rows.filter((r) => r.id !== id);
-    await saveFallbackRows(next);
-    return res.status(200).json({ deleted: true });
-  } catch {
-    return res.status(500).json({ error: "SERVER_ERROR" });
-  }
+  return res.status(404).json({ error: "NOT_FOUND" });
 });
 

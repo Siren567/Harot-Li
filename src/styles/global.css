@@ -596,9 +596,25 @@ textarea:focus-visible {
 
 /* Unified catalog: same column rhythm for every category (bracelets / keychains / etc.) */
 .studio-products-grid.studio-products-grid--uniform {
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
   align-items: stretch;
+}
+
+.studio-products-grid.studio-products-grid--uniform .studio-product-card {
+  width: 100%;
+}
+
+@media (max-width: 1024px) {
+  .studio-products-grid.studio-products-grid--uniform {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .studio-products-grid.studio-products-grid--uniform {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
 }
 
 .studio-products-grid.studio-products-grid--uniform .studio-subsection-title {
@@ -1083,6 +1099,77 @@ textarea:focus-visible {
   flex-wrap: wrap;
 }
 
+.studio-engraving-input-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.studio-engraving-input-wrap {
+  position: relative;
+  border: 1px solid #e9d9ca;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 72px 8px 10px;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+.studio-engraving-input-wrap.active,
+.studio-engraving-input-wrap:focus-within {
+  border-color: #9b6a45;
+  box-shadow: 0 0 0 2px rgba(155, 106, 69, .12);
+}
+
+.studio-engraving-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #3d2a1b;
+  font-size: .88rem;
+  font-family: inherit;
+  outline: none;
+  padding: 0;
+}
+
+.studio-engraving-input-meta {
+  margin-top: 4px;
+  font-size: .72rem;
+  color: #9b836f;
+  line-height: 1.35;
+}
+
+.studio-engraving-input-actions {
+  position: absolute;
+  left: 10px;
+  top: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.studio-icon-btn {
+  border: 0;
+  background: transparent;
+  color: #6f5644;
+  opacity: .6;
+  font-size: 17px;
+  line-height: 1;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  cursor: pointer;
+  transition: opacity .14s ease;
+}
+
+.studio-icon-btn:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.studio-icon-btn:disabled {
+  opacity: .32;
+  cursor: not-allowed;
+}
+
 .studio-engraving-list {
   display: flex;
   gap: 8px;
@@ -1197,36 +1284,159 @@ textarea:focus-visible {
 
 .studio-pay-row {
   grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 8px;
   max-width: 100%;
+}
+
+.studio-pay-row .studio-chip {
+  border-radius: 12px;
+  min-height: 44px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.studio-pay-row .studio-chip.active {
+  border-color: #8a5d3e;
+  background: linear-gradient(180deg, #fff8ef 0%, #f5e8d8 100%);
+  color: #3d2718;
+  box-shadow: 0 0 0 3px rgba(155, 106, 69, 0.2);
+}
+
+.studio-pay-row .studio-chip:disabled,
+.studio-pay-row .studio-chip[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #f7f1eb;
+  color: #947d69;
 }
 
 .studio-order-summary {
   overflow-wrap: anywhere;
   word-break: break-word;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .studio-order-summary h3 {
-  margin: 0 0 8px;
+  margin: 0;
 }
 
 .studio-order-summary p {
-  margin: 0 0 7px;
+  margin: 0;
   color: #6f5644;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
-.studio-order-summary hr {
-  border: none;
-  border-top: 1px solid #e9d9ca;
-  margin: 8px 0;
-}
-
 .studio-order-summary strong {
   color: #2c1b10;
+}
+
+.studio-summary-product-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #eadbcf;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fff 0%, #fdf8f2 100%);
+}
+
+.studio-summary-thumb {
+  width: 68px;
+  height: 68px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid #eadbcf;
+  flex-shrink: 0;
+  background: #f4ebe2;
+}
+
+.studio-summary-thumb--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8f7460;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.studio-summary-title-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.studio-summary-product-title {
+  font-size: 0.97rem;
+  line-height: 1.3;
+}
+
+.studio-summary-subtitle {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: #8f7460;
+}
+
+.studio-summary-section {
+  border: 1px solid #eadbcf;
+  border-radius: 12px;
+  background: #fffdfa;
+  padding: 10px 12px;
+}
+
+.studio-summary-section-title {
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  color: #8f7460;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.studio-summary-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.studio-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 0.85rem;
+  color: #7b604c;
+}
+
+.studio-summary-row strong {
+  text-align: left;
+}
+
+.studio-summary-row--stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.studio-summary-pricing {
+  border-top: 1px solid #e9d9ca;
+  margin-top: 2px;
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.studio-summary-row--total {
+  padding-top: 8px;
+  border-top: 1px dashed #e2d0c1;
+  font-size: 0.95rem;
 }
 
 .studio-success {

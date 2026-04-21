@@ -616,10 +616,17 @@ export function CategoriesPage() {
   }, [flat, selectedId, tree]);
 
   async function onSave(payload: any) {
+    console.log("[CategoriesPage] create/update request", {
+      mode: drawerMode,
+      id: editing?.id ?? null,
+      payload,
+    });
     if (drawerMode === "create") {
-      await apiFetch<{ category: Category }>("/api/categories", { method: "POST", body: JSON.stringify(payload) });
+      const out = await apiFetch<{ category: Category }>("/api/categories", { method: "POST", body: JSON.stringify(payload) });
+      console.log("[CategoriesPage] create response", out);
     } else if (editing) {
-      await apiFetch<{ category: Category }>(`/api/categories/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+      const out = await apiFetch<{ category: Category }>(`/api/categories/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
+      console.log("[CategoriesPage] update response", out);
     }
     await refresh();
   }
@@ -681,7 +688,9 @@ export function CategoriesPage() {
     const label = c.parentId ? "תת קטגוריה" : "קטגוריה";
     try {
       setDeleting(true);
+      console.log("[CategoriesPage] delete request", { id: c.id, name: c.name, parentId: c.parentId });
       const out = await apiFetch<{ deleted?: boolean }>(`/api/categories/${c.id}`, { method: "DELETE" });
+      console.log("[CategoriesPage] delete response", out);
       if (!out?.deleted) {
         throw { status: 500, error: "DELETE_FAILED" };
       }

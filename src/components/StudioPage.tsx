@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import type { StudioSubcategory } from "../constants/studioData";
 import { getApiBaseUrl } from "../lib/apiBase";
 import { loadBootstrapOnce, loadPublicProductsOnce } from "../lib/studioDataLoader";
-import { studioCategories, studioFonts, studioPayments, studioShippingMethods } from "../constants/studioData";
+import { studioCategories, studioFonts, studioShippingMethods } from "../constants/studioData";
 import CheckoutForm, { type CheckoutFormData } from "./checkout/CheckoutForm";
 
 type StudioPageProps = {
@@ -262,7 +262,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const engravingsRef = useRef(engravings);
   engravingsRef.current = engravings;
   const [activeEngravingId, setActiveEngravingId] = useState("engraving-1");
-  const [activeTextDraft, setActiveTextDraft] = useState("לנצח שלך");
   const [customerImageDataUrl, setCustomerImageDataUrl] = useState<string | null>(null);
   const customerImageInputRef = useRef<HTMLInputElement | null>(null);
   const [galleryModalUrl, setGalleryModalUrl] = useState<string | null>(null);
@@ -278,7 +277,14 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
 
   const [shippingId, setShippingId] = useState("home");
-  const [paymentId, setPaymentId] = useState("card");
+  const [paymentId, setPaymentId] = useState<"card" | "bit" | "paypal">("card");
+  const checkoutPaymentOptions: Array<{ id: "card" | "bit" | "paypal"; label: string; enabled: boolean; soon?: boolean }> = [
+    { id: "card", label: "כרטיס אשראי", enabled: true },
+    { id: "bit", label: "Bit", enabled: false, soon: true },
+    { id: "paypal", label: "PayPal", enabled: false, soon: true },
+  ];
+  const selectedPaymentMethod: "payplus" = "payplus";
+
   const objectRef = useRef<HTMLDivElement | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const apiBase = useMemo(() => getApiBaseUrl(), []);
@@ -296,22 +302,30 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     setEngravings((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
 
-  function addEngraving() {
+  function addEngraving(afterId?: string) {
     const id = `engraving-${Date.now()}`;
     setEngravings((prev) => {
       const idx = prev.length;
       const y = clampPercent(-18 + idx * 12);
-      const next = [...prev, { id, text: "שורה חדשה", font: "heebo", size: 26, x: 0, y }];
+      const newItem: EngravingItem = { id, text: "", font: "heebo", size: 26, x: 0, y };
+      const insertAt = afterId ? prev.findIndex((item) => item.id === afterId) + 1 : prev.length;
+      const next = [...prev];
+      next.splice(Math.max(0, insertAt), 0, newItem);
       queueMicrotask(() => setActiveEngravingId(id));
       return next;
     });
   }
 
-  function removeActiveEngraving() {
-    if (engravings.length <= 1 || !activeEngraving) return;
-    const next = engravings.filter((item) => item.id !== activeEngraving.id);
-    setEngravings(next);
-    setActiveEngravingId(next[0]?.id ?? "");
+  function removeEngraving(id: string) {
+    setEngravings((prev) => {
+      if (prev.length <= 1) return prev;
+      const idx = prev.findIndex((item) => item.id === id);
+      if (idx < 0) return prev;
+      const next = prev.filter((item) => item.id !== id);
+      const fallback = next[Math.min(idx, next.length - 1)]?.id ?? next[0]?.id ?? "";
+      queueMicrotask(() => setActiveEngravingId(fallback));
+      return next;
+    });
   }
 
   function clampPercent(value: number) {
@@ -353,14 +367,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     setActiveEngravingId(id);
     setDraggingId(id);
   }
-
-  // Only sync the textarea draft when switching which engraving box is active. Including `engravings`
-  // here re-ran the effect on every keystroke and could steal focus / reset caret in some cases.
-  useEffect(() => {
-    const selected =
-      engravingsRef.current.find((item) => item.id === activeEngravingId) ?? engravingsRef.current[0] ?? null;
-    setActiveTextDraft(selected?.text ?? "");
-  }, [activeEngravingId]);
 
   useEffect(() => {
     if (!draggingId) return;
@@ -638,7 +644,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             shippingMethodId: shippingId,
             orderNotes: notes.trim() || null,
             couponCode: appliedCoupon?.code || null,
-            paymentMethod: customer.paymentMethod ?? "cash",
+            paymentMethod: customer.paymentMethod ?? "payplus",
             items: [
               {
                 name: `${activeProduct.title} (${activeColor.name})`,
@@ -870,19 +876,50 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           ) : null}
           <div className="studio-custom-layout">
             <aside className="studio-control-panel">
-              <label>
-                טקסט לחריטה (הבוקס הפעיל)
-                <textarea
-                  rows={4}
-                  value={activeTextDraft}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setEngraveFitError(null);
-                    setActiveTextDraft(value);
-                    if (activeEngraving) updateEngraving(activeEngraving.id, { text: value });
-                  }}
-                />
-              </label>
+              <div>
+                <div className="studio-field-hint">טקסט לחריטה</div>
+                <div className="studio-engraving-input-list">
+                  {engravings.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className={`studio-engraving-input-wrap ${activeEngravingId === item.id ? "active" : ""}`}
+                    >
+                      <input
+                        className="studio-engraving-input"
+                        value={item.text}
+                        placeholder="הכנס טקסט לחריטה"
+                        onFocus={() => setActiveEngravingId(item.id)}
+                        onChange={(e) => {
+                          setEngraveFitError(null);
+                          updateEngraving(item.id, { text: e.target.value });
+                        }}
+                      />
+                      <div className="studio-engraving-input-meta">טקסט {idx + 1}: {item.text.trim() || "הכנס טקסט לחריטה"}</div>
+                      <div className="studio-engraving-input-actions">
+                        <button
+                          type="button"
+                          className="studio-icon-btn"
+                          aria-label="הוסף שדה טקסט"
+                          title="הוסף שדה טקסט"
+                          onClick={() => addEngraving(item.id)}
+                        >
+                          +
+                        </button>
+                        <button
+                          type="button"
+                          className="studio-icon-btn"
+                          aria-label="מחק שדה טקסט"
+                          title="מחק שדה טקסט"
+                          onClick={() => removeEngraving(item.id)}
+                          disabled={engravings.length <= 1}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <label>
                 פונט
                 <select
@@ -913,12 +950,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 />
               </label>
               <div className="studio-engraving-tools">
-                <button type="button" className="studio-chip" onClick={addEngraving}>
-                  הוסף בוקס טקסט / אימוג'י
-                </button>
-                <button type="button" className="studio-chip light" onClick={removeActiveEngraving} disabled={engravings.length <= 1}>
-                  מחק בוקס נבחר
-                </button>
                 <button type="button" className="studio-chip light" onClick={autoFitEngravingSizes} title="מקטין או מגדיל כך שכל הטקסט ייכנס לתכשיט">
                   התאמת גודל אוטומטית
                 </button>
@@ -928,18 +959,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   {engraveFitError}
                 </p>
               ) : null}
-              <div className="studio-engraving-list">
-                {engravings.map((item, idx) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`studio-chip ${activeEngravingId === item.id ? "active" : ""}`}
-                    onClick={() => setActiveEngravingId(item.id)}
-                  >
-                    טקסט {idx + 1}: {item.text.trim() || "ריק"}
-                  </button>
-                ))}
-              </div>
               {activeProduct ? (
                 <div className="studio-chip-row studio-color-pick-row" aria-label="צבע מוצר">
                   {activeProduct.colors.map((c, i) => (
@@ -1091,6 +1110,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               <CheckoutForm
                 id="studio-checkout-form"
                 className="studio-checkout-form"
+                paymentMethod={selectedPaymentMethod}
                 disabled={submitting || !canPurchase}
                 onSubmit={submitOrder}
               />
@@ -1112,39 +1132,118 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 ))}
               </div>
               <div className="studio-pay-row">
-                {studioPayments.map((payment) => (
+                {checkoutPaymentOptions.map((payment) => (
                   <button
                     type="button"
                     key={payment.id}
                     className={`studio-chip ${paymentId === payment.id ? "active" : ""}`}
-                    onClick={() => setPaymentId(payment.id)}
+                    onClick={() => {
+                      if (!payment.enabled) return;
+                      setPaymentId(payment.id);
+                    }}
+                    disabled={!payment.enabled}
+                    aria-disabled={!payment.enabled}
                   >
                     {payment.label}
+                    {!payment.enabled && payment.soon ? " (בקרוב)" : ""}
                   </button>
                 ))}
               </div>
             </div>
             <aside className="studio-order-summary">
               <h3>סיכום הזמנה</h3>
-              <p>{activeProduct?.title ?? "—"}</p>
-              <p>צבע: {activeColor?.name ?? "—"}</p>
-              <p>חריטה: {engravingSummary || "ללא טקסט"}</p>
-              <p>כמות: {qty}</p>
-              {activeColor ? (
-                <p style={{ fontSize: "0.85rem", opacity: 0.85 }}>
-                  מלאי זמין לווריאציה: {activeColor.stock}
-                </p>
+              <div className="studio-summary-product-head">
+                {activeProduct?.image ? (
+                  <img src={activeProduct.image} alt={activeProduct.title} className="studio-summary-thumb" />
+                ) : (
+                  <div className="studio-summary-thumb studio-summary-thumb--placeholder">אין תמונה</div>
+                )}
+                <div className="studio-summary-title-block">
+                  <strong className="studio-summary-product-title">{activeProduct?.title ?? "מוצר לא נבחר"}</strong>
+                  {activeColor ? <span className="studio-summary-subtitle">{activeColor.name}</span> : null}
+                </div>
+              </div>
+
+              <div className="studio-summary-section">
+                <div className="studio-summary-section-title">פרטי המוצר</div>
+                <div className="studio-summary-rows">
+                  <div className="studio-summary-row">
+                    <span>כמות</span>
+                    <strong>{qty}</strong>
+                  </div>
+                  {activeColor ? (
+                    <div className="studio-summary-row">
+                      <span>צבע</span>
+                      <strong>{activeColor.name}</strong>
+                    </div>
+                  ) : null}
+                  {activeColor?.material ? (
+                    <div className="studio-summary-row">
+                      <span>חומר</span>
+                      <strong>{activeColor.material}</strong>
+                    </div>
+                  ) : null}
+                  {activeColor?.pendantType ? (
+                    <div className="studio-summary-row">
+                      <span>סוג תליון</span>
+                      <strong>{activeColor.pendantType}</strong>
+                    </div>
+                  ) : null}
+                  <div className="studio-summary-row">
+                    <span>משלוח</span>
+                    <strong>{shipping.label}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {engravingSummary || notes.trim() ? (
+                <div className="studio-summary-section">
+                  <div className="studio-summary-section-title">התאמה אישית</div>
+                  <div className="studio-summary-rows">
+                    {engravingSummary ? (
+                      <div className="studio-summary-row studio-summary-row--stack">
+                        <span>חריטה</span>
+                        <strong>{engravingSummary}</strong>
+                      </div>
+                    ) : null}
+                    {notes.trim() ? (
+                      <div className="studio-summary-row studio-summary-row--stack">
+                        <span>הערות</span>
+                        <strong>{notes.trim()}</strong>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
               ) : null}
-              <p>משלוח: {shipping.label}</p>
+
               {!canPurchase ? <p style={{ color: "#b42318", fontWeight: 700 }}>אזל מהמלאי - לא ניתן להשלים הזמנה</p> : null}
               {activeColor && qty > activeColor.stock ? (
                 <p style={{ color: "#b42318", fontWeight: 700 }}>הכמות גבוהה מהמלאי הזמין</p>
               ) : null}
-              <hr />
-              <p>ביניים: {shekel(subtotal)}</p>
-              <p>משלוח: {effectiveShippingFee === 0 ? "חינם" : shekel(effectiveShippingFee)}</p>
-              {appliedCoupon ? <p>הנחה ({appliedCoupon.code}): -{shekel(discount)}</p> : null}
-              <strong>סה"כ לתשלום: {shekel(total)}</strong>
+              <div className="studio-summary-pricing">
+                <div className="studio-summary-row">
+                  <span>מחיר פריט</span>
+                  <strong>{shekel(activeColor?.price ?? activeProduct?.price ?? 0)}</strong>
+                </div>
+                <div className="studio-summary-row">
+                  <span>ביניים</span>
+                  <strong>{shekel(subtotal)}</strong>
+                </div>
+                <div className="studio-summary-row">
+                  <span>משלוח</span>
+                  <strong>{effectiveShippingFee === 0 ? "חינם" : shekel(effectiveShippingFee)}</strong>
+                </div>
+                {appliedCoupon ? (
+                  <div className="studio-summary-row">
+                    <span>הנחה ({appliedCoupon.code})</span>
+                    <strong>-{shekel(discount)}</strong>
+                  </div>
+                ) : null}
+                <div className="studio-summary-row studio-summary-row--total">
+                  <span>סה"כ לתשלום</span>
+                  <strong>{shekel(total)}</strong>
+                </div>
+              </div>
 
               <div style={{ marginTop: "12px" }}>
                 <label style={{ display: "block", fontSize: "12px", opacity: 0.85 }}>

@@ -23,6 +23,7 @@ type PaymentStatusKey = "paid" | "unpaid";
 export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [hoveredChartIndex, setHoveredChartIndex] = useState<number | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeChart, setActiveChart] = useState<"orders" | "visits" | "newCustomers" | "revenue">("orders");
   const [snapshot, setSnapshot] = useState<{
@@ -109,6 +110,10 @@ export function DashboardPage() {
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [loadDashboard]);
+
+  useEffect(() => {
+    setHoveredChartIndex(null);
+  }, [activeChart, snapshot]);
 
   const stats = snapshot?.stats ?? {
     totalRevenue: 0,
@@ -312,22 +317,48 @@ export function DashboardPage() {
   const chartSeries = selectedChart.series.length > 0 ? selectedChart.series : [0, 0, 0, 0, 0, 0, 0];
   const chartDates = selectedChart.dates.length === chartSeries.length ? selectedChart.dates : snapshot?.dailyOrders?.map((d) => d.date) ?? [];
   const denom = Math.max(1, chartSeries.length - 1);
-  const maxPoint = Math.max(1, ...chartSeries);
+  const rawMaxPoint = Math.max(0, ...chartSeries);
+  const rawMinPoint = Math.min(...chartSeries);
+  const spread = rawMaxPoint - rawMinPoint;
+  const axisPadding = spread > 0 ? spread * 0.18 : Math.max(1, rawMaxPoint * 0.4);
+  const scaledMin = Math.max(0, rawMinPoint - axisPadding);
+  const scaledMax = Math.max(1, rawMaxPoint + axisPadding);
+  const scaledRange = Math.max(1, scaledMax - scaledMin);
+  const maxPoint = rawMaxPoint;
   const sumSeries = chartSeries.reduce((a, b) => a + b, 0);
   const avgSeries = chartSeries.length ? sumSeries / chartSeries.length : 0;
   const chartGradId = `dash-chart-fill-${activeChart}`;
+  const chartStrokeGradId = `dash-chart-stroke-${activeChart}`;
   const yTop = 6;
   const yBottom = 88;
   const yRange = yBottom - yTop;
-  const chartPath = chartSeries
-    .map((v, i) => {
-      const x = (i / denom) * 100;
-      const ratio = maxPoint > 0 ? v / maxPoint : 0;
-      const y = yBottom - ratio * yRange;
-      return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-    })
-    .join(" ");
+  const chartPoints = chartSeries.map((v, i) => {
+    const x = (i / denom) * 100;
+    const ratio = (v - scaledMin) / scaledRange;
+    const y = yBottom - Math.max(0, Math.min(1, ratio)) * yRange;
+    return { x, y, value: v, date: chartDates[i] };
+  });
+  const smoothPathFromPoints = (points: Array<{ x: number; y: number }>) => {
+    if (points.length === 0) return "";
+    if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+    const tension = 0.24;
+    let out = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const prev = points[i - 1] ?? points[i];
+      const curr = points[i];
+      const next = points[i + 1];
+      const after = points[i + 2] ?? next;
+      const cp1x = curr.x + (next.x - prev.x) * tension;
+      const cp1y = curr.y + (next.y - prev.y) * tension;
+      const cp2x = next.x - (after.x - curr.x) * tension;
+      const cp2y = next.y - (after.y - curr.y) * tension;
+      out += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${next.x} ${next.y}`;
+    }
+    return out;
+  };
+  const chartPath = smoothPathFromPoints(chartPoints);
   const chartAreaPath = `${chartPath} L 100 ${yBottom} L 0 ${yBottom} Z`;
+  const hoveredPoint = hoveredChartIndex != null ? chartPoints[hoveredChartIndex] ?? null : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -529,36 +560,100 @@ export function DashboardPage() {
               marginTop: "14px",
               borderRadius: "12px",
               border: "1px solid var(--border-subtle)",
-              background: "linear-gradient(180deg, var(--surface) 0%, rgba(0,0,0,0.12) 100%)",
+              background: "linear-gradient(180deg, rgba(20,20,20,0.28) 0%, rgba(0,0,0,0.24) 100%)",
               padding: "10px 12px 6px",
             }}
           >
-            <div style={{ height: "200px", position: "relative" }}>
+            <div style={{ height: "220px", position: "relative" }}>
               <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%", display: "block" }}>
                 <defs>
                   <linearGradient id={chartGradId} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="rgba(201,169,110,0.42)" />
-                    <stop offset="100%" stopColor="rgba(201,169,110,0.03)" />
+                    <stop offset="0%" stopColor="rgba(201,169,110,0.35)" />
+                    <stop offset="55%" stopColor="rgba(201,169,110,0.16)" />
+                    <stop offset="100%" stopColor="rgba(201,169,110,0.02)" />
+                  </linearGradient>
+                  <linearGradient id={chartStrokeGradId} x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#f0d8ad" />
+                    <stop offset="100%" stopColor="#c9a96e" />
                   </linearGradient>
                 </defs>
                 {[22.75, 39.5, 56.25, 73].map((g) => (
                   <line key={g} x1="0" y1={g} x2="100" y2={g} stroke="rgba(255,255,255,0.06)" strokeWidth="0.45" vectorEffect="non-scaling-stroke" />
                 ))}
+                {hoveredPoint ? (
+                  <line
+                    x1={hoveredPoint.x}
+                    y1={yTop}
+                    x2={hoveredPoint.x}
+                    y2={yBottom}
+                    stroke="rgba(201,169,110,0.38)"
+                    strokeDasharray="1.5 1.8"
+                    strokeWidth="0.7"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ) : null}
                 <text x="1" y="12" fill="rgba(255,255,255,0.45)" fontSize="5" fontFamily="system-ui, sans-serif">
-                  {activeChart === "revenue" ? fmtMoney(maxPoint) : String(maxPoint)}
+                  {activeChart === "revenue" ? fmtMoney(Math.round(scaledMax)) : String(Math.round(scaledMax))}
+                </text>
+                <text x="1" y="52" fill="rgba(255,255,255,0.34)" fontSize="4.7" fontFamily="system-ui, sans-serif">
+                  {activeChart === "revenue" ? fmtMoney(Math.round((scaledMax + scaledMin) / 2)) : String(Math.round((scaledMax + scaledMin) / 2))}
                 </text>
                 <text x="1" y="92" fill="rgba(255,255,255,0.45)" fontSize="5" fontFamily="system-ui, sans-serif">
-                  0
+                  {activeChart === "revenue" ? fmtMoney(Math.round(scaledMin)) : String(Math.round(scaledMin))}
                 </text>
                 <path d={chartAreaPath} fill={`url(#${chartGradId})`} />
-                <path d={chartPath} fill="none" stroke="var(--primary)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
-                {chartSeries.map((v, i) => {
-                  const x = (i / denom) * 100;
-                  const ratio = maxPoint > 0 ? v / maxPoint : 0;
-                  const y = yBottom - ratio * yRange;
-                  return <circle key={i} cx={x} cy={y} r="1.6" fill="var(--primary)" stroke="var(--card)" strokeWidth="0.5" />;
+                <path d={chartPath} fill="none" stroke={`url(#${chartStrokeGradId})`} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                {chartPoints.map((point, i) => {
+                  const isHovered = hoveredChartIndex === i;
+                  const showDot = isHovered || chartPoints.length <= 10;
+                  if (!showDot) return null;
+                  return (
+                    <circle
+                      key={i}
+                      cx={point.x}
+                      cy={point.y}
+                      r={isHovered ? "2.1" : "1.2"}
+                      fill="#e9c98d"
+                      stroke="rgba(20,20,20,0.9)"
+                      strokeWidth={isHovered ? "0.75" : "0.5"}
+                    />
+                  );
                 })}
+                {chartPoints.map((point, i) => (
+                  <rect
+                    key={`hit-${i}`}
+                    x={Math.max(0, point.x - 50 / chartPoints.length)}
+                    y={0}
+                    width={100 / chartPoints.length}
+                    height={100}
+                    fill="transparent"
+                    onMouseEnter={() => setHoveredChartIndex(i)}
+                    onMouseLeave={() => setHoveredChartIndex(null)}
+                  />
+                ))}
               </svg>
+              {hoveredPoint ? (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "8px",
+                    insetInlineStart: "8px",
+                    background: "rgba(16, 16, 16, 0.82)",
+                    border: "1px solid rgba(201,169,110,0.4)",
+                    color: "var(--foreground)",
+                    borderRadius: "10px",
+                    padding: "7px 9px",
+                    fontSize: "11px",
+                    lineHeight: 1.35,
+                    backdropFilter: "blur(4px)",
+                  }}
+                >
+                  <div style={{ color: "var(--muted-foreground)" }}>{hoveredPoint.date ? fmtChartDay(hoveredPoint.date) : "—"}</div>
+                  <strong style={{ color: "#f2d8aa", fontSize: "12px" }}>
+                    {activeChart === "revenue" ? fmtMoney(hoveredPoint.value) : Number(hoveredPoint.value).toLocaleString("he-IL")}
+                  </strong>
+                </div>
+              ) : null}
             </div>
             <div
               style={{
