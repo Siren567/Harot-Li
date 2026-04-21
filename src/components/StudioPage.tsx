@@ -246,7 +246,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [greetingCard] = useState(false);
   const [giftGreetingText, setGiftGreetingText] = useState("");
   const [showProductColorPicker, setShowProductColorPicker] = useState(false);
-  const [textSizePreset, setTextSizePreset] = useState<"s" | "m" | "l">("m");
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<null | { code: string; discountAmount: number; freeShipping: boolean }>(null);
   const [couponMsg, setCouponMsg] = useState<string | null>(null);
@@ -280,14 +279,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   function updateEngraving(id: string, patch: Partial<EngravingItem>) {
     setEngravings((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
-  }
-
-  function applyTextSizePreset(next: "s" | "m" | "l") {
-    setTextSizePreset(next);
-    const targetSize = next === "s" ? 20 : next === "l" ? 34 : 26;
-    if (activeEngraving) {
-      updateEngraving(activeEngraving.id, { size: targetSize });
-    }
   }
 
   function addEngraving() {
@@ -1027,7 +1018,13 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   </div>
                 </div>
 
-                <div className={`studio-personalization-tile ${showProductColorPicker ? "is-active" : ""}`} style={{ position: "relative" }}>
+                <div
+                  className={`studio-personalization-tile studio-personalization-tile--color ${showProductColorPicker ? "is-active" : ""}`}
+                  style={{
+                    position: "relative",
+                    ["--selected-color" as string]: activeColor?.swatch ?? "#d4af37",
+                  }}
+                >
                   <button
                     type="button"
                     className="studio-personalization-btn"
@@ -1068,31 +1065,57 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   ) : null}
                 </div>
 
-                <div className={`studio-personalization-tile studio-personalization-tile--size ${textSizePreset ? "is-active" : ""}`}>
-                  <button
-                    type="button"
-                    className="studio-personalization-btn"
-                    onClick={() => {
-                      const next = textSizePreset === "s" ? "m" : textSizePreset === "m" ? "l" : "s";
-                      applyTextSizePreset(next);
-                    }}
-                    aria-label="בחירת גודל טקסט"
-                    title="בחירת גודל טקסט"
-                  >
-                    <span className="studio-personalization-label">גודל</span>
-                    <span className="studio-size-pill">{textSizePreset.toUpperCase()}</span>
-                  </button>
+                <div className={`studio-personalization-tile studio-personalization-tile--size ${activeEngraving ? "is-active" : ""}`}>
+                  <div className="studio-personalization-size-head">
+                    <span className="studio-personalization-label">גודל טקסט</span>
+                    <span className="studio-personalization-value">{Math.round(activeEngraving?.size ?? 26)}px</span>
+                  </div>
+                  <div className="studio-size-controls">
+                    <input
+                      type="range"
+                      min={ENGRAVE_MIN_PX}
+                      max={ENGRAVE_MAX_PX}
+                      step={1}
+                      value={Math.round(activeEngraving?.size ?? 26)}
+                      onChange={(e) => {
+                        if (!activeEngraving) return;
+                        setEngraveFitError(null);
+                        const next = Math.min(ENGRAVE_MAX_PX, Math.max(ENGRAVE_MIN_PX, Number(e.target.value) || ENGRAVE_MIN_PX));
+                        updateEngraving(activeEngraving.id, { size: next });
+                      }}
+                      className="studio-size-range"
+                      aria-label="גודל טקסט"
+                    />
+                    <input
+                      type="number"
+                      min={ENGRAVE_MIN_PX}
+                      max={ENGRAVE_MAX_PX}
+                      step={1}
+                      value={Math.round(activeEngraving?.size ?? 26)}
+                      onChange={(e) => {
+                        if (!activeEngraving) return;
+                        setEngraveFitError(null);
+                        const raw = Number(e.target.value);
+                        const next = Number.isFinite(raw) ? Math.min(ENGRAVE_MAX_PX, Math.max(ENGRAVE_MIN_PX, raw)) : ENGRAVE_MIN_PX;
+                        updateEngraving(activeEngraving.id, { size: next });
+                      }}
+                      className="studio-size-input"
+                      aria-label="הקלדת גודל טקסט"
+                    />
+                  </div>
                 </div>
 
                 <div className={`studio-personalization-tile studio-personalization-tile--gift ${giftWrap ? "is-active" : ""}`}>
-                  <label className="studio-gift-toggle-row">
-                    <input
-                      type="checkbox"
-                      checked={giftWrap}
-                      onChange={(e) => setGiftWrap(e.target.checked)}
-                    />
+                  <button
+                    type="button"
+                    className="studio-personalization-btn studio-personalization-btn--gift"
+                    onClick={() => setGiftWrap((prev) => !prev)}
+                    aria-label="אריזת מתנה"
+                    title="אריזת מתנה"
+                  >
                     <span className="studio-personalization-label">אריזת מתנה</span>
-                  </label>
+                    <span className="studio-personalization-value">{giftWrap ? "פעיל" : "כבוי"}</span>
+                  </button>
                   <div className={`studio-gift-reveal-inline ${giftWrap ? "open" : ""}`} aria-hidden={!giftWrap}>
                     {giftWrap ? (
                       <textarea
@@ -1109,7 +1132,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               </div>
               {activeProduct?.allowCustomerImageUpload ? (
                 <div className="studio-customer-photo-block">
-                  <div className="studio-field-hint">תמונה אישית (אופציונלי)</div>
+                  <div className="studio-field-hint">תמונה אישית</div>
                   <input
                     ref={customerImageInputRef}
                     type="file"
@@ -1141,12 +1164,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     }}
                   >
                     <strong>{customerImageDataUrl ? "התמונה נטענה בהצלחה" : "גרור תמונה לכאן"}</strong>
-                    <span>{customerImageDataUrl ? "אפשר לגרור תמונה אחרת או ללחוץ להחלפה" : "או לחץ כדי לבחור מהמחשב"}</span>
+                    <span>{customerImageDataUrl ? "אפשר לגרור תמונה אחרת או ללחוץ להחלפה" : "PNG, JPG, JPEG עד 10MB"}</span>
                   </button>
                   <div className="studio-customer-photo-actions">
-                    <button type="button" className="studio-chip" onClick={() => customerImageInputRef.current?.click()}>
-                      {customerImageDataUrl ? "החלפת תמונה" : "העלאת תמונה"}
-                    </button>
                     {customerImageDataUrl ? (
                       <button type="button" className="studio-chip light" onClick={() => setGalleryModalUrl(customerImageDataUrl)} title="תצוגה מקדימה" aria-label="תצוגה מקדימה">
                         <Eye size={14} />
