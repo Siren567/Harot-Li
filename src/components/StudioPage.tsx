@@ -513,21 +513,38 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   }, [normalizedTab]);
 
   const filteredProducts = useMemo(() => {
-    return runtimeProducts.filter((p) => {
-      const inTab = tabMatchesMainCategoryId
+    // Debug trace: helps diagnose "no products in this category" without touching the backend.
+    // Safe to keep — logs only when in DEV mode.
+    const traceOn = typeof import.meta !== "undefined" && (import.meta as any).env?.DEV;
+    const byTab = runtimeProducts.filter((p) => {
+      return tabMatchesMainCategoryId
         ? p.mainCategoryId === category
         : category === p.category || normalizeCategoryKey(p.category) === normalizedTab;
+    });
 
-      if (!inTab) return false;
-
-      if (normalizedTab === "couple") {
-        return p.subcategory === "couple";
-      }
-      if ((normalizedTab === "bracelets" || normalizedTab === "necklaces") && !p.subcategory) {
-        return false;
-      }
+    const final = byTab.filter((p) => {
+      // "couple" tab is explicit: only couple-audience products belong here.
+      if (normalizedTab === "couple") return p.subcategory === "couple";
+      // For bracelets/necklaces we used to drop products with a null audience, which
+      // hid every seeded row that had no CategoryProduct link to a men/women sub-category.
+      // Keep them: the `groupedProducts` memo already routes null-audience rows into
+      // the `others` bucket so they remain visible under the tab.
       return true;
     });
+
+    if (traceOn) {
+      // eslint-disable-next-line no-console
+      console.log("[studio/filter]", {
+        total: runtimeProducts.length,
+        category,
+        normalizedTab,
+        afterCategory: byTab.length,
+        afterAudience: final.length,
+        sample: final.slice(0, 3).map((p) => ({ id: p.id, title: p.title, audience: p.subcategory })),
+      });
+    }
+
+    return final;
   }, [category, runtimeProducts, normalizedTab, tabMatchesMainCategoryId]);
 
   const groupedProducts = useMemo(() => {
