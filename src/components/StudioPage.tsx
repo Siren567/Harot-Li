@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Eye, Palette, Plus, Smile, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Eye, Gift, Palette, Plus, Smile, Trash2 } from "lucide-react";
 import EmojiPicker, { type EmojiClickData } from "emoji-picker-react";
 import type { StudioSubcategory } from "../constants/studioData";
 import { getApiBaseUrl } from "../lib/apiBase";
 import { loadBootstrapOnce, loadPublicProductsOnce } from "../lib/studioDataLoader";
 import { studioCategories, studioFonts, studioShippingMethods } from "../constants/studioData";
 import CheckoutForm, { type CheckoutFormData } from "./checkout/CheckoutForm";
+import Pendant3DPreview from "./Pendant3DPreview";
 
 type StudioPageProps = {
   onBackToLanding: () => void;
@@ -113,9 +114,8 @@ function inferColorKeyFromLabel(raw: string | null | undefined): ColorKey | null
 
 function buildStudioColors(p: PublicProduct): StudioColorRow[] {
   const variants = Array.isArray(p.variants) ? p.variants : [];
-  const allowed = new Set(
-    (p.studioColors ?? []).map((t) => tokenToColorKey(String(t))).filter((k): k is ColorKey => Boolean(k))
-  );
+  const allowedOrdered = (p.studioColors ?? []).map((t) => tokenToColorKey(String(t))).filter((k): k is ColorKey => Boolean(k));
+  const allowed = new Set(allowedOrdered);
 
   if (variants.length > 0) {
     const mapped: Array<StudioColorRow | null> = variants.map((v) => {
@@ -139,7 +139,17 @@ function buildStudioColors(p: PublicProduct): StudioColorRow[] {
       return row;
     });
     const rows = mapped.filter((x): x is StudioColorRow => x !== null);
-    if (rows.length > 0) return rows;
+    if (rows.length > 0) {
+      if (allowedOrdered.length === 0) return rows;
+      return [...rows].sort((a, b) => {
+        const ai = a.colorKey ? allowedOrdered.indexOf(a.colorKey) : -1;
+        const bi = b.colorKey ? allowedOrdered.indexOf(b.colorKey) : -1;
+        const normA = ai === -1 ? Number.MAX_SAFE_INTEGER : ai;
+        const normB = bi === -1 ? Number.MAX_SAFE_INTEGER : bi;
+        if (normA !== normB) return normA - normB;
+        return 0;
+      });
+    }
   }
 
   const onlyKeys = (p.studioColors ?? []).map((t) => tokenToColorKey(String(t))).filter((k): k is ColorKey => Boolean(k));
@@ -172,32 +182,6 @@ function getProductTotalStock(p: PublicProduct, colors: StudioColorRow[]): numbe
     return colors.reduce((sum, c) => sum + Math.max(0, Number(c.stock) || 0), 0);
   }
   return Math.max(0, Number(p.stock) || 0);
-}
-
-function pendantShapeClassName(pendantType: string | null | undefined): string {
-  const t = String(pendantType ?? "").trim();
-  if (!t) return "";
-  if (t.includes("לב")) return "pendant-heart";
-  if (t.includes("עיגול")) return "pendant-circle";
-  if (t.includes("ריבוע")) return "pendant-square";
-  if (t.includes("מלבן")) return "pendant-bar";
-  return "";
-}
-
-function mockupShapeClassName(category: string | null | undefined, pendantType: string | null | undefined, title?: string | null): string {
-  const c = String(category ?? "").trim().toLowerCase();
-  const hint = `${String(pendantType ?? "")} ${String(title ?? "")}`.toLowerCase();
-
-  if (hint.includes("לב")) return "pendant-heart";
-  if (hint.includes("עיגול")) return "pendant-circle";
-  if (hint.includes("ריבוע")) return "pendant-square";
-  if (hint.includes("מלבן") || hint.includes("bar") || hint.includes("plate") || hint.includes("לוחית")) return "pendant-tag";
-
-  if (c === "bracelets") return "bracelets";
-  if (c === "necklaces") return "pendant-tag";
-  if (c === "keychains") return "keychains";
-
-  return pendantShapeClassName(pendantType);
 }
 
 const ENGRAVE_MIN_PX = 8;
@@ -261,9 +245,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   ];
   const selectedPaymentMethod: "payplus" = "payplus";
 
-  const objectRef = useRef<HTMLDivElement | null>(null);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [rotatingMeta, setRotatingMeta] = useState<{ id: string; startPointerAngle: number; startItemAngle: number } | null>(null);
   const [emojiPickerForId, setEmojiPickerForId] = useState<string | null>(null);
   const personalizationRef = useRef<HTMLDivElement | null>(null);
   const apiBase = useMemo(() => getApiBaseUrl(), []);
@@ -279,6 +260,10 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   function updateEngraving(id: string, patch: Partial<EngravingItem>) {
     setEngravings((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function clampPercent(value: number) {
+    return Math.max(-45, Math.min(45, value));
   }
 
   function addEngraving() {
@@ -317,85 +302,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   function onEmojiPicked(id: string, emojiData: EmojiClickData) {
     appendEmojiToEngraving(id, emojiData.emoji);
   }
-
-  function clampPercent(value: number) {
-    return Math.max(-45, Math.min(45, value));
-  }
-
-  function startDragEngraving(id: string) {
-    setActiveEngravingId(id);
-    setDraggingId(id);
-  }
-
-  function pointerAngleForEngraving(item: EngravingItem, event: PointerEvent | React.PointerEvent<HTMLElement>) {
-    const target = objectRef.current;
-    if (!target) return 0;
-    const rect = target.getBoundingClientRect();
-    const cx = rect.left + rect.width * (0.5 + item.x / 100);
-    const cy = rect.top + rect.height * (0.5 + item.y / 100);
-    return (Math.atan2(event.clientY - cy, event.clientX - cx) * 180) / Math.PI;
-  }
-
-  function startRotateEngraving(event: React.PointerEvent<HTMLElement>, id: string) {
-    event.stopPropagation();
-    const item = engravingsRef.current.find((x) => x.id === id);
-    if (!item) return;
-    setActiveEngravingId(id);
-    setRotatingMeta({
-      id,
-      startPointerAngle: pointerAngleForEngraving(item, event),
-      startItemAngle: Number(item.angle) || 0,
-    });
-  }
-
-  useEffect(() => {
-    if (!draggingId) return;
-    let rafId: number | null = null;
-    let pending: { x: number; y: number } | null = null;
-    const flush = () => {
-      rafId = null;
-      if (!pending || !draggingId) return;
-      updateEngraving(draggingId, pending);
-      pending = null;
-    };
-    const onMove = (event: PointerEvent) => {
-      const target = objectRef.current;
-      if (!target) return;
-      const rect = target.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
-      const x = clampPercent(((event.clientX - rect.left) / rect.width) * 100 - 50);
-      const y = clampPercent(((event.clientY - rect.top) / rect.height) * 100 - 50);
-      pending = { x, y };
-      if (rafId == null) rafId = requestAnimationFrame(flush);
-    };
-    const onUp = () => setDraggingId(null);
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      if (rafId != null) cancelAnimationFrame(rafId);
-    };
-  }, [draggingId]);
-
-  useEffect(() => {
-    if (!rotatingMeta) return;
-    const onMove = (event: PointerEvent) => {
-      const item = engravingsRef.current.find((x) => x.id === rotatingMeta.id);
-      if (!item) return;
-      const currentPointerAngle = pointerAngleForEngraving(item, event);
-      const delta = currentPointerAngle - rotatingMeta.startPointerAngle;
-      const nextAngle = rotatingMeta.startItemAngle + delta;
-      updateEngraving(rotatingMeta.id, { angle: nextAngle });
-    };
-    const onUp = () => setRotatingMeta(null);
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  }, [rotatingMeta]);
 
   useEffect(() => {
     if (!galleryModalUrl) return;
@@ -494,14 +400,13 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     ? activeProduct.colors[selectedColorByProduct[activeProduct.id] ?? 0] ?? activeProduct.colors[0]
     : null;
 
-  const pendantExtraClass = useMemo(
-    () => mockupShapeClassName(activeProduct?.category, activeColor?.pendantType, activeProduct?.title),
-    [activeColor?.pendantType, activeProduct?.category, activeProduct?.title]
-  );
-
   const galleryUrls = activeProduct?.images?.length ? activeProduct.images : activeProduct?.image ? [activeProduct.image] : [];
   /** תמונת הרקע בתוך מודל החריטה — תמיד התמונה הראשית; שאר התמונות נצפות בגלריה למטה ובפופאפ בלבד. */
   const engraveStageImageUrl = galleryUrls[selectedGalleryIndex] ?? galleryUrls[0] ?? activeProduct?.image ?? null;
+  const engravingPreviewText = useMemo(
+    () => engravings.map((item) => item.text.trim()).filter(Boolean).slice(0, 3).join("\n"),
+    [engravings]
+  );
 
   useEffect(() => {
     setSelectedGalleryIndex(0);
@@ -1015,6 +920,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                         </option>
                       ))}
                     </select>
+                    <ChevronDown size={14} className="studio-font-chevron" aria-hidden />
                   </div>
                 </div>
 
@@ -1035,7 +941,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     <Palette size={16} />
                     <span className="studio-personalization-label">צבע</span>
                     <span
-                      className="studio-personalization-dot"
+                      className="studio-personalization-dot studio-personalization-dot--large"
                       style={{ background: activeColor?.swatch ?? "linear-gradient(135deg,#111827,#d4af37)" }}
                       aria-hidden
                     />
@@ -1055,9 +961,10 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                             }}
                             aria-label={`בחר צבע ${c.name}`}
                             title={c.name}
-                            style={{ background: c.swatch }}
+                            style={{ ["--option-color" as string]: c.swatch }}
                           >
-                            <span>{c.name}</span>
+                            <span className="studio-product-color-option-dot" aria-hidden />
+                            <span className="studio-product-color-option-label">{c.name}</span>
                           </button>
                         ))}
                       </div>
@@ -1068,7 +975,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 <div className={`studio-personalization-tile studio-personalization-tile--size ${activeEngraving ? "is-active" : ""}`}>
                   <div className="studio-personalization-size-head">
                     <span className="studio-personalization-label">גודל טקסט</span>
-                    <span className="studio-personalization-value">{Math.round(activeEngraving?.size ?? 26)}px</span>
+                    <span className="studio-size-value">{Math.round(activeEngraving?.size ?? 26)}px</span>
                   </div>
                   <div className="studio-size-controls">
                     <input
@@ -1113,7 +1020,10 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     aria-label="אריזת מתנה"
                     title="אריזת מתנה"
                   >
-                    <span className="studio-personalization-label">אריזת מתנה</span>
+                    <span className="studio-gift-head">
+                      <Gift size={15} aria-hidden />
+                      <span className="studio-personalization-label">אריזת מתנה</span>
+                    </span>
                     <span className="studio-personalization-value">{giftWrap ? "פעיל" : "כבוי"}</span>
                   </button>
                   <div className={`studio-gift-reveal-inline ${giftWrap ? "open" : ""}`} aria-hidden={!giftWrap}>
@@ -1216,55 +1126,13 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   </div>
                 ) : null}
                 <div className="studio-preview-stage">
-                  <div
-                    ref={objectRef}
-                    className={`studio-3d-object ${activeProduct?.category ?? "other"} ${pendantExtraClass} ${engraveStageImageUrl ? "has-photo" : ""}`}
-                    style={
-                      {
-                        transform: "rotateY(14deg) rotateX(8deg) scale(1)",
-                        ["--studio-metal" as string]: activeColor?.swatch ?? "#d4af37"
-                      } as CSSProperties
-                    }
-                  >
-                    {engraveStageImageUrl ? (
-                      <img className="studio-3d-fill" src={engraveStageImageUrl} alt="" loading="eager" decoding="async" />
-                    ) : null}
-                    {customerImageDataUrl ? (
-                      <img className="studio-customer-overlay" src={customerImageDataUrl} alt="" />
-                    ) : null}
-                    {engravings.map((item) => {
-                      const inkDark = activeColor?.colorKey !== "black";
-                      const px = Math.min(ENGRAVE_MAX_PX, Math.max(ENGRAVE_MIN_PX, Math.round(item.size)));
-                      return (
-                        <span
-                          key={item.id}
-                          className={`studio-engrave-text ${item.font} ${activeEngravingId === item.id ? "is-active" : ""} ${
-                            inkDark ? "engrave-ink--dark" : "engrave-ink--light"
-                          }`}
-                          style={
-                            {
-                              left: `calc(50% + ${item.x}%)`,
-                              top: `calc(50% + ${item.y}%)`,
-                              fontSize: `${px}px`,
-                              transform: `translate(-50%, -50%) rotate(${Number(item.angle) || 0}deg)`,
-                            } as CSSProperties
-                          }
-                          onPointerDown={() => startDragEngraving(item.id)}
-                        >
-                          {item.text !== "" ? item.text : "•"}
-                          {activeEngravingId === item.id ? (
-                            <button
-                              type="button"
-                              className="studio-engrave-rotate-handle"
-                              onPointerDown={(e) => startRotateEngraving(e, item.id)}
-                              aria-label="סיבוב טקסט"
-                              title="סיבוב טקסט"
-                            />
-                          ) : null}
-                        </span>
-                      );
-                    })}
-                  </div>
+                  <Pendant3DPreview
+                    metalColor={activeColor?.swatch ?? "#d4af37"}
+                    engravingText={engravingPreviewText}
+                    fallbackImageUrl={engraveStageImageUrl}
+                    modelUrl="/models/pendant.glb"
+                    autoRotate
+                  />
                 </div>
                 {galleryUrls.length > 0 ? (
                   <div className="studio-gallery-carousel" aria-label="גלריית תמונות המוצר">
