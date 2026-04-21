@@ -1037,22 +1037,6 @@ textarea:focus-visible {
   font-weight: 500;
 }
 
-.studio-three-hint {
-  position: absolute;
-  left: 50%;
-  bottom: 10px;
-  transform: translateX(-50%);
-  font-size: .7rem;
-  color: #8a6f58;
-  background: rgba(255, 250, 245, 0.72);
-  border: 1px solid rgba(200, 170, 140, 0.35);
-  padding: 4px 10px;
-  border-radius: 999px;
-  letter-spacing: .02em;
-  pointer-events: none;
-  backdrop-filter: blur(4px);
-}
-
 .studio-three-flat-pendant {
   width: 62%;
   aspect-ratio: 1/1;
@@ -1592,10 +1576,14 @@ textarea:focus-visible {
 }
 
 .studio-size-value {
+  font-family: "Heebo", system-ui, sans-serif;
   font-size: .95rem;
-  line-height: 1;
-  font-weight: 500;
-  color: #8b5e3c;
+  line-height: 1.1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: #1a100a;
+  -webkit-font-smoothing: antialiased;
 }
 
 .studio-size-input:focus {

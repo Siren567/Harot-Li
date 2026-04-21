@@ -65,12 +65,60 @@ function buildHeartShape(w: number, h: number): THREE.Shape {
   return shape;
 }
 
+/** Half of the symmetric `buildHeartShape` heart, split on the vertical center line (x = 0). */
+function buildHalfHeartShape(side: -1 | 1, w: number, h: number): THREE.Shape {
+  const sx = w / 2;
+  const sy = h / 2;
+  const shape = new THREE.Shape();
+  if (side === -1) {
+    shape.moveTo(0, -sy);
+    shape.bezierCurveTo(-sx * 0.2, -sy * 0.4, -sx, -sy * 0.2, -sx, sy * 0.35);
+    shape.bezierCurveTo(-sx, sy * 0.85, -sx * 0.35, sy, 0, sy * 0.55);
+    shape.lineTo(0, -sy);
+  } else {
+    shape.moveTo(0, sy * 0.55);
+    shape.bezierCurveTo(sx * 0.35, sy, sx, sy * 0.85, sx, sy * 0.35);
+    shape.bezierCurveTo(sx, -sy * 0.2, sx * 0.2, -sy * 0.4, 0, -sy);
+    shape.lineTo(0, sy * 0.55);
+  }
+  return shape;
+}
+
+/** One classic jigsaw piece: flat body + semicircular tab on top (fits template height). */
+function buildPuzzlePieceShape(w: number, h: number): THREE.Shape {
+  const hw = w / 2;
+  const hh = h / 2;
+  const c = Math.min(w, h) * 0.07;
+  let tr = Math.min(w, h) * 0.26;
+  tr = Math.min(tr, Math.max(0.12, hw - c - 0.04));
+  const bodyTop = hh - tr;
+  const bodyBottom = -hh;
+
+  const shape = new THREE.Shape();
+  shape.moveTo(-hw + c, bodyBottom);
+  shape.lineTo(hw - c, bodyBottom);
+  shape.quadraticCurveTo(hw, bodyBottom, hw, bodyBottom + c);
+  shape.lineTo(hw, bodyTop - c);
+  shape.quadraticCurveTo(hw, bodyTop, hw - c, bodyTop);
+  if (hw - c > tr + 1e-4) shape.lineTo(tr, bodyTop);
+  shape.absarc(0, bodyTop, tr, 0, Math.PI, false);
+  if (-hw + c < -tr - 1e-4) shape.lineTo(-hw + c, bodyTop);
+  shape.quadraticCurveTo(-hw, bodyTop, -hw, bodyTop - c);
+  shape.lineTo(-hw, bodyBottom + c);
+  shape.quadraticCurveTo(-hw, bodyBottom, -hw + c, bodyBottom);
+  return shape;
+}
+
 function buildShape(t: PreviewTemplate): THREE.Shape {
   switch (t.shape) {
     case "disc":
       return buildDiscShape(t.width / 2);
     case "heart":
       return buildHeartShape(t.width, t.height);
+    case "puzzle":
+      return buildPuzzlePieceShape(t.width, t.height);
+    case "splitHeart":
+      return buildHalfHeartShape(-1, t.width, t.height);
     case "tag":
     case "bar":
     case "square":
@@ -190,11 +238,13 @@ function drawEngraving({ canvas, template, lines, metalColor }: DrawOpts) {
   const cleanLines = lines.map((l) => ({ ...l, text: (l.text ?? "").trim() })).filter((l) => l.text);
   if (cleanLines.length === 0) return;
 
-  // Slider-px → canvas-px. Canvas ≈ 1024, pendant renders ≈ 360 CSS px.
-  const sliderToCanvas = W / 360;
+  // Slider-px → canvas-px. Canvas long side ≈ 1024, pendant renders ≈ 360 CSS px.
+  const longCanvasSide = Math.max(W, H);
+  const sliderToCanvas = longCanvasSide / 360;
 
   ctx.save();
   ctx.translate(W / 2, H / 2);
+  ctx.direction = "rtl";
   if (template.textRotation) ctx.rotate(template.textRotation);
   ctx.textAlign = template.textAlign === "center" ? "center" : "left";
   ctx.textBaseline = "middle";
@@ -248,13 +298,85 @@ function drawEngraving({ canvas, template, lines, metalColor }: DrawOpts) {
   ctx.restore();
 }
 
+type DrawHalfOpts = {
+  canvas: HTMLCanvasElement;
+  template: PreviewTemplate;
+  line: EngravingLine;
+  metalColor: string;
+};
+
+/** Single engraving line centered on a half-heart texture. */
+function drawEngravingSingleOnHalf({ canvas, template, line, metalColor }: DrawHalfOpts) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const text = (line.text ?? "").trim();
+  if (!text) return;
+
+  const safeW = W * template.safeArea.x;
+  const safeH = H * template.safeArea.y;
+  const longCanvasSide = Math.max(W, H);
+  const sliderToCanvas = longCanvasSide / 360;
+
+  ctx.save();
+  ctx.translate(W / 2, H / 2);
+  ctx.direction = "rtl";
+  if (template.textRotation) ctx.rotate(template.textRotation);
+  ctx.textAlign = template.textAlign === "center" ? "center" : "left";
+  ctx.textBaseline = "middle";
+
+  const family = resolveFontFamily(line.fontId);
+  let fontSize =
+    Math.max(template.minFontSize, Math.min(template.maxFontSize, line.size || template.defaultFontSize)) * sliderToCanvas;
+  ctx.font = `600 ${fontSize}px ${family}`;
+  let measured = ctx.measureText(text).width;
+  if (measured > safeW) fontSize *= safeW / measured;
+  ctx.font = `600 ${fontSize}px ${family}`;
+  measured = ctx.measureText(text).width;
+  if (measured > safeW) fontSize *= safeW / measured;
+  const lineH = fontSize * 1.2;
+  if (lineH > safeH) fontSize *= safeH / lineH;
+  ctx.font = `600 ${fontSize}px ${family}`;
+
+  const y = 0;
+  const preset = getEngravingPreset(metalColor);
+  const hOff = fontSize * preset.highlightOffset;
+  const sOff = fontSize * preset.shadowOffset;
+
+  ctx.shadowColor = "transparent";
+  ctx.fillStyle = preset.shadow;
+  if (preset.blur) ctx.filter = `blur(${preset.blur}px)`;
+  ctx.fillText(text, 0, y + sOff);
+  ctx.filter = "none";
+  ctx.fillStyle = preset.highlight;
+  ctx.fillText(text, 0, y + hOff);
+  ctx.fillStyle = preset.ink;
+  ctx.fillText(text, 0, y);
+  ctx.lineWidth = Math.max(0.75, fontSize * 0.018);
+  ctx.strokeStyle = preset.edge;
+  ctx.strokeText(text, 0, y);
+  ctx.restore();
+}
+
+/** FontFaceSet.load expects a single family name, not a full CSS stack. */
+function primaryFamilyForLoading(cssStack: string): string {
+  const s = String(cssStack ?? "").trim();
+  const quoted = s.match(/"([^"]+)"/);
+  if (quoted) return quoted[1];
+  const first = s.split(",")[0]?.trim().replace(/^['"]|['"]$/g, "") ?? "sans-serif";
+  return first || "sans-serif";
+}
+
 async function ensureFontsLoaded(lines: EngravingLine[]) {
   if (typeof document === "undefined" || !("fonts" in document)) return;
   try {
     await Promise.all(
       lines.map((l) => {
         const family = resolveFontFamily(l.fontId);
-        return (document as unknown as { fonts: FontFaceSet }).fonts.load(`600 24px ${family}`);
+        const loadName = primaryFamilyForLoading(family);
+        return (document as unknown as { fonts: FontFaceSet }).fonts.load(`600 24px ${loadName}`);
       })
     );
     await (document as unknown as { fonts: FontFaceSet }).fonts.ready;
@@ -278,6 +400,10 @@ export default function Pendant3DPreview({
   const rimMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
   const engravingCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const engravingTexRef = useRef<THREE.CanvasTexture | null>(null);
+  const engravingCanvasLeftRef = useRef<HTMLCanvasElement | null>(null);
+  const engravingCanvasRightRef = useRef<HTMLCanvasElement | null>(null);
+  const engravingTexLeftRef = useRef<THREE.CanvasTexture | null>(null);
+  const engravingTexRightRef = useRef<THREE.CanvasTexture | null>(null);
   const [webglFailed, setWebglFailed] = useState(false);
 
   const templateKey = template.id;
@@ -332,8 +458,6 @@ export default function Pendant3DPreview({
     scene.add(rim);
     scene.add(new THREE.HemisphereLight(0xffffff, 0x9a8470, 0.28));
 
-    // Build the pendant shape
-    const shape = buildShape(template);
     const extrudeSettings: THREE.ExtrudeGeometryOptions = {
       depth: template.thickness,
       bevelEnabled: true,
@@ -343,9 +467,6 @@ export default function Pendant3DPreview({
       curveSegments: 64,
       steps: 1,
     };
-    const bodyGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-    bodyGeo.translate(0, 0, -template.thickness / 2);
-    bodyGeo.computeVertexNormals();
 
     const base = new THREE.Color(metalColor);
     const frontMat = new THREE.MeshStandardMaterial({
@@ -364,43 +485,154 @@ export default function Pendant3DPreview({
     backMatRef.current = frontMat;
     rimMatRef.current = sideMat;
 
-    // ExtrudeGeometry emits two material groups: 0 = front+back caps, 1 = sides.
-    const body = new THREE.Mesh(bodyGeo, [frontMat, sideMat]);
+    const splitMode = template.shape === "splitHeart";
+    let bodyGeo: THREE.ExtrudeGeometry | null = null;
+    let overlayGeo: THREE.PlaneGeometry | null = null;
+    let overlayMat: THREE.MeshBasicMaterial | null = null;
+    let engravingTex: THREE.CanvasTexture | null = null;
+    let leftBodyGeo: THREE.ExtrudeGeometry | null = null;
+    let rightBodyGeo: THREE.ExtrudeGeometry | null = null;
+    let leftOverlayGeo: THREE.PlaneGeometry | null = null;
+    let rightOverlayGeo: THREE.PlaneGeometry | null = null;
+    let leftOverlayMat: THREE.MeshBasicMaterial | null = null;
+    let rightOverlayMat: THREE.MeshBasicMaterial | null = null;
+    let leftEngravingTex: THREE.CanvasTexture | null = null;
+    let rightEngravingTex: THREE.CanvasTexture | null = null;
 
-    // Engraving overlay: transparent plane (or shaped plane) just in front of body.
-    const engravingCanvas = document.createElement("canvas");
-    // Canvas aspect matches shape bounding box so text isn't distorted.
-    const longSide = 1024;
-    const aspect = template.width / template.height;
-    engravingCanvas.width = aspect >= 1 ? longSide : Math.round(longSide * aspect);
-    engravingCanvas.height = aspect >= 1 ? Math.round(longSide / aspect) : longSide;
-    engravingCanvasRef.current = engravingCanvas;
-
-    const engravingTex = new THREE.CanvasTexture(engravingCanvas);
-    engravingTex.colorSpace = THREE.SRGBColorSpace;
-    engravingTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-    engravingTex.needsUpdate = true;
-    engravingTexRef.current = engravingTex;
-
-    const overlayGeo = new THREE.PlaneGeometry(template.width * 0.98, template.height * 0.98);
-    const overlayMat = new THREE.MeshBasicMaterial({
-      map: engravingTex,
+    const overlayMatCommon = {
       transparent: true,
       depthWrite: false,
-    });
-    const overlay = new THREE.Mesh(overlayGeo, overlayMat);
-    overlay.position.z = template.thickness / 2 + 0.002;
+      depthTest: true,
+      toneMapped: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    } as const;
 
     const pendant = new THREE.Group();
-    pendant.add(body, overlay);
 
-    // Bail (small ring at top) for necklaces / keychains
-    if (template.hasBail) {
-      const bailRadius = 0.13;
-      const bailGeo = new THREE.TorusGeometry(bailRadius, 0.034, 20, 48);
-      const bail = new THREE.Mesh(bailGeo, sideMat);
-      bail.position.set(0, template.height / 2 + bailRadius - 0.02, 0);
-      pendant.add(bail);
+    if (splitMode) {
+      engravingCanvasRef.current = null;
+      engravingTexRef.current = null;
+
+      const sx = template.width / 2;
+      const gap = 0.035;
+      const leftShape = buildHalfHeartShape(-1, template.width, template.height);
+      const rightShape = buildHalfHeartShape(1, template.width, template.height);
+
+      leftBodyGeo = new THREE.ExtrudeGeometry(leftShape, extrudeSettings);
+      leftBodyGeo.translate(0, 0, -template.thickness / 2);
+      leftBodyGeo.computeVertexNormals();
+      rightBodyGeo = new THREE.ExtrudeGeometry(rightShape, extrudeSettings);
+      rightBodyGeo.translate(0, 0, -template.thickness / 2);
+      rightBodyGeo.computeVertexNormals();
+
+      const leftMesh = new THREE.Mesh(leftBodyGeo, [frontMat, sideMat]);
+      const rightMesh = new THREE.Mesh(rightBodyGeo, [frontMat, sideMat]);
+
+      const halfPlateW = sx * 0.95;
+      const halfPlateH = template.height * 0.95;
+      const longSideHalf = 640;
+      const aspectHalf = halfPlateW / halfPlateH;
+      const cW = aspectHalf >= 1 ? longSideHalf : Math.round(longSideHalf * aspectHalf);
+      const cH = aspectHalf >= 1 ? Math.round(longSideHalf / aspectHalf) : longSideHalf;
+
+      const canvasL = document.createElement("canvas");
+      canvasL.width = cW;
+      canvasL.height = cH;
+      const canvasR = document.createElement("canvas");
+      canvasR.width = cW;
+      canvasR.height = cH;
+      engravingCanvasLeftRef.current = canvasL;
+      engravingCanvasRightRef.current = canvasR;
+
+      leftEngravingTex = new THREE.CanvasTexture(canvasL);
+      leftEngravingTex.colorSpace = THREE.SRGBColorSpace;
+      leftEngravingTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      leftEngravingTex.needsUpdate = true;
+      engravingTexLeftRef.current = leftEngravingTex;
+
+      rightEngravingTex = new THREE.CanvasTexture(canvasR);
+      rightEngravingTex.colorSpace = THREE.SRGBColorSpace;
+      rightEngravingTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      rightEngravingTex.needsUpdate = true;
+      engravingTexRightRef.current = rightEngravingTex;
+
+      leftOverlayGeo = new THREE.PlaneGeometry(halfPlateW, halfPlateH);
+      leftOverlayMat = new THREE.MeshBasicMaterial({ map: leftEngravingTex, ...overlayMatCommon });
+      const leftOverlay = new THREE.Mesh(leftOverlayGeo, leftOverlayMat);
+      leftOverlay.position.set(-sx / 2, 0, template.thickness / 2 + 0.02);
+      leftOverlay.renderOrder = 1;
+
+      rightOverlayGeo = new THREE.PlaneGeometry(halfPlateW, halfPlateH);
+      rightOverlayMat = new THREE.MeshBasicMaterial({ map: rightEngravingTex, ...overlayMatCommon });
+      const rightOverlay = new THREE.Mesh(rightOverlayGeo, rightOverlayMat);
+      rightOverlay.position.set(sx / 2, 0, template.thickness / 2 + 0.02);
+      rightOverlay.renderOrder = 1;
+
+      const leftRoot = new THREE.Group();
+      leftRoot.add(leftMesh, leftOverlay);
+      leftRoot.position.x = -gap / 2;
+      const rightRoot = new THREE.Group();
+      rightRoot.add(rightMesh, rightOverlay);
+      rightRoot.position.x = gap / 2;
+
+      if (template.hasBail) {
+        const bailRadius = 0.11;
+        const bailGeo = new THREE.TorusGeometry(bailRadius, 0.028, 16, 40);
+        const bailL = new THREE.Mesh(bailGeo, sideMat);
+        bailL.position.set(-sx * 0.22, template.height * 0.2 + bailRadius * 0.45, 0);
+        leftRoot.add(bailL);
+        const bailR = new THREE.Mesh(bailGeo, sideMat);
+        bailR.position.set(sx * 0.22, template.height * 0.2 + bailRadius * 0.45, 0);
+        rightRoot.add(bailR);
+      }
+
+      pendant.add(leftRoot, rightRoot);
+    } else {
+      const shape = buildShape(template);
+      bodyGeo = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+      bodyGeo.translate(0, 0, -template.thickness / 2);
+      bodyGeo.computeVertexNormals();
+
+      const body = new THREE.Mesh(bodyGeo, [frontMat, sideMat]);
+
+      const engravingCanvas = document.createElement("canvas");
+      const longSide = 1024;
+      const aspect = template.width / template.height;
+      engravingCanvas.width = aspect >= 1 ? longSide : Math.round(longSide * aspect);
+      engravingCanvas.height = aspect >= 1 ? Math.round(longSide / aspect) : longSide;
+      engravingCanvasRef.current = engravingCanvas;
+
+      engravingTex = new THREE.CanvasTexture(engravingCanvas);
+      engravingTex.colorSpace = THREE.SRGBColorSpace;
+      engravingTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      engravingTex.needsUpdate = true;
+      engravingTexRef.current = engravingTex;
+
+      overlayGeo = new THREE.PlaneGeometry(template.width * 0.98, template.height * 0.98);
+      overlayMat = new THREE.MeshBasicMaterial({
+        map: engravingTex,
+        ...overlayMatCommon,
+      });
+      const overlay = new THREE.Mesh(overlayGeo, overlayMat);
+      overlay.position.z = template.thickness / 2 + 0.02;
+      overlay.renderOrder = 1;
+
+      pendant.add(body, overlay);
+
+      if (template.hasBail) {
+        const bailRadius = 0.13;
+        const bailGeo = new THREE.TorusGeometry(bailRadius, 0.034, 20, 48);
+        const bail = new THREE.Mesh(bailGeo, sideMat);
+        bail.position.set(0, template.height / 2 + bailRadius - 0.02, 0);
+        pendant.add(bail);
+      }
+
+      engravingCanvasLeftRef.current = null;
+      engravingCanvasRightRef.current = null;
+      engravingTexLeftRef.current = null;
+      engravingTexRightRef.current = null;
     }
 
     scene.add(pendant);
@@ -412,10 +644,9 @@ export default function Pendant3DPreview({
     controls.enableDamping = true;
     controls.dampingFactor = 0.09;
     controls.rotateSpeed = 0.55;
-    controls.minPolarAngle = Math.PI / 2 - 0.35;
-    controls.maxPolarAngle = Math.PI / 2 + 0.35;
-    (controls as unknown as { minAzimuthAngle: number }).minAzimuthAngle = -0.7;
-    (controls as unknown as { maxAzimuthAngle: number }).maxAzimuthAngle = 0.7;
+    // Let shoppers orbit freely to any viewing angle (no narrow azimuth window).
+    controls.minPolarAngle = 0.08;
+    controls.maxPolarAngle = Math.PI - 0.08;
     controls.autoRotate = autoRotate;
     controls.autoRotateSpeed = 0.6;
     controls.target.set(0, 0, 0);
@@ -449,12 +680,29 @@ export default function Pendant3DPreview({
       (controls as unknown as { removeEventListener: (t: string, h: () => void) => void }).removeEventListener("start", onStart);
       controls.dispose();
       pmrem.dispose();
-      bodyGeo.dispose();
-      overlayGeo.dispose();
-      overlayMat.dispose();
+      if (splitMode) {
+        leftBodyGeo?.dispose();
+        rightBodyGeo?.dispose();
+        leftOverlayGeo?.dispose();
+        rightOverlayGeo?.dispose();
+        leftOverlayMat?.dispose();
+        rightOverlayMat?.dispose();
+        leftEngravingTex?.dispose();
+        rightEngravingTex?.dispose();
+        engravingCanvasLeftRef.current = null;
+        engravingCanvasRightRef.current = null;
+        engravingTexLeftRef.current = null;
+        engravingTexRightRef.current = null;
+      } else {
+        bodyGeo?.dispose();
+        overlayGeo?.dispose();
+        overlayMat?.dispose();
+        engravingTex?.dispose();
+        engravingCanvasRef.current = null;
+        engravingTexRef.current = null;
+      }
       frontMat.dispose();
       sideMat.dispose();
-      engravingTex.dispose();
       renderer.dispose();
       if (renderer.domElement.parentNode === mountEl) {
         mountEl.removeChild(renderer.domElement);
@@ -462,8 +710,6 @@ export default function Pendant3DPreview({
       frontMatRef.current = null;
       backMatRef.current = null;
       rimMatRef.current = null;
-      engravingCanvasRef.current = null;
-      engravingTexRef.current = null;
     };
     // Rebuild when the template changes (shape swap).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -483,6 +729,35 @@ export default function Pendant3DPreview({
   // React to text / font / size changes (debounced through React batching)
   useEffect(() => {
     let cancelled = false;
+    const split = template.shape === "splitHeart";
+    if (split) {
+      const cL = engravingCanvasLeftRef.current;
+      const cR = engravingCanvasRightRef.current;
+      const tL = engravingTexLeftRef.current;
+      const tR = engravingTexRightRef.current;
+      if (!cL || !cR || !tL || !tR) return;
+
+      (async () => {
+        await ensureFontsLoaded(lines);
+        if (cancelled) return;
+        const leftCanvas = engravingCanvasLeftRef.current;
+        const rightCanvas = engravingCanvasRightRef.current;
+        const leftTex = engravingTexLeftRef.current;
+        const rightTex = engravingTexRightRef.current;
+        if (!leftCanvas || !rightCanvas || !leftTex || !rightTex) return;
+        const line0 = lines[0] ?? { text: "", fontId: "heebo", size: template.defaultFontSize };
+        const line1 = lines[1] ?? { text: "", fontId: line0.fontId, size: line0.size };
+        drawEngravingSingleOnHalf({ canvas: leftCanvas, template, line: line0, metalColor });
+        drawEngravingSingleOnHalf({ canvas: rightCanvas, template, line: line1, metalColor });
+        leftTex.needsUpdate = true;
+        rightTex.needsUpdate = true;
+      })();
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const canvas = engravingCanvasRef.current;
     const tex = engravingTexRef.current;
     if (!canvas || !tex) return;
@@ -501,7 +776,7 @@ export default function Pendant3DPreview({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linesSignature, templateKey, metalColor]);
+  }, [linesSignature, templateKey, metalColor, template.shape]);
 
   return (
     <div className="studio-three-wrap">
@@ -521,16 +796,15 @@ export default function Pendant3DPreview({
                   className="studio-three-flat-text"
                   style={{ fontFamily: resolveFontFamily(lines[0]?.fontId) }}
                 >
-                  {lines.map((l) => l.text.trim()).filter(Boolean).join("\n")}
+                  {template.shape === "splitHeart"
+                    ? [lines[0]?.text, lines[1]?.text].map((t) => String(t ?? "").trim()).filter(Boolean).join("\n")
+                    : lines.map((l) => l.text.trim()).filter(Boolean).join("\n")}
                 </span>
               </div>
             </div>
           )}
         </div>
       ) : null}
-      <div className="studio-three-hint" aria-hidden="true">
-        גררו לסיבוב קל
-      </div>
     </div>
   );
 }

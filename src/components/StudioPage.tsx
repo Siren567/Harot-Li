@@ -7,14 +7,7 @@ import { loadBootstrapOnce, loadPublicProductsOnce } from "../lib/studioDataLoad
 import { studioCategories, studioFonts, studioShippingMethods } from "../constants/studioData";
 import CheckoutForm, { type CheckoutFormData } from "./checkout/CheckoutForm";
 import Pendant3DPreview, { type EngravingLine } from "./Pendant3DPreview";
-import {
-  getTemplateForProduct,
-  getTemplateForPendantType,
-  normalizePendantType,
-  PENDANT_TYPE_IDS,
-  PENDANT_TYPE_LABEL_HE,
-  type PendantTypeId,
-} from "../config/previewTemplates";
+import { getTemplateForProduct, getTemplateForPendantType, normalizePendantType } from "../config/previewTemplates";
 
 type StudioPageProps = {
   onBackToLanding: () => void;
@@ -343,7 +336,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productId, setProductId] = useState<string>("");
   const [selectedColorByProduct, setSelectedColorByProduct] = useState<Record<string, number>>({});
-  const [selectedPendantTypeByProduct, setSelectedPendantTypeByProduct] = useState<Record<string, PendantTypeId>>({});
 
   const [engravings, setEngravings] = useState<EngravingItem[]>([
     { id: "engraving-1", text: "לנצח שלך", font: "heebo", size: 28, x: 0, y: 0, angle: 0 },
@@ -403,6 +395,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   }
 
   function addEngraving() {
+    if (previewTemplate.shape === "splitHeart" && engravingsRef.current.length >= 2) return;
     if (engravingsRef.current.length >= 3) return;
     const id = `engraving-${Date.now()}`;
     setEngravings((prev) => {
@@ -423,6 +416,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   }
 
   function removeEngraving(id: string) {
+    if (previewTemplate.shape === "splitHeart") return;
     setEngravings((prev) => {
       if (prev.length <= 1) return prev;
       const idx = prev.findIndex((x) => x.id === id);
@@ -550,71 +544,89 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const galleryUrls = activeProduct?.images?.length ? activeProduct.images : activeProduct?.image ? [activeProduct.image] : [];
   /** תמונת הרקע בתוך מודל החריטה — תמיד התמונה הראשית; שאר התמונות נצפות בגלריה למטה ובפופאפ בלבד. */
   const engraveStageImageUrl = galleryUrls[selectedGalleryIndex] ?? galleryUrls[0] ?? activeProduct?.image ?? null;
-  /**
-   * Allowed pendant types for the active product, derived from the distinct pendantType
-   * values across its active variants. Order matches PENDANT_TYPE_IDS for a stable UI.
-   * Empty array = the product has no pendant-type configuration → selector is hidden
-   * and the preview falls back to the category-based template.
-   */
-  const allowedPendantTypes = useMemo<PendantTypeId[]>(() => {
-    if (!activeProduct) return [];
-    const set = new Set<PendantTypeId>();
-    for (const c of activeProduct.colors ?? []) {
-      const id = normalizePendantType(c.pendantType ?? null);
-      if (id) set.add(id);
-    }
-    return PENDANT_TYPE_IDS.filter((id) => set.has(id));
-  }, [activeProduct]);
-
-  const activePendantType = useMemo<PendantTypeId | null>(() => {
-    if (!activeProduct || allowedPendantTypes.length === 0) return null;
-    const stored = selectedPendantTypeByProduct[activeProduct.id];
-    if (stored && allowedPendantTypes.includes(stored)) return stored;
-    return allowedPendantTypes[0];
-  }, [activeProduct, allowedPendantTypes, selectedPendantTypeByProduct]);
+  /** Canonical pendant type for the selected variant — drives preview only (not shown in UI). */
+  const variantPendantTypeId = useMemo(() => {
+    if (!activeColor) return null;
+    return normalizePendantType(activeColor.pendantType ?? null);
+  }, [activeColor]);
 
   const previewTemplate = useMemo(
-    () => (activePendantType ? getTemplateForPendantType(activePendantType) : getTemplateForProduct(activeProduct)),
-    [activePendantType, activeProduct]
-  );
-  const previewLines = useMemo<EngravingLine[]>(
     () =>
-      engravings
-        .map((item) => ({
-          text: item.text.trim(),
-          fontId: item.font || "heebo",
-          size: Math.max(previewTemplate.minFontSize, Math.min(previewTemplate.maxFontSize, item.size || previewTemplate.defaultFontSize)),
-        }))
-        .filter((l) => l.text)
-        .slice(0, 3),
-    [engravings, previewTemplate]
+      variantPendantTypeId ? getTemplateForPendantType(variantPendantTypeId, activeProduct) : getTemplateForProduct(activeProduct),
+    [variantPendantTypeId, activeProduct]
   );
+  const isCoupleSplitHeart = previewTemplate.shape === "splitHeart";
+
+  const previewLines = useMemo<EngravingLine[]>(() => {
+    const mapLine = (item: EngravingItem): EngravingLine => ({
+      text: item.text.trim(),
+      fontId: item.font || "heebo",
+      size: Math.max(
+        previewTemplate.minFontSize,
+        Math.min(previewTemplate.maxFontSize, item.size || previewTemplate.defaultFontSize)
+      ),
+    });
+    if (isCoupleSplitHeart) {
+      const e0 = engravings[0];
+      const e1 = engravings[1];
+      const d0 = e0 ?? {
+        id: "engraving-1",
+        text: "",
+        font: "heebo",
+        size: previewTemplate.defaultFontSize,
+        x: 0,
+        y: 0,
+        angle: 0,
+      };
+      const d1 = e1 ?? {
+        id: "engraving-2",
+        text: "",
+        font: d0.font,
+        size: d0.size,
+        x: 0,
+        y: 0,
+        angle: 0,
+      };
+      return [mapLine(d0), mapLine(d1)];
+    }
+    return engravings
+      .map(mapLine)
+      .filter((l) => l.text)
+      .slice(0, 3);
+  }, [engravings, previewTemplate, isCoupleSplitHeart]);
+
+  useEffect(() => {
+    if (!isCoupleSplitHeart) return;
+    setEngravings((prev) => {
+      let next = prev.slice(0, 2);
+      if (next.length > 2) next = next.slice(0, 2);
+      if (next.length === 0) {
+        next = [
+          { id: "engraving-1", text: "", font: "heebo", size: previewTemplate.defaultFontSize, x: 0, y: 0, angle: 0 },
+          { id: "engraving-2", text: "", font: "heebo", size: previewTemplate.defaultFontSize, x: 0, y: 0, angle: 0 },
+        ];
+      } else if (next.length === 1) {
+        next = [
+          next[0],
+          {
+            id: `engraving-${Date.now()}`,
+            text: "",
+            font: next[0].font,
+            size: next[0].size,
+            x: 0,
+            y: 0,
+            angle: 0,
+          },
+        ];
+      }
+      return next;
+    });
+  }, [isCoupleSplitHeart, activeProduct?.id]);
 
   useEffect(() => {
     setSelectedGalleryIndex(0);
     setShowProductColorPicker(false);
   }, [activeProduct?.id]);
-
-  // Keep the selected pendant type inside the product's allowed set. If the
-  // stored value is now disallowed (or absent), fall back to the first allowed
-  // type so the preview always reflects a valid configuration.
-  useEffect(() => {
-    if (!activeProduct) return;
-    const stored = selectedPendantTypeByProduct[activeProduct.id];
-    if (allowedPendantTypes.length === 0) {
-      if (stored) {
-        setSelectedPendantTypeByProduct((prev) => {
-          const next = { ...prev };
-          delete next[activeProduct.id];
-          return next;
-        });
-      }
-      return;
-    }
-    if (!stored || !allowedPendantTypes.includes(stored)) {
-      setSelectedPendantTypeByProduct((prev) => ({ ...prev, [activeProduct.id]: allowedPendantTypes[0] }));
-    }
-  }, [activeProduct, allowedPendantTypes, selectedPendantTypeByProduct]);
 
   // Clamp stale indices: if a product's color list shrinks (or the stored
   // index is out of range), reset it to 0 so the preview never reads a
@@ -808,7 +820,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 qty,
                 unitPrice: Math.round((activeColor.price ?? activeProduct.price) * 100),
                 color: activeColor.name,
-                pendantShape: activePendantType ? PENDANT_TYPE_LABEL_HE[activePendantType] : activeColor.pendantType ?? null,
+                pendantShape: activeColor.pendantType ?? null,
                 material: activeColor.material ?? null,
                 engravingText: engravingSummary || null,
                 customerImageUrl: activeProduct.allowCustomerImageUpload ? customerImageDataUrl : null,
@@ -1063,7 +1075,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   <div className="studio-field-hint">טקסט לחריטה</div>
                   <div className="studio-engraving-title-actions">
                     <span className="studio-engraving-counter" aria-live="polite">
-                      {engravings.length}/3
+                      {isCoupleSplitHeart ? "2/2" : `${engravings.length}/3`}
                     </span>
                     <button
                       type="button"
@@ -1071,7 +1083,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                       aria-label="הוסף שדה טקסט"
                       title="הוסף שדה טקסט"
                       onClick={addEngraving}
-                      disabled={engravings.length >= 3}
+                      disabled={engravings.length >= 3 || isCoupleSplitHeart}
                     >
                       <Plus size={14} />
                     </button>
@@ -1080,6 +1092,11 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 <div className="studio-engraving-input-list">
                   {engravings.map((item, idx) => (
                     <div key={item.id} className={`studio-engraving-input-wrap ${activeEngravingId === item.id ? "active" : ""}`}>
+                      {isCoupleSplitHeart ? (
+                        <div className="studio-field-hint" style={{ marginBottom: 4 }}>
+                          {idx === 0 ? "חצי א׳ — טקסט לחריטה" : "חצי ב׳ — טקסט לחריטה"}
+                        </div>
+                      ) : null}
                       <textarea
                         className="studio-engraving-input studio-engraving-input--multiline"
                         value={item.text}
@@ -1100,7 +1117,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                       >
                         <Smile size={12} />
                       </button>
-                      {idx > 0 ? (
+                      {!isCoupleSplitHeart && idx > 0 ? (
                         <button
                           type="button"
                           className="studio-icon-btn studio-icon-btn--trash-corner"
@@ -1201,34 +1218,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     </div>
                   ) : null}
                 </div>
-
-                {allowedPendantTypes.length > 0 ? (
-                  <div className="studio-personalization-tile studio-personalization-tile--pendant-type">
-                    <span className="studio-personalization-label">סוג תליון</span>
-                    <div className="studio-pendant-type-options" role="radiogroup" aria-label="סוג תליון">
-                      {allowedPendantTypes.map((type) => {
-                        const selected = activePendantType === type;
-                        return (
-                          <button
-                            key={type}
-                            type="button"
-                            role="radio"
-                            aria-checked={selected}
-                            className={`studio-pendant-type-option ${selected ? "is-selected" : ""}`}
-                            onClick={() => {
-                              if (!activeProduct) return;
-                              setSelectedPendantTypeByProduct((prev) => ({ ...prev, [activeProduct.id]: type }));
-                            }}
-                            title={PENDANT_TYPE_LABEL_HE[type]}
-                          >
-                            <span className={`studio-pendant-type-glyph studio-pendant-type-glyph--${type}`} aria-hidden />
-                            <span className="studio-pendant-type-label">{PENDANT_TYPE_LABEL_HE[type]}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : null}
 
                 <div className={`studio-personalization-tile studio-personalization-tile--size ${activeEngraving ? "is-active" : ""}`}>
                   <div className="studio-personalization-size-head">
@@ -1559,12 +1548,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     <div className="studio-summary-row">
                       <span>חומר</span>
                       <strong>{activeColor.material}</strong>
-                    </div>
-                  ) : null}
-                  {activeColor?.pendantType ? (
-                    <div className="studio-summary-row">
-                      <span>סוג תליון</span>
-                      <strong>{activeColor.pendantType}</strong>
                     </div>
                   ) : null}
                   <div className="studio-summary-row">
