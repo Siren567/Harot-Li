@@ -458,9 +458,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           };
         });
         if (!mounted) return;
-        setRuntimeProducts(mapped);
-        setSelectedColorByProduct(Object.fromEntries(mapped.map((p) => [p.id, 0])));
-        if (mapped.length > 0) setProductId((prev) => (prev && mapped.some((p) => p.id === prev) ? prev : mapped[0].id));
+        const uniqueProducts = Array.from(new Map(mapped.map((p) => [p.id, p])).values());
+        setRuntimeProducts(uniqueProducts);
+        setSelectedColorByProduct(Object.fromEntries(uniqueProducts.map((p) => [p.id, 0])));
+        if (uniqueProducts.length > 0) {
+          setProductId((prev) => (prev && uniqueProducts.some((p) => p.id === prev) ? prev : uniqueProducts[0].id));
+        }
       } catch {
         if (!mounted) return;
         setRuntimeProducts([]);
@@ -731,7 +734,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           ))}
         </div>
         <button type="button" className="studio-select-btn" disabled={outOfStock}>
-          {outOfStock ? "אזל המלאי" : "בחר"}
+          בחר
         </button>
       </article>
     );
