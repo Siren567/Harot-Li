@@ -21,6 +21,15 @@ const EnvSchema = z.object({
   GROW_MAKE_APPROVE_TRANSACTION_URL: z.string().url().optional(),
   GROW_NOTIFY_TOKEN: z.string().min(1).optional(),
   PUBLIC_APP_BASE_URL: z.string().url().optional(),
+
+  // PayPlus integration.
+  PAYPLUS_API_KEY: z.string().min(1).optional(),
+  PAYPLUS_SECRET_KEY: z.string().min(1).optional(),
+  PAYPLUS_PAYMENT_PAGE_UID: z.string().min(1).optional(),
+  PAYPLUS_API_BASE: z.string().url().optional(),
+  PAYPLUS_WEBHOOK_SECRET: z.string().min(1).optional(),
+  PAYPLUS_VERIFY_WEBHOOK: z.string().optional(),
+  PUBLIC_SITE_URL: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

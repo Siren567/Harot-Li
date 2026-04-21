@@ -8,6 +8,13 @@ import {
   extractGrowNotifyFields,
   isGrowNotifyAuthorized,
 } from "../services/growPayments.service.js";
+import {
+  handlePaymentFailure,
+  handlePaymentSuccess,
+  parseWebhookEvent,
+  verifyWebhookSignature,
+} from "../services/payplus.service.js";
+import type { Request, Response, NextFunction } from "express";
 
 export const paymentsRouter = Router();
 
@@ -57,6 +64,64 @@ paymentsRouter.post("/grow/create-link", async (req, res) => {
       return res.status(503).json({ error: "PAYMENT_NOT_CONFIGURED", message: "Missing GROW create-link URL configuration." });
     }
     return res.status(500).json({ error: "PAYMENT_LINK_CREATE_FAILED" });
+  }
+});
+
+/**
+ * Middleware placeholder that will verify the PayPlus webhook signature before
+ * the handler runs. Today it passes through (with logging) so the endpoint is
+ * reachable during development — the real HMAC check is implemented once
+ * PAYPLUS_WEBHOOK_SECRET is provisioned.
+ *
+ * The route intentionally does NOT require admin auth: PayPlus calls it
+ * server-to-server.
+ */
+function verifyPaymentWebhook(req: Request, _res: Response, next: NextFunction) {
+  const raw = (req as any).rawBody as string | undefined;
+  const ok = verifyWebhookSignature(req.headers, raw ?? JSON.stringify(req.body ?? {}));
+  (req as any).payplusSignatureVerified = ok;
+  console.log(`[payplus.webhook] received verified=${ok}`);
+  // TODO: once verifyWebhookSignature returns a real result, reject with 401 when !ok
+  // (except in a dev-bypass env flag).
+  next();
+}
+
+paymentsRouter.post("/payplus/webhook", verifyPaymentWebhook, async (req, res) => {
+  const event = parseWebhookEvent(req.body);
+  console.log(`[payplus.webhook] event=${event.type}`);
+
+  if (event.type === "unknown") {
+    return res.status(200).json({ ok: true, ignored: true });
+  }
+
+  try {
+    // orderId comes from provider metadata — never trust the client.
+    const order = await prisma.order.findUnique({ where: { id: event.orderId } });
+    if (!order) {
+      console.warn(`[payplus.webhook] order not found id=${event.orderId}`);
+      return res.status(404).json({ ok: false, error: "ORDER_NOT_FOUND" });
+    }
+
+    if (event.type === "payment.succeeded") {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { paymentStatus: "paid", paymentId: event.paymentId || null } as any,
+      });
+      console.log(`[payplus.webhook] order ${order.orderNumber} -> paid`);
+      await handlePaymentSuccess(event);
+    } else if (event.type === "payment.failed") {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { paymentStatus: "failed", paymentId: event.paymentId || null } as any,
+      });
+      console.log(`[payplus.webhook] order ${order.orderNumber} -> failed`);
+      await handlePaymentFailure(event);
+    }
+
+    return res.json({ ok: true });
+  } catch (err: any) {
+    console.error("[payplus.webhook] FAILED", err?.message ?? err);
+    return res.status(500).json({ ok: false, error: "WEBHOOK_PROCESSING_FAILED" });
   }
 });
 

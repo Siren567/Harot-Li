@@ -15,7 +15,19 @@ import { variantsRouter } from "./routes/variants.js";
 
 const app = express();
 
-app.use(express.json({ limit: "10mb" }));
+// Capture the raw request body for webhook routes so signature verification
+// sees the exact bytes the provider signed. Other routes are unaffected.
+app.use(
+  express.json({
+    limit: "10mb",
+    verify: (req: any, _res, buf) => {
+      const url = typeof req.url === "string" ? req.url : "";
+      if (url.includes("/api/payments/") && url.includes("/webhook")) {
+        req.rawBody = buf.toString("utf8");
+      }
+    },
+  })
+);
 
 app.use(
   cors({

@@ -1,5 +1,7 @@
 import { memo, useState, type FormEvent } from "react";
 
+export type PaymentMethod = "cash" | "payplus";
+
 export type CheckoutFormData = {
   fullName: string;
   phone: string;
@@ -10,6 +12,7 @@ export type CheckoutFormData = {
   apartment: string;
   zipCode: string;
   notes: string;
+  paymentMethod: PaymentMethod;
 };
 
 type CheckoutFormProps = {
@@ -31,6 +34,7 @@ function CheckoutForm({ onSubmit, id, className, disabled }: CheckoutFormProps) 
   const [apartment, setApartment] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [notes, setNotes] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [error, setError] = useState<string | null>(null);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -60,6 +64,7 @@ function CheckoutForm({ onSubmit, id, className, disabled }: CheckoutFormProps) 
       apartment: apartment.trim(),
       zipCode: zipCode.trim(),
       notes: notes.trim(),
+      paymentMethod,
     });
   }
 
@@ -103,6 +108,29 @@ function CheckoutForm({ onSubmit, id, className, disabled }: CheckoutFormProps) 
         הערות
         <textarea name="notes" rows={3} value={notes} onChange={(ev) => setNotes(ev.target.value)} placeholder="הערות נוספות למשלוח או ליצירה" />
       </label>
+      <fieldset className="studio-checkout-form-payment" style={{ gridColumn: "1 / -1", border: "none", padding: 0, margin: 0 }}>
+        <legend style={{ fontSize: "0.9rem", marginBottom: "0.35rem" }}>אמצעי תשלום</legend>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", marginInlineEnd: "1rem" }}>
+          <input
+            type="radio"
+            name="paymentMethod"
+            value="cash"
+            checked={paymentMethod === "cash"}
+            onChange={() => setPaymentMethod("cash")}
+          />
+          מזומן
+        </label>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+          <input
+            type="radio"
+            name="paymentMethod"
+            value="payplus"
+            checked={paymentMethod === "payplus"}
+            onChange={() => setPaymentMethod("payplus")}
+          />
+          כרטיס אשראי (PayPlus)
+        </label>
+      </fieldset>
       {error ? (
         <p role="alert" style={{ color: "#b42318", fontSize: "0.85rem", margin: 0, gridColumn: "1 / -1" }}>
           {error}

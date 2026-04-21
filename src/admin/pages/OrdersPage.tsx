@@ -446,7 +446,14 @@ export function OrdersPage() {
           customerEmail: String(o.customer?.email ?? "—"),
           createdAt: String(o.createdAt ?? new Date().toISOString()),
           total: Number(o.total ?? 0),
-          paymentStatus: raw === "PAID" || raw === "COMPLETED" ? "paid" : raw === "CANCELLED" || raw === "REFUNDED" ? "failed" : "pending",
+          paymentStatus: (() => {
+            // Prefer the real payment field written by the PayPlus webhook; fall back to the
+            // legacy status-derived value for orders created before payment fields existed.
+            const raw2 = String(o.paymentStatus ?? "").toLowerCase();
+            if (raw2 === "paid" || raw2 === "failed" || raw2 === "pending") return raw2 as PaymentStatus;
+            if (raw2 === "cancelled") return "failed";
+            return raw === "PAID" || raw === "COMPLETED" ? "paid" : raw === "CANCELLED" || raw === "REFUNDED" ? "failed" : "pending";
+          })(),
           orderStatus: uiStatus,
           rawStatus: raw,
           designNumber: "—",

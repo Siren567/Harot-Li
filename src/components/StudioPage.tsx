@@ -621,6 +621,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             shippingMethodId: shippingId,
             orderNotes: notes.trim() || null,
             couponCode: appliedCoupon?.code || null,
+            paymentMethod: customer.paymentMethod ?? "cash",
             items: [
               {
                 name: `${activeProduct.title} (${activeColor.name})`,
@@ -637,7 +638,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             ]
           })
         });
-        let data: { ok?: boolean; order?: { orderNumber?: string }; message?: string; hint?: string } = {};
+        let data: { ok?: boolean; order?: { orderNumber?: string; paymentUrl?: string | null; paymentMethod?: string }; message?: string; hint?: string } = {};
         try {
           const text = await res.text();
           if (text) data = JSON.parse(text);
@@ -658,6 +659,14 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         }
         setOrderNumber(data.order.orderNumber);
         setStep(3);
+        // PayPlus prep: when the real integration lands, the backend will return a
+        // paymentUrl for payplus orders and we redirect the user to the hosted page.
+        if (customer.paymentMethod === "payplus") {
+          setCouponMsg("מעביר אותך לתשלום...");
+          if (data.order.paymentUrl) {
+            window.location.href = data.order.paymentUrl;
+          }
+        }
       } catch {
         setCouponMsg(
           "לא ניתן להתחבר לשרת. ודאו שהבקאנד רץ (למשל npm run dev ב-backend) ושהאתר נטען דרך npm run dev כדי ש־/api יעבוד."

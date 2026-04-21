@@ -52,6 +52,7 @@ const CreateOrderSchema = z.object({
   couponCode: z.string().optional().nullable(),
   shippingMethodId: z.string().max(64).optional().nullable(),
   orderNotes: z.string().max(4000).optional().nullable(),
+  paymentMethod: z.enum(["cash", "payplus"]).optional().default("cash"),
 });
 
 function normalizeCode(code: string) {
@@ -388,7 +389,8 @@ ordersRouter.post("/", async (req, res) => {
     return res.status(400).json({ ok: false, error: "VALIDATION", details: parsed.error.flatten() });
   }
 
-  const { customer: inputCustomer, items, shippingFee, couponCode, shippingMethodId, orderNotes } = parsed.data;
+  const { customer: inputCustomer, items, shippingFee, couponCode, shippingMethodId, orderNotes, paymentMethod } = parsed.data;
+  console.log(`[POST /api/orders] creating order paymentMethod=${paymentMethod} items=${items.length}`);
   const subtotal = items.reduce((sum, it) => sum + it.unitPrice * it.qty, 0);
   const itemsQuantity = items.reduce((sum, it) => sum + it.qty, 0);
 
@@ -499,7 +501,11 @@ ordersRouter.post("/", async (req, res) => {
           couponId: appliedCouponId,
           items: items as unknown as any, // kept for legacy readers; OrderItem rows are canonical
           deliveryDetails: deliveryDetails as object,
-        },
+          // Payment flow (PayPlus prep): cash stays pending until handled manually,
+          // payplus stays pending until the webhook flips it to paid/failed.
+          paymentMethod,
+          paymentStatus: "pending",
+        } as any,
       });
 
       // Create normalized OrderItem rows.

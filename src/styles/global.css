@@ -728,6 +728,7 @@ textarea:focus-visible {
   bottom: 10px;
 }
 
+
 .studio-stock-badge--low {
   border-color: rgba(245,158,11,.35);
   background: rgba(245,158,11,.14);

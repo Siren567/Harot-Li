@@ -70,6 +70,14 @@ model Order {
   /// Snapshot: shipping method, address lines, checkout + design notes (studio).
   deliveryDetails Json?
 
+  // Payment integration fields (PayPlus prep). paymentMethod is "cash" | "payplus".
+  // paymentStatus is "pending" | "paid" | "failed" | "cancelled" and is independent of
+  // OrderStatus so payment-provider lifecycle can evolve without coupling to fulfillment.
+  paymentMethod  String   @default("cash")
+  paymentStatus  String   @default("pending")
+  paymentId      String?
+  paymentUrl     String?
+
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
