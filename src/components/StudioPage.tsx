@@ -1106,7 +1106,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   className={`studio-personalization-tile studio-personalization-tile--color ${showProductColorPicker ? "is-active" : ""}`}
                   style={{
                     position: "relative",
-                    ["--selected-color" as string]: activeColor?.swatch ?? "#d4af37",
+                    ["--selected-color" as string]: resolvePreviewMetalSwatch(activeProduct, activeColor),
                   }}
                 >
                   <button

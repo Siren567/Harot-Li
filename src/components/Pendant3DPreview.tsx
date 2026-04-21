@@ -84,9 +84,98 @@ type DrawOpts = {
   canvas: HTMLCanvasElement;
   template: PreviewTemplate;
   lines: EngravingLine[];
+  metalColor: string;
 };
 
-function drawEngraving({ canvas, template, lines }: DrawOpts) {
+/** Parse "#rrggbb" / "#rgb" to [r,g,b] in 0-255. Returns mid grey if unparseable. */
+function hexToRgb(hex: string): [number, number, number] {
+  const s = String(hex || "").trim().replace(/^#/, "");
+  if (s.length === 3) {
+    const r = parseInt(s[0] + s[0], 16);
+    const g = parseInt(s[1] + s[1], 16);
+    const b = parseInt(s[2] + s[2], 16);
+    if ([r, g, b].every((v) => Number.isFinite(v))) return [r, g, b];
+  }
+  if (s.length === 6) {
+    const r = parseInt(s.slice(0, 2), 16);
+    const g = parseInt(s.slice(2, 4), 16);
+    const b = parseInt(s.slice(4, 6), 16);
+    if ([r, g, b].every((v) => Number.isFinite(v))) return [r, g, b];
+  }
+  return [160, 160, 160];
+}
+
+/** Relative luminance (ITU BT.709) in 0-1. */
+function luminance(hex: string): number {
+  const [r, g, b] = hexToRgb(hex).map((v) => v / 255) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+type EngravingPreset = {
+  /** Main text fill. */
+  ink: string;
+  /** Inner edge contrast stroke on top of ink (thin). */
+  edge: string;
+  /** Offset highlight layer (catches light). */
+  highlight: string;
+  highlightOffset: number; // as fraction of font size
+  /** Offset shadow layer (recessed depth). */
+  shadow: string;
+  shadowOffset: number;
+  /** Anti-alias softening. */
+  blur: number;
+};
+
+/**
+ * Adaptive engraving presets per metal. Dark metals get light engraving,
+ * light metals get dark engraving; all share a layered highlight+shadow
+ * to sell the recessed-engraving effect.
+ */
+function getEngravingPreset(metalColor: string): EngravingPreset {
+  const lum = luminance(metalColor);
+
+  // Black (or any very dark metal) — light engraving, readability-first.
+  if (lum < 0.22) {
+    return {
+      ink: "rgba(240,238,232,0.92)",
+      edge: "rgba(255,255,255,0.35)",
+      highlight: "rgba(255,255,255,0.55)",
+      highlightOffset: -0.035,
+      shadow: "rgba(0,0,0,0.55)",
+      shadowOffset: 0.04,
+      blur: 0.6,
+    };
+  }
+
+  // Silver / very light metal — dark engraving with strong shadow to avoid grey-on-grey.
+  if (lum > 0.7) {
+    return {
+      ink: "rgba(28,22,16,0.9)",
+      edge: "rgba(0,0,0,0.35)",
+      highlight: "rgba(255,255,255,0.7)",
+      highlightOffset: -0.04,
+      shadow: "rgba(0,0,0,0.45)",
+      shadowOffset: 0.045,
+      blur: 0.5,
+    };
+  }
+
+  // Gold / rose / mid-tone metal — dark ink, warm-tinted shadow, subtle highlight.
+  // Slightly warmer ink on rose (red-heavy) to stay premium rather than muddy.
+  const [r] = hexToRgb(metalColor);
+  const roseish = r > 200 && lum < 0.7 && lum > 0.45; // rose gold zone
+  return {
+    ink: roseish ? "rgba(60,28,24,0.92)" : "rgba(38,22,10,0.9)",
+    edge: "rgba(0,0,0,0.3)",
+    highlight: "rgba(255,240,215,0.55)",
+    highlightOffset: -0.035,
+    shadow: "rgba(30,12,4,0.55)",
+    shadowOffset: 0.04,
+    blur: 0.5,
+  };
+}
+
+function drawEngraving({ canvas, template, lines, metalColor }: DrawOpts) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
   const W = canvas.width;
@@ -100,9 +189,7 @@ function drawEngraving({ canvas, template, lines }: DrawOpts) {
   const cleanLines = lines.map((l) => ({ ...l, text: (l.text ?? "").trim() })).filter((l) => l.text);
   if (cleanLines.length === 0) return;
 
-  // Canvas px per 1 "slider px". We want the slider value to map to
-  // a predictable on-screen size. Canvas is ~1024 wide, pendant renders
-  // at ~360 CSS px → multiplier ≈ 2.85. Use 2.85 so 28 (default) ≈ 80 canvas px.
+  // Slider-px → canvas-px. Canvas ≈ 1024, pendant renders ≈ 360 CSS px.
   const sliderToCanvas = W / 360;
 
   ctx.save();
@@ -111,19 +198,16 @@ function drawEngraving({ canvas, template, lines }: DrawOpts) {
   ctx.textAlign = template.textAlign === "center" ? "center" : "left";
   ctx.textBaseline = "middle";
 
-  // Compute per-line font sizes: start from slider value, shrink only if overflow.
+  // Per-line font sizes: slider value is the base; only shrink if overflow.
   const perLine = cleanLines.map((line) => {
     const family = resolveFontFamily(line.fontId);
     let fontSize = Math.max(template.minFontSize, line.size) * sliderToCanvas;
     ctx.font = `600 ${fontSize}px ${family}`;
     const measured = ctx.measureText(line.text).width;
-    if (measured > safeW) {
-      fontSize *= safeW / measured;
-    }
+    if (measured > safeW) fontSize *= safeW / measured;
     return { ...line, family, fontSize };
   });
 
-  // Vertical fit across all lines combined
   const totalH = perLine.reduce((acc, l) => acc + l.fontSize * 1.22, 0);
   const vScale = totalH > safeH ? safeH / totalH : 1;
   perLine.forEach((l) => (l.fontSize *= vScale));
@@ -131,20 +215,33 @@ function drawEngraving({ canvas, template, lines }: DrawOpts) {
   const totalBlockH = perLine.reduce((acc, l) => acc + l.fontSize * 1.22, 0);
   let y = -totalBlockH / 2 + perLine[0].fontSize * 0.61;
 
-  // Dark, slightly recessed look — text ink darker than metal, subtle inset.
+  const preset = getEngravingPreset(metalColor);
+
   for (const l of perLine) {
     ctx.font = `600 ${l.fontSize}px ${l.family}`;
-    // subtle outer lift
-    ctx.shadowColor = "rgba(255,255,255,0.35)";
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = Math.max(1, l.fontSize * 0.03);
-    ctx.fillStyle = "rgba(255,255,255,0.25)";
-    ctx.fillText(l.text, 0, y + ctx.shadowOffsetY);
-    // main ink
+    const hOff = l.fontSize * preset.highlightOffset;
+    const sOff = l.fontSize * preset.shadowOffset;
+
+    // Layer 1 — recessed shadow (below & right of ink).
     ctx.shadowColor = "transparent";
-    ctx.shadowOffsetY = 0;
-    ctx.fillStyle = "rgba(20,14,8,0.85)";
+    ctx.fillStyle = preset.shadow;
+    if (preset.blur) ctx.filter = `blur(${preset.blur}px)`;
+    ctx.fillText(l.text, 0, y + sOff);
+    ctx.filter = "none";
+
+    // Layer 2 — light-catching highlight (above & left of ink).
+    ctx.fillStyle = preset.highlight;
+    ctx.fillText(l.text, 0, y + hOff);
+
+    // Layer 3 — main ink.
+    ctx.fillStyle = preset.ink;
     ctx.fillText(l.text, 0, y);
+
+    // Layer 4 — thin edge contrast stroke for crispness.
+    ctx.lineWidth = Math.max(0.75, l.fontSize * 0.018);
+    ctx.strokeStyle = preset.edge;
+    ctx.strokeText(l.text, 0, y);
+
     y += l.fontSize * 1.22;
   }
   ctx.restore();
@@ -395,7 +492,7 @@ export default function Pendant3DPreview({
       const c = engravingCanvasRef.current;
       const t = engravingTexRef.current;
       if (!c || !t) return;
-      drawEngraving({ canvas: c, template, lines });
+      drawEngraving({ canvas: c, template, lines, metalColor });
       t.needsUpdate = true;
     })();
 
@@ -403,7 +500,7 @@ export default function Pendant3DPreview({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [linesSignature, templateKey]);
+  }, [linesSignature, templateKey, metalColor]);
 
   return (
     <div className="studio-three-wrap">
