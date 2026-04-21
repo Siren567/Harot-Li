@@ -756,8 +756,9 @@ textarea:focus-visible {
 }
 
 .studio-stock-badge--overlay-low {
-  top: auto;
-  bottom: 10px;
+  top: 10px;
+  bottom: auto;
+  inset-inline-start: 10px;
 }
 
 
@@ -1070,6 +1071,41 @@ textarea:focus-visible {
   margin-top: 6px;
 }
 
+.studio-upload-dropzone {
+  width: 100%;
+  border: 1px dashed #d9c4b2;
+  background: linear-gradient(180deg, #fff 0%, #fdf8f2 100%);
+  border-radius: 14px;
+  min-height: 110px;
+  padding: 14px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #7a624f;
+  cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+.studio-upload-dropzone strong {
+  font-size: .9rem;
+  color: #5c4330;
+}
+
+.studio-upload-dropzone span {
+  font-size: .78rem;
+  color: #8a7463;
+}
+
+.studio-upload-dropzone:hover,
+.studio-upload-dropzone.is-dragging {
+  border-color: #9b6a45;
+  box-shadow: 0 0 0 2px rgba(155, 106, 69, .12);
+  background: #fffaf4;
+}
+
 .studio-engrave-text {
   position: absolute;
   white-space: pre-wrap;
@@ -1188,23 +1224,27 @@ textarea:focus-visible {
 
 .studio-personalization-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-top: 10px;
+  align-items: start;
 }
 
 .studio-personalization-tile {
-  height: 52px;
+  min-height: 54px;
   border-radius: 14px;
   border: 1px solid #e5e5e5;
   background: #fafafa;
   color: #3d2a1b;
-  display: grid;
-  place-items: center;
-  gap: 2px;
-  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  cursor: default;
   transition: background .2s ease, border-color .2s ease, box-shadow .2s ease, transform .12s ease;
   user-select: none;
+  overflow: hidden;
 }
 
 .studio-personalization-tile:hover {
@@ -1229,8 +1269,22 @@ textarea:focus-visible {
 }
 
 .studio-personalization-tile--font {
-  padding: 8px 10px;
-  place-items: start;
+  position: relative;
+}
+
+.studio-personalization-control {
+  width: 100%;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid #eadfce;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+}
+
+.studio-personalization-control--font {
+  position: relative;
 }
 
 .studio-personalization-select {
@@ -1242,17 +1296,15 @@ textarea:focus-visible {
   font-size: .86rem;
   outline: none;
   appearance: none;
-  padding-inline-end: 18px;
+  padding-inline-end: 20px;
+  direction: rtl;
+  text-overflow: ellipsis;
 }
 
-.studio-personalization-tile--font {
-  position: relative;
-}
-
-.studio-personalization-tile--font:after {
+.studio-personalization-control--font:after {
   content: "▾";
   position: absolute;
-  left: 10px;
+  inset-inline-start: 10px;
   top: 50%;
   transform: translateY(-50%);
   color: #8d7664;
@@ -1262,16 +1314,17 @@ textarea:focus-visible {
 
 .studio-personalization-btn {
   width: 100%;
-  height: 100%;
+  min-height: 38px;
   border: 0;
   background: transparent;
   cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  flex-direction: row-reverse;
   gap: 6px;
   color: inherit;
-  padding: 0 10px;
+  padding: 0;
 }
 
 .studio-personalization-dot {
@@ -1279,21 +1332,41 @@ textarea:focus-visible {
   height: 10px;
   border-radius: 999px;
   border: 1px solid rgba(0,0,0,.12);
+  flex: 0 0 auto;
+}
+
+.studio-personalization-value {
+  font-size: .73rem;
+  color: #8b6f5d;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 70px;
 }
 
 .studio-personalization-tile--gift {
   position: relative;
-  padding: 0 10px;
+  justify-content: flex-start;
 }
 
-.studio-personalization-tile--gift input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
+.studio-gift-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
 }
 
-.studio-gift-reveal {
-  margin-top: 8px;
+.studio-gift-toggle-row input {
+  width: 14px;
+  height: 14px;
+  accent-color: #9b6a45;
+}
+
+.studio-gift-reveal-inline {
+  margin-top: 0;
+  width: 100%;
   max-height: 0;
   opacity: 0;
   transform: translateY(-4px);
@@ -1301,8 +1374,9 @@ textarea:focus-visible {
   overflow: hidden;
 }
 
-.studio-gift-reveal.open {
-  max-height: 140px;
+.studio-gift-reveal-inline.open {
+  margin-top: 8px;
+  max-height: 110px;
   opacity: 1;
   transform: translateY(0);
 }
@@ -1310,7 +1384,7 @@ textarea:focus-visible {
 .studio-color-popover {
   position: absolute;
   top: calc(100% + 8px);
-  inset-inline-start: 0;
+  inset-inline-end: 0;
   z-index: 20;
   width: min(300px, calc(100vw - 40px));
   border-radius: 14px;
@@ -1322,49 +1396,48 @@ textarea:focus-visible {
 
 .studio-color-swatches {
   display: grid;
-  grid-template-columns: repeat(10, 1fr);
-  gap: 6px;
+  grid-template-columns: 1fr;
+  gap: 7px;
 }
 
-.studio-color-swatch {
+.studio-product-color-option {
   width: 100%;
-  aspect-ratio: 1/1;
+  min-height: 34px;
   border-radius: 10px;
   border: 1px solid rgba(0,0,0,.12);
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .75rem;
+  font-weight: 800;
+  color: #2f2218;
+  background-size: cover;
 }
 
-.studio-color-swatch.active {
+.studio-product-color-option span {
+  background: rgba(255,255,255,.78);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.studio-product-color-option.active {
   border-color: rgba(155, 106, 69, .75);
   box-shadow: 0 0 0 2px rgba(155, 106, 69, .14);
 }
 
-.studio-color-row {
-  margin-top: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.studio-color-row input[type="color"] {
-  width: 44px;
-  height: 34px;
+.studio-size-pill {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
   border: 1px solid #e4d4c5;
-  border-radius: 10px;
-  padding: 0;
   background: #fff;
-}
-
-.studio-color-auto {
-  border: 1px solid #e4d4c5;
-  background: #fffaf4;
-  border-radius: 10px;
-  padding: 8px 10px;
-  font-size: 12px;
+  font-size: .72rem;
   font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: #6f5644;
-  cursor: pointer;
 }
 
 .studio-option-tiles-row {
@@ -1403,14 +1476,14 @@ textarea:focus-visible {
 
 .studio-gift-note-input {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 0;
   border: 1px solid #e4d4c5;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #fff;
   color: #3d2a1b;
   padding: 8px 10px;
-  resize: vertical;
-  min-height: 58px;
+  resize: none;
+  min-height: 56px;
 }
 
 .studio-engraving-input-list {
@@ -1545,12 +1618,12 @@ textarea:focus-visible {
 
 .studio-icon-btn--emoji-corner {
   position: absolute;
-  left: 30px;
-  bottom: 6px;
+  left: 8px;
+  bottom: 5px;
   top: auto;
   transform: none;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1659,14 +1732,15 @@ textarea:focus-visible {
 .studio-checkout-form {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
+  align-items: start;
 }
 
 .studio-checkout-form-address-row {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
 }
 
 .studio-checkout-form-notes {
@@ -1893,6 +1967,15 @@ textarea:focus-visible {
   gap: 4px;
 }
 
+.studio-summary-customer-image {
+  width: 86px;
+  height: 86px;
+  border-radius: 12px;
+  border: 1px solid #e2d3c5;
+  object-fit: cover;
+  cursor: zoom-in;
+}
+
 .studio-summary-pricing {
   border-top: 1px solid #e9d9ca;
   margin-top: 2px;
@@ -2052,6 +2135,9 @@ textarea:focus-visible {
 @media (max-width: 560px) {
   .studio-products-grid {
     grid-template-columns: 1fr;
+  }
+  .studio-personalization-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

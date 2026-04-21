@@ -10,16 +10,37 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Eye,
   Filter,
   MessageSquarePlus,
-  Pencil,
   RefreshCw,
   Search,
   Star,
   UserRound,
   X,
 } from "lucide-react";
+
+const CUSTOMER_NOTES_STORAGE_KEY = "harotli_admin_customer_notes_v1";
+
+function readCustomerNotesMap(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(CUSTOMER_NOTES_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeCustomerNotesMap(map: Record<string, string>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CUSTOMER_NOTES_STORAGE_KEY, JSON.stringify(map));
+  } catch {
+    // ignore localStorage errors
+  }
+}
 
 type CustomerStatus = "new" | "repeat" | "inactive" | "no_orders";
 
@@ -445,26 +466,6 @@ function Drawer({
             <MessageSquarePlus size={16} />
             הוספת הערה
           </button>
-          <button
-            type="button"
-            onClick={() => {}}
-            style={{
-              background: "transparent",
-              color: "var(--foreground-secondary)",
-              border: "1px solid var(--border)",
-              borderRadius: "10px",
-              padding: "10px 12px",
-              fontSize: "12px",
-              fontWeight: 900,
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "8px",
-            }}
-          >
-            <Pencil size={16} />
-            עריכה
-          </button>
         </div>
       </aside>
     </>
@@ -476,6 +477,7 @@ export function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [notePopoverCustomerId, setNotePopoverCustomerId] = useState<string | null>(null);
 
   const loadCustomers = useCallback(
     async (silent?: boolean) => {
@@ -543,6 +545,11 @@ export function CustomersPage() {
           else c.status = "new";
           return c;
         });
+        const storedNotes = readCustomerNotesMap();
+        for (const c of mapped) {
+          const note = String(storedNotes[c.id] ?? "").trim();
+          if (note) c.internalNote = note;
+        }
         setCustomers(mapped);
       } catch (e: any) {
         setCustomers([]);
@@ -681,6 +688,26 @@ export function CustomersPage() {
     const recentRepeat = customers.filter((c) => c.ordersCount >= 2 && c.lastOrderAt && new Date(c.lastOrderAt).getTime() >= monthAgo).slice(0, 6);
     return { recentRepeat };
   }, [customers, monthAgo]);
+
+  function saveCustomerNote(customerId: string, note: string) {
+    const next = String(note ?? "").trim();
+    setCustomers((prev) => prev.map((c) => (c.id === customerId ? { ...c, internalNote: next } : c)));
+    const map = readCustomerNotesMap();
+    if (next) map[customerId] = next;
+    else delete map[customerId];
+    writeCustomerNotesMap(map);
+    if (!next) {
+      setNotePopoverCustomerId((cur) => (cur === customerId ? null : cur));
+    }
+  }
+
+  function onAddCustomerNote(customer: Customer) {
+    const current = String(customer.internalNote ?? "").trim();
+    const next = window.prompt("הוסף/ערוך הערה ללקוח", current);
+    if (next === null) return;
+    saveCustomerNote(customer.id, next);
+    toast("ההערה נשמרה", "success");
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px", paddingBottom: "18px" }}>
@@ -1045,14 +1072,65 @@ export function CustomersPage() {
                           >
                             {initials(c.fullName)}
                           </div>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: 13, color: "var(--foreground)", fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <div style={{ minWidth: 0, position: "relative" }}>
+                            <div style={{ fontSize: 13, color: "var(--foreground)", fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "inline-flex", alignItems: "center", gap: 8 }}>
                               {c.fullName}
+                              {c.internalNote?.trim() ? (
+                                <button
+                                  type="button"
+                                  aria-label="צפה בהערת לקוח"
+                                  title="צפה בהערת לקוח"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setNotePopoverCustomerId((cur) => (cur === c.id ? null : c.id));
+                                  }}
+                                  style={{
+                                    width: 18,
+                                    height: 18,
+                                    borderRadius: 999,
+                                    border: "1px solid rgba(245,158,11,0.45)",
+                                    background: "rgba(245,158,11,0.16)",
+                                    color: "var(--warning)",
+                                    fontSize: 12,
+                                    fontWeight: 900,
+                                    lineHeight: 1,
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    cursor: "pointer",
+                                    padding: 0,
+                                  }}
+                                >
+                                  !
+                                </button>
+                              ) : null}
                             </div>
                             <div style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 2 }}>
                               CLV: <span style={{ color: "var(--foreground-secondary)", fontWeight: 900 }}>{fmtMoney(c.totalSpend)}</span> · שמורים:{" "}
                               <span style={{ color: "var(--foreground-secondary)", fontWeight: 900 }}>{c.savedDesigns.length}</span>
                             </div>
+                            {notePopoverCustomerId === c.id && c.internalNote?.trim() ? (
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  position: "absolute",
+                                  top: "calc(100% + 6px)",
+                                  right: 0,
+                                  width: "min(320px, 55vw)",
+                                  borderRadius: "10px",
+                                  border: "1px solid var(--border)",
+                                  background: "var(--card)",
+                                  boxShadow: "0 10px 24px rgba(0,0,0,0.35)",
+                                  padding: "10px 12px",
+                                  zIndex: 20,
+                                }}
+                              >
+                                <div style={{ fontSize: "11px", color: "var(--muted-foreground)", marginBottom: "4px" }}>הערה ללקוח</div>
+                                <div style={{ fontSize: "12px", color: "var(--foreground-secondary)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                                  {c.internalNote}
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       </td>
@@ -1080,49 +1158,7 @@ export function CustomersPage() {
                         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                           <button
                             type="button"
-                            onClick={() => toast("תצוגת פרטי לקוח מורחבת בוטלה", "info")}
-                            style={{
-                              background: "var(--input)",
-                              border: "1px solid var(--border)",
-                              color: "var(--foreground-secondary)",
-                              borderRadius: "10px",
-                              padding: "8px 10px",
-                              fontSize: "12px",
-                              fontWeight: 900,
-                              cursor: "pointer",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "8px",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            <Eye size={16} />
-                            צפייה
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => toast("עריכת לקוח (placeholder)", "info")}
-                            style={{
-                              background: "transparent",
-                              border: "1px solid var(--border)",
-                              color: "var(--foreground-secondary)",
-                              borderRadius: "10px",
-                              padding: "8px 10px",
-                              fontSize: "12px",
-                              fontWeight: 900,
-                              cursor: "pointer",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "8px",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            <Pencil size={16} />
-                            עריכה
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => toast("הוספת הערה (placeholder)", "success")}
+                            onClick={() => onAddCustomerNote(c)}
                             style={{
                               background: "var(--primary)",
                               border: "1px solid rgba(201,169,110,0.35)",
@@ -1290,7 +1326,10 @@ export function CustomersPage() {
         open={Boolean(selected)}
         customer={selected}
         onClose={() => setSelected(null)}
-        onAddNote={() => toast("הוספת הערה (placeholder)", "success")}
+        onAddNote={() => {
+          if (!selected) return;
+          onAddCustomerNote(selected);
+        }}
       />
       <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
     </div>

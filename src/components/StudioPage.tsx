@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Palette, Plus, Smile, Trash2 } from "lucide-react";
+import { Eye, Palette, Plus, Smile, Trash2 } from "lucide-react";
 import EmojiPicker, { type EmojiClickData } from "emoji-picker-react";
 import type { StudioSubcategory } from "../constants/studioData";
 import { getApiBaseUrl } from "../lib/apiBase";
@@ -234,6 +234,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   engravingsRef.current = engravings;
   const [activeEngravingId, setActiveEngravingId] = useState("engraving-1");
   const [customerImageDataUrl, setCustomerImageDataUrl] = useState<string | null>(null);
+  const [isImageDropActive, setIsImageDropActive] = useState(false);
   const customerImageInputRef = useRef<HTMLInputElement | null>(null);
   const [galleryModalUrl, setGalleryModalUrl] = useState<string | null>(null);
   const [engraveFitError, setEngraveFitError] = useState<string | null>(null);
@@ -244,8 +245,8 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [giftWrap, setGiftWrap] = useState(false);
   const [greetingCard] = useState(false);
   const [giftGreetingText, setGiftGreetingText] = useState("");
-  const [engraveInkColor, setEngraveInkColor] = useState<string>(""); // empty = auto
-  const [showInkPicker, setShowInkPicker] = useState(false);
+  const [showProductColorPicker, setShowProductColorPicker] = useState(false);
+  const [textSizePreset, setTextSizePreset] = useState<"s" | "m" | "l">("m");
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<null | { code: string; discountAmount: number; freeShipping: boolean }>(null);
   const [couponMsg, setCouponMsg] = useState<string | null>(null);
@@ -265,6 +266,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [rotatingMeta, setRotatingMeta] = useState<{ id: string; startPointerAngle: number; startItemAngle: number } | null>(null);
   const [emojiPickerForId, setEmojiPickerForId] = useState<string | null>(null);
+  const personalizationRef = useRef<HTMLDivElement | null>(null);
   const apiBase = useMemo(() => getApiBaseUrl(), []);
 
   const activeEngraving = useMemo(
@@ -276,13 +278,16 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     [engravings]
   );
 
-  const inkSwatches = useMemo(
-    () => ["", "#111827", "#ffffff", "#d4af37", "#c0c0c0", "#d4a5a0", "#2a2a2a", "#1d4ed8", "#16a34a", "#b91c1c"],
-    []
-  );
-
   function updateEngraving(id: string, patch: Partial<EngravingItem>) {
     setEngravings((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+  }
+
+  function applyTextSizePreset(next: "s" | "m" | "l") {
+    setTextSizePreset(next);
+    const targetSize = next === "s" ? 20 : next === "l" ? 34 : 26;
+    if (activeEngraving) {
+      updateEngraving(activeEngraving.id, { size: targetSize });
+    }
   }
 
   function addEngraving() {
@@ -510,6 +515,19 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   useEffect(() => {
     setSelectedGalleryIndex(0);
   }, [activeProduct?.id]);
+
+  useEffect(() => {
+    const onDocPointerDown = (event: PointerEvent) => {
+      if (!showProductColorPicker) return;
+      const root = personalizationRef.current;
+      if (!root) return;
+      if (event.target instanceof Node && !root.contains(event.target)) {
+        setShowProductColorPicker(false);
+      }
+    };
+    window.addEventListener("pointerdown", onDocPointerDown);
+    return () => window.removeEventListener("pointerdown", onDocPointerDown);
+  }, [showProductColorPicker]);
 
   const normalizedTab = useMemo(() => {
     const n = normalizeCategoryKey(category);
@@ -748,22 +766,37 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  function handleCustomerImageFile(file?: File | null) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setCouponMsg("ניתן להעלות קובץ תמונה בלבד");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setCustomerImageDataUrl(typeof reader.result === "string" ? reader.result : null);
+    reader.readAsDataURL(file);
+  }
+
   const renderProductCard = (product: StudioRuntimeProduct) => {
     const outOfStock = product.totalStock <= 0;
     const lowStock = !outOfStock && product.totalStock <= product.lowThreshold;
     const selectedIndex = selectedColorByProduct[product.id] ?? 0;
+    const previewImage =
+      product.images[selectedIndex] ??
+      product.images[0] ??
+      product.image ??
+      null;
     return (
       <article
         key={product.id}
         className={`studio-product-card ${productId === product.id ? "selected" : ""} ${outOfStock ? "out-of-stock" : ""}`}
-        onClick={outOfStock ? undefined : () => selectProductAndGoDesign(product.id)}
         aria-disabled={outOfStock}
       >
         <span className="studio-product-category-label">{categoryLabelById[product.category] ?? "קטגוריה"}</span>
         <div className={`studio-product-thumb ${product.category}`}>
-          {product.image ? (
+          {previewImage ? (
             <img
-              src={product.image}
+              src={previewImage}
               alt={product.title}
               loading="lazy"
               decoding="async"
@@ -795,7 +828,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             />
           ))}
         </div>
-        <button type="button" className="studio-select-btn" disabled={outOfStock}>
+        <button
+          type="button"
+          className="studio-select-btn"
+          disabled={outOfStock}
+          onClick={() => selectProductAndGoDesign(product.id)}
+        >
           בחר
         </button>
       </article>
@@ -932,7 +970,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                         title="בחר אימוגי"
                         onClick={() => setEmojiPickerForId((prev) => (prev === item.id ? null : item.id))}
                       >
-                        <Smile size={14} />
+                        <Smile size={12} />
                       </button>
                       {idx > 0 ? (
                         <button
@@ -968,105 +1006,107 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   </p>
                 ) : null}
               </div>
-              <div className="studio-personalization-row" aria-label="התאמה אישית">
+              <div className="studio-personalization-row" aria-label="התאמה אישית" ref={personalizationRef}>
                 <div className={`studio-personalization-tile studio-personalization-tile--font ${activeEngraving ? "is-active" : ""}`}>
                   <div className="studio-personalization-label">פונט</div>
-                  <select
-                    className="studio-personalization-select"
-                    value={activeEngraving?.font ?? "heebo"}
-                    onChange={(e) => {
-                      setEngraveFitError(null);
-                      activeEngraving && updateEngraving(activeEngraving.id, { font: e.target.value });
-                    }}
-                  >
-                    {studioFonts.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="studio-personalization-control studio-personalization-control--font">
+                    <select
+                      className="studio-personalization-select"
+                      value={activeEngraving?.font ?? "heebo"}
+                      onChange={(e) => {
+                        setEngraveFitError(null);
+                        activeEngraving && updateEngraving(activeEngraving.id, { font: e.target.value });
+                      }}
+                    >
+                      {studioFonts.map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
-                <div className={`studio-personalization-tile ${showInkPicker ? "is-active" : ""}`} style={{ position: "relative" }}>
+                <div className={`studio-personalization-tile ${showProductColorPicker ? "is-active" : ""}`} style={{ position: "relative" }}>
                   <button
                     type="button"
                     className="studio-personalization-btn"
-                    onClick={() => setShowInkPicker((v) => !v)}
-                    aria-label="בחירת צבע טקסט"
-                    title="בחירת צבע טקסט"
+                    onClick={() => setShowProductColorPicker((v) => !v)}
+                    aria-label="בחירת צבע מוצר"
+                    title="בחירת צבע מוצר"
                   >
                     <Palette size={16} />
                     <span className="studio-personalization-label">צבע</span>
                     <span
                       className="studio-personalization-dot"
-                      style={{ background: engraveInkColor ? engraveInkColor : "linear-gradient(135deg,#111827,#d4af37)" }}
+                      style={{ background: activeColor?.swatch ?? "linear-gradient(135deg,#111827,#d4af37)" }}
                       aria-hidden
                     />
+                    <span className="studio-personalization-value">{activeColor?.name ?? "בחר צבע"}</span>
                   </button>
-                  {showInkPicker ? (
-                    <div className="studio-color-popover" role="dialog" aria-label="בחירת צבע טקסט">
+                  {showProductColorPicker && activeProduct ? (
+                    <div className="studio-color-popover" role="dialog" aria-label="בחירת צבע מוצר">
                       <div className="studio-color-swatches">
-                        {inkSwatches.map((c) => (
+                        {activeProduct.colors.map((c, i) => (
                           <button
-                            key={c || "auto"}
+                            key={`${activeProduct.id}-tile-color-${i}`}
                             type="button"
-                            className={`studio-color-swatch ${engraveInkColor === c ? "active" : ""}`}
-                            onClick={() => setEngraveInkColor(c)}
-                            aria-label={c ? `בחר צבע ${c}` : "צבע אוטומטי"}
-                            title={c ? c : "אוטומטי"}
-                            style={{ background: c ? c : "linear-gradient(135deg,#111827,#d4af37)" }}
-                          />
+                            className={`studio-product-color-option ${i === (selectedColorByProduct[activeProduct.id] ?? 0) ? "active" : ""}`}
+                            onClick={() => {
+                              setSelectedColorByProduct((prev) => ({ ...prev, [activeProduct.id]: i }));
+                              setShowProductColorPicker(false);
+                            }}
+                            aria-label={`בחר צבע ${c.name}`}
+                            title={c.name}
+                            style={{ background: c.swatch }}
+                          >
+                            <span>{c.name}</span>
+                          </button>
                         ))}
-                      </div>
-                      <div className="studio-color-row">
-                        <input
-                          type="color"
-                          value={engraveInkColor || "#111827"}
-                          onChange={(e) => setEngraveInkColor(e.target.value)}
-                          aria-label="בחירת צבע מותאם"
-                        />
-                        <button type="button" className="studio-color-auto" onClick={() => setEngraveInkColor("")}>
-                          אוטומטי
-                        </button>
                       </div>
                     </div>
                   ) : null}
                 </div>
 
-                <label className={`studio-personalization-tile studio-personalization-tile--gift ${giftWrap ? "is-active" : ""}`}>
-                  <input type="checkbox" checked={giftWrap} onChange={(e) => setGiftWrap(e.target.checked)} />
-                  <div className="studio-personalization-label">אריזת מתנה</div>
-                </label>
-              </div>
-
-              <div className={`studio-gift-reveal ${giftWrap ? "open" : ""}`} aria-hidden={!giftWrap}>
-                {giftWrap ? (
-                  <textarea
-                    className="studio-gift-note-input"
-                    value={giftGreetingText}
-                    maxLength={140}
-                    rows={2}
-                    placeholder="כתוב הקדשה קצרה למתנה..."
-                    onChange={(e) => setGiftGreetingText(e.target.value)}
-                  />
-                ) : null}
-              </div>
-
-              {activeProduct ? (
-                <div className="studio-chip-row studio-color-pick-row" aria-label="צבע מוצר">
-                  {activeProduct.colors.map((c, i) => (
-                    <button
-                      type="button"
-                      key={`${activeProduct.id}-color-${i}`}
-                      className={`studio-chip material ${(selectedColorByProduct[activeProduct.id] ?? 0) === i ? "active" : ""}`}
-                      style={{ ["--mat" as string]: c.swatch }}
-                      onClick={() => setSelectedColorByProduct((prev) => ({ ...prev, [activeProduct.id]: i }))}
-                    >
-                      {c.name}
-                    </button>
-                  ))}
+                <div className={`studio-personalization-tile studio-personalization-tile--size ${textSizePreset ? "is-active" : ""}`}>
+                  <button
+                    type="button"
+                    className="studio-personalization-btn"
+                    onClick={() => {
+                      const next = textSizePreset === "s" ? "m" : textSizePreset === "m" ? "l" : "s";
+                      applyTextSizePreset(next);
+                    }}
+                    aria-label="בחירת גודל טקסט"
+                    title="בחירת גודל טקסט"
+                  >
+                    <span className="studio-personalization-label">גודל</span>
+                    <span className="studio-size-pill">{textSizePreset.toUpperCase()}</span>
+                  </button>
                 </div>
-              ) : null}
+
+                <div className={`studio-personalization-tile studio-personalization-tile--gift ${giftWrap ? "is-active" : ""}`}>
+                  <label className="studio-gift-toggle-row">
+                    <input
+                      type="checkbox"
+                      checked={giftWrap}
+                      onChange={(e) => setGiftWrap(e.target.checked)}
+                    />
+                    <span className="studio-personalization-label">אריזת מתנה</span>
+                  </label>
+                  <div className={`studio-gift-reveal-inline ${giftWrap ? "open" : ""}`} aria-hidden={!giftWrap}>
+                    {giftWrap ? (
+                      <textarea
+                        className="studio-gift-note-input"
+                        value={giftGreetingText}
+                        maxLength={140}
+                        rows={2}
+                        placeholder="כתוב הקדשה קצרה למתנה..."
+                        onChange={(e) => setGiftGreetingText(e.target.value)}
+                      />
+                    ) : null}
+                  </div>
+                </div>
+              </div>
               {activeProduct?.allowCustomerImageUpload ? (
                 <div className="studio-customer-photo-block">
                   <div className="studio-field-hint">תמונה אישית (אופציונלי)</div>
@@ -1076,18 +1116,42 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     accept="image/*"
                     className="visually-hidden"
                     onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (!f) return;
-                      const reader = new FileReader();
-                      reader.onload = () => setCustomerImageDataUrl(typeof reader.result === "string" ? reader.result : null);
-                      reader.readAsDataURL(f);
+                      const f = e.target.files?.[0] ?? null;
+                      handleCustomerImageFile(f);
                       e.target.value = "";
                     }}
                   />
+                  <button
+                    type="button"
+                    className={`studio-upload-dropzone ${isImageDropActive ? "is-dragging" : ""}`}
+                    onClick={() => customerImageInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsImageDropActive(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      setIsImageDropActive(false);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsImageDropActive(false);
+                      const f = e.dataTransfer?.files?.[0] ?? null;
+                      handleCustomerImageFile(f);
+                    }}
+                  >
+                    <strong>{customerImageDataUrl ? "התמונה נטענה בהצלחה" : "גרור תמונה לכאן"}</strong>
+                    <span>{customerImageDataUrl ? "אפשר לגרור תמונה אחרת או ללחוץ להחלפה" : "או לחץ כדי לבחור מהמחשב"}</span>
+                  </button>
                   <div className="studio-customer-photo-actions">
                     <button type="button" className="studio-chip" onClick={() => customerImageInputRef.current?.click()}>
                       {customerImageDataUrl ? "החלפת תמונה" : "העלאת תמונה"}
                     </button>
+                    {customerImageDataUrl ? (
+                      <button type="button" className="studio-chip light" onClick={() => setGalleryModalUrl(customerImageDataUrl)} title="תצוגה מקדימה" aria-label="תצוגה מקדימה">
+                        <Eye size={14} />
+                      </button>
+                    ) : null}
                     {customerImageDataUrl ? (
                       <button type="button" className="studio-chip light" onClick={() => setCustomerImageDataUrl(null)}>
                         הסר תמונה
@@ -1151,7 +1215,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     {engravings.map((item) => {
                       const inkDark = activeColor?.colorKey !== "black";
                       const px = Math.min(ENGRAVE_MAX_PX, Math.max(ENGRAVE_MIN_PX, Math.round(item.size)));
-                      const forcedInk = engraveInkColor ? { color: engraveInkColor, textShadow: "none" } : null;
                       return (
                         <span
                           key={item.id}
@@ -1164,7 +1227,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                               top: `calc(50% + ${item.y}%)`,
                               fontSize: `${px}px`,
                               transform: `translate(-50%, -50%) rotate(${Number(item.angle) || 0}deg)`,
-                              ...(forcedInk ?? {}),
                             } as CSSProperties
                           }
                           onPointerDown={() => startDragEngraving(item.id)}
@@ -1336,6 +1398,17 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 <div className="studio-summary-section">
                   <div className="studio-summary-section-title">התאמה אישית</div>
                   <div className="studio-summary-rows">
+                    {customerImageDataUrl ? (
+                      <div className="studio-summary-row studio-summary-row--stack">
+                        <span>תמונה אישית</span>
+                        <img
+                          src={customerImageDataUrl}
+                          alt="תמונה אישית שהועלתה"
+                          className="studio-summary-customer-image"
+                          onClick={() => setGalleryModalUrl(customerImageDataUrl)}
+                        />
+                      </div>
+                    ) : null}
                     {engravingSummary ? (
                       <div className="studio-summary-row studio-summary-row--stack">
                         <span>חריטה</span>

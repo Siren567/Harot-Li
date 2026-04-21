@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Eye,
   Filter,
   MessageSquarePlus,
   RefreshCw,
@@ -44,6 +45,7 @@ type OrderItem = {
   name: string;
   qty: number;
   price: number;
+  customerImageUrl?: string | null;
 };
 
 type Order = {
@@ -362,6 +364,52 @@ function Drawer({
                           {it.name}
                         </div>
                         <div style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "2px" }}>כמות: {it.qty}</div>
+                        {it.customerImageUrl ? (
+                          <div style={{ marginTop: "8px", display: "flex", gap: "8px", alignItems: "center" }}>
+                            <button
+                              type="button"
+                              onClick={() => window.open(it.customerImageUrl || "", "_blank", "noopener,noreferrer")}
+                              style={{
+                                background: "var(--input)",
+                                border: "1px solid var(--border)",
+                                color: "var(--foreground-secondary)",
+                                borderRadius: "8px",
+                                padding: "5px 8px",
+                                fontSize: "11px",
+                                fontWeight: 800,
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                              }}
+                            >
+                              <Eye size={13} />
+                              צפייה בתמונה
+                            </button>
+                            <a
+                              href={it.customerImageUrl}
+                              download={`customer-image-${order.orderNumber || it.id}.png`}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                background: "transparent",
+                                border: "1px solid var(--border)",
+                                color: "var(--foreground-secondary)",
+                                borderRadius: "8px",
+                                padding: "5px 8px",
+                                fontSize: "11px",
+                                fontWeight: 800,
+                                textDecoration: "none",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                              }}
+                            >
+                              <Download size={13} />
+                              הורדה
+                            </a>
+                          </div>
+                        ) : null}
                       </div>
                       <div style={{ fontSize: "12px", color: "var(--foreground-secondary)", fontWeight: 700 }}>{fmtMoney(it.price)}</div>
                     </div>
@@ -535,6 +583,7 @@ export function OrdersPage() {
             name: String(it?.title ?? it?.nameSnapshot ?? it?.name ?? "מוצר"),
             qty: Number(it?.qty ?? 1),
             price: Number(it?.unitPrice ?? 0) / 100,
+            customerImageUrl: typeof it?.customerImageUrl === "string" && it.customerImageUrl.trim() ? it.customerImageUrl : null,
           })),
           engravingText: customization.engravingText,
           pendantShape: customization.pendantShape,

@@ -136,7 +136,7 @@ function CheckoutForm({ onSubmit, paymentMethod, id, className, disabled }: Chec
         <input
           name="address"
           autoComplete="street-address"
-          placeholder="דիզנגוף 120"
+          placeholder="דיזינגוף 120, תל אביב"
           value={address}
           onChange={(ev) => {
             setAddress(ev.target.value);
@@ -155,8 +155,8 @@ function CheckoutForm({ onSubmit, paymentMethod, id, className, disabled }: Chec
           <input name="apartment" autoComplete="off" placeholder="12" value={apartment} onChange={(ev) => setApartment(ev.target.value)} />
         </label>
         <label>
-          מיקוד <small style={{ color: "var(--foreground-secondary)", fontWeight: 500 }}>* אופציונלי</small>
-          <input name="zipCode" autoComplete="postal-code" placeholder="6100001" value={zipCode} onChange={(ev) => setZipCode(ev.target.value)} />
+          מיקוד
+          <input name="zipCode" autoComplete="postal-code" placeholder="אופציונלי" value={zipCode} onChange={(ev) => setZipCode(ev.target.value)} />
         </label>
       </div>
       <label className="studio-checkout-form-notes">
