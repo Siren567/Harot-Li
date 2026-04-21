@@ -78,6 +78,17 @@ export function DashboardPage() {
         setLoadError("נדרשת התחברות מחדש לאדמין.");
       } else if (e?.status === 0 || e?.error === "FETCH_TIMEOUT" || e?.error === "FETCH_ERROR") {
         setLoadError("לא ניתן להגיע לשרת. בדקו חיבור לרשת או שהבקאנד זמין (בפיתוח מקומי: הרצת backend).");
+      } else if (e?.status === 503 && e?.error === "DATABASE_UNAVAILABLE") {
+        setLoadError(
+          "מסד הנתונים לא זמין מהשרת. ודאו ש־DATABASE_URL תקין, ש־Postgres פעיל והמיגרציות הורצו (למשל prisma migrate deploy). כל נתוני ההזמנות והמלאי תלויים בחיבור הזה."
+        );
+      } else if (e?.status === 500 && (e?.message || e?.hint)) {
+        setLoadError(
+          `שגיאת שרת בטעינת הדאשבורד: ${String(e?.message || e?.hint || "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 180)}`
+        );
       } else {
         setLoadError("לא ניתן לטעון את נתוני הדאשבורד בזמן אמת.");
       }
@@ -126,7 +137,15 @@ export function DashboardPage() {
   const outOfStock = stockAlerts.filter((s) => s.kind === "out");
   const lowStock = stockAlerts.filter((s) => s.kind === "low");
 
-  const fmtMoney = (v: number) => `₪${Number(v || 0).toLocaleString("he-IL")}`;
+  /** סכומי הזמנה ב-DB באגורות → תצוגה בשקלים */
+  const fmtMoney = (v: number) => {
+    const shekels = Number(v || 0) / 100;
+    const txt =
+      Math.abs(shekels % 1) < 1e-9
+        ? shekels.toLocaleString("he-IL", { maximumFractionDigits: 0 })
+        : shekels.toLocaleString("he-IL", { maximumFractionDigits: 2 });
+    return `₪${txt}`;
+  };
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleString("he-IL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
   const EMPTY_MSG = "אין כרגע נתונים";
@@ -250,46 +269,65 @@ export function DashboardPage() {
     return `${m}:${String(r).padStart(2, "0")}`;
   };
 
+  const fmtChartDay = (iso: string) => {
+    const d = new Date(`${iso}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return iso.slice(5);
+    return d.toLocaleDateString("he-IL", { weekday: "short", day: "numeric", month: "numeric" });
+  };
+
   const chartConfigs = useMemo(
     () => [
       {
         key: "orders" as const,
         label: "הזמנות",
-        description: `${chartMonthLabel || "30 ימים אחרונים"} · כמות הזמנות לפי יום`,
+        description: `${chartMonthLabel || "7 ימים אחרונים"} · מספר הזמנות בכל יום`,
         series: snapshot?.dailyOrders?.map((d) => Number(d.total || 0)) ?? [],
+        dates: snapshot?.dailyOrders?.map((d) => d.date) ?? [],
       },
       {
         key: "visits" as const,
         label: "כניסות לאתר",
-        description: `${chartMonthLabel || "30 ימים אחרונים"} · כניסות יומיות לאתר`,
+        description: `${chartMonthLabel || "7 ימים אחרונים"} · כניסות יומיות`,
         series: snapshot?.dailySiteVisits?.map((d) => Number(d.total || 0)) ?? [],
+        dates: snapshot?.dailySiteVisits?.map((d) => d.date) ?? [],
       },
       {
         key: "newCustomers" as const,
         label: "לקוחות חדשים",
-        description: `${chartMonthLabel || "30 ימים אחרונים"} · לקוחות שנרשמו בכל יום`,
+        description: `${chartMonthLabel || "7 ימים אחרונים"} · הרשמות חדשות לפי יום`,
         series: snapshot?.dailyNewCustomers?.map((d) => Number(d.total || 0)) ?? [],
+        dates: snapshot?.dailyNewCustomers?.map((d) => d.date) ?? [],
       },
       {
         key: "revenue" as const,
         label: "הכנסות",
-        description: `${chartMonthLabel || "30 ימים אחרונים"} · הכנסות לפי יום`,
+        description: `${chartMonthLabel || "7 ימים אחרונים"} · סכום הזמנות ליום (לפני מע״מ)`,
         series: snapshot?.dailyRevenue?.map((d) => Number(d.total || 0)) ?? [],
+        dates: snapshot?.dailyRevenue?.map((d) => d.date) ?? [],
       },
     ],
     [snapshot, chartMonthLabel]
   );
   const selectedChart = chartConfigs.find((c) => c.key === activeChart) ?? chartConfigs[0];
   const chartSeries = selectedChart.series.length > 0 ? selectedChart.series : [0, 0, 0, 0, 0, 0, 0];
-  const maxPoint = Math.max(...chartSeries, 0);
-  const hasRevenueData = maxPoint > 0;
+  const chartDates = selectedChart.dates.length === chartSeries.length ? selectedChart.dates : snapshot?.dailyOrders?.map((d) => d.date) ?? [];
+  const denom = Math.max(1, chartSeries.length - 1);
+  const maxPoint = Math.max(1, ...chartSeries);
+  const sumSeries = chartSeries.reduce((a, b) => a + b, 0);
+  const avgSeries = chartSeries.length ? sumSeries / chartSeries.length : 0;
+  const chartGradId = `dash-chart-fill-${activeChart}`;
+  const yTop = 6;
+  const yBottom = 88;
+  const yRange = yBottom - yTop;
   const chartPath = chartSeries
     .map((v, i) => {
-      const x = (i / (chartSeries.length - 1)) * 100;
-      const y = hasRevenueData ? 100 - (v / maxPoint) * 100 : 100;
+      const x = (i / denom) * 100;
+      const ratio = maxPoint > 0 ? v / maxPoint : 0;
+      const y = yBottom - ratio * yRange;
       return `${i === 0 ? "M" : "L"} ${x} ${y}`;
     })
     .join(" ");
+  const chartAreaPath = `${chartPath} L 100 ${yBottom} L 0 ${yBottom} Z`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -434,7 +472,7 @@ export function DashboardPage() {
       </div>
 
       {/* Charts + Top products (lightweight, same card style) */}
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "20px" }}>
         <div style={sectionCard}>
           <h3 style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)", marginBottom: "6px" }}>סקירת מדדים</h3>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "10px" }}>
@@ -461,20 +499,88 @@ export function DashboardPage() {
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)", marginTop: "6px", lineHeight: 1.5 }}>
             {selectedChart.description}
           </p>
-          <div style={{ marginTop: "16px", height: "240px", borderRadius: "12px", border: "1px solid var(--border-subtle)", background: "var(--surface)", padding: "12px" }}>
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%" }}>
-              <defs>
-                <linearGradient id="revenue-gradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="rgba(201,169,110,0.35)" />
-                  <stop offset="100%" stopColor="rgba(201,169,110,0.02)" />
-                </linearGradient>
-              </defs>
-              {[20, 40, 60, 80].map((g) => (
-                <line key={g} x1="0" y1={g} x2="100" y2={g} stroke="rgba(255,255,255,0.08)" strokeWidth="0.6" />
+          <div
+            style={{
+              marginTop: "14px",
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "10px 20px",
+              fontSize: "12px",
+              color: "var(--muted-foreground)",
+              borderBottom: "1px solid var(--border-subtle)",
+              paddingBottom: "12px",
+            }}
+          >
+            <span>
+              <strong style={{ color: "var(--foreground)", fontWeight: 700 }}>סה״כ בתקופה:</strong>{" "}
+              {activeChart === "revenue" ? fmtMoney(sumSeries) : Number(sumSeries).toLocaleString("he-IL")}
+            </span>
+            <span>
+              <strong style={{ color: "var(--foreground)", fontWeight: 700 }}>שיא יומי:</strong>{" "}
+              {activeChart === "revenue" ? fmtMoney(maxPoint) : Number(maxPoint).toLocaleString("he-IL")}
+            </span>
+            <span>
+              <strong style={{ color: "var(--foreground)", fontWeight: 700 }}>ממוצע ליום:</strong>{" "}
+              {activeChart === "revenue" ? fmtMoney(Math.round(avgSeries)) : Number(avgSeries.toFixed(1)).toLocaleString("he-IL")}
+            </span>
+          </div>
+          <div
+            style={{
+              marginTop: "14px",
+              borderRadius: "12px",
+              border: "1px solid var(--border-subtle)",
+              background: "linear-gradient(180deg, var(--surface) 0%, rgba(0,0,0,0.12) 100%)",
+              padding: "10px 12px 6px",
+            }}
+          >
+            <div style={{ height: "200px", position: "relative" }}>
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ width: "100%", height: "100%", display: "block" }}>
+                <defs>
+                  <linearGradient id={chartGradId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="rgba(201,169,110,0.42)" />
+                    <stop offset="100%" stopColor="rgba(201,169,110,0.03)" />
+                  </linearGradient>
+                </defs>
+                {[22.75, 39.5, 56.25, 73].map((g) => (
+                  <line key={g} x1="0" y1={g} x2="100" y2={g} stroke="rgba(255,255,255,0.06)" strokeWidth="0.45" vectorEffect="non-scaling-stroke" />
+                ))}
+                <text x="1" y="12" fill="rgba(255,255,255,0.45)" fontSize="5" fontFamily="system-ui, sans-serif">
+                  {activeChart === "revenue" ? fmtMoney(maxPoint) : String(maxPoint)}
+                </text>
+                <text x="1" y="92" fill="rgba(255,255,255,0.45)" fontSize="5" fontFamily="system-ui, sans-serif">
+                  0
+                </text>
+                <path d={chartAreaPath} fill={`url(#${chartGradId})`} />
+                <path d={chartPath} fill="none" stroke="var(--primary)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+                {chartSeries.map((v, i) => {
+                  const x = (i / denom) * 100;
+                  const ratio = maxPoint > 0 ? v / maxPoint : 0;
+                  const y = yBottom - ratio * yRange;
+                  return <circle key={i} cx={x} cy={y} r="1.6" fill="var(--primary)" stroke="var(--card)" strokeWidth="0.5" />;
+                })}
+              </svg>
+            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(${chartSeries.length}, minmax(0, 1fr))`,
+                gap: "4px",
+                marginTop: "8px",
+                paddingTop: "4px",
+                borderTop: "1px solid var(--border-subtle)",
+              }}
+            >
+              {chartSeries.map((v, i) => (
+                <div key={`${chartDates[i] ?? i}-${i}`} style={{ textAlign: "center", minWidth: 0 }}>
+                  <div style={{ fontSize: "10px", color: "var(--muted-foreground)", lineHeight: 1.2, wordBreak: "break-word" }}>
+                    {chartDates[i] ? fmtChartDay(chartDates[i]) : `יום ${i + 1}`}
+                  </div>
+                  <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--foreground)", marginTop: "4px" }}>
+                    {activeChart === "revenue" ? fmtMoney(v) : Number(v).toLocaleString("he-IL")}
+                  </div>
+                </div>
               ))}
-              <path d={`${chartPath} L 100 100 L 0 100 Z`} fill="url(#revenue-gradient)" />
-              <path d={chartPath} fill="none" stroke="var(--primary)" strokeWidth="1.8" />
-            </svg>
+            </div>
           </div>
         </div>
         <div style={sectionCard}>
@@ -512,7 +618,7 @@ export function DashboardPage() {
       </div>
 
       {/* Recent orders + Stock alerts */}
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "20px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 320px), 1fr))", gap: "20px" }}>
         <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: "14px", overflow: "hidden" }}>
           <div
             style={{

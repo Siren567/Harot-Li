@@ -416,11 +416,13 @@ export function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [listLoadError, setListLoadError] = useState<string | null>(null);
 
   const loadOrders = useCallback(async (silent?: boolean) => {
     if (!silent) setLoading(true);
     if (silent) setRefreshing(true);
     try {
+      setListLoadError(null);
       const out = await apiFetch<{ orders: any[] }>("/api/orders?limit=500");
       const rows = Array.isArray(out?.orders) ? out.orders : [];
       const mapped: Order[] = rows.map((o: any) => {
@@ -462,8 +464,15 @@ export function OrdersPage() {
         };
       });
       setOrders(mapped);
-    } catch {
+    } catch (e: any) {
       setOrders([]);
+      if (e?.status === 503 && e?.error === "DATABASE_UNAVAILABLE") {
+        setListLoadError(
+          "מסד הנתונים לא זמין מהשרת. בדקו DATABASE_URL ו־Postgres; לאחר החזרת החיבור רעננו את העמוד."
+        );
+      } else {
+        setListLoadError("לא ניתן לטעון הזמנות מהשרת.");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -553,6 +562,21 @@ export function OrdersPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+      {listLoadError && (
+        <div
+          style={{
+            border: "1px solid rgba(239, 68, 68, 0.35)",
+            background: "rgba(239, 68, 68, 0.1)",
+            color: "var(--destructive)",
+            borderRadius: "10px",
+            padding: "12px 14px",
+            fontSize: "13px",
+            lineHeight: 1.45,
+          }}
+        >
+          {listLoadError}
+        </div>
+      )}
       {/* Page header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
         <div>

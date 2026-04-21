@@ -387,17 +387,23 @@ export function ProductEditorPage() {
       setProducts(normalizedProducts);
       setVariantsByProduct(grouped);
       setProductsFetchError(null);
-    } catch {
+    } catch (e: any) {
       setProducts([]);
       setVariantsByProduct({});
       const isLocal =
         typeof window !== "undefined" &&
         (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-      setProductsFetchError(
-        isLocal
-          ? "אין חיבור לשרת המוצרים כרגע. ודאו שה־Backend רץ (למשל npm run dev ב-backend, פורט 4000) ונסו שוב."
-          : "אין חיבור לשרת המוצרים כרגע. ודאו שהשרת פעיל, ש־VITE_API_BASE_URL מוגדר אם צריך, ושהאחסון מפנה את /api או /_/backend לבקאנד."
-      );
+      if (e?.status === 503 && e?.error === "DATABASE_UNAVAILABLE") {
+        setProductsFetchError(
+          "מסד הנתונים לא זמין מהשרת (Prisma). בדקו ש־Postgres רץ וש־DATABASE_URL מוגדר נכון בסביבת הריצה של הבקאנד, והריצו מיגרציות אם צריך. עד שהחיבור ישוב — הקטלוג, המלאי, הלקוחות וההזמנות לא ייטענו."
+        );
+      } else {
+        setProductsFetchError(
+          isLocal
+            ? "אין חיבור לשרת המוצרים כרגע. ודאו שה־Backend רץ (למשל npm run dev ב-backend, פורט 4000) ונסו שוב."
+            : "אין חיבור לשרת המוצרים כרגע. ודאו שהשרת פעיל, ש־VITE_API_BASE_URL מוגדר אם צריך, ושהאחסון מפנה את /api או /_/backend לבקאנד."
+        );
+      }
       toast("טעינת מוצרים נכשלה", "error");
     } finally {
       if (opts?.silent) setRefreshing(false);

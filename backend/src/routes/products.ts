@@ -7,6 +7,7 @@ import {
 } from "../services/products.service.js";
 import { requireAdmin } from "../lib/auth.js";
 import { invalidatePublicProductsCache } from "./public.js";
+import { isDatabaseConnectionError, respondDatabaseUnavailable } from "../lib/dbErrors.js";
 
 export const productsRouter = Router();
 
@@ -18,7 +19,8 @@ productsRouter.get("/", async (req, res) => {
       activeRaw === undefined ? undefined : activeRaw === "true" ? true : activeRaw === "false" ? false : undefined;
     const products = await listProducts({ q, active });
     res.json({ products });
-  } catch {
+  } catch (e) {
+    if (isDatabaseConnectionError(e)) return respondDatabaseUnavailable(res, e);
     res.status(500).json({ error: "SERVER_ERROR" });
   }
 });

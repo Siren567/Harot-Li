@@ -160,6 +160,17 @@ function buildStudioColors(p: PublicProduct): StudioColorRow[] {
   }));
 }
 
+function getProductTotalStock(p: PublicProduct, colors: StudioColorRow[]): number {
+  const variants = Array.isArray(p.variants) ? p.variants : [];
+  if (variants.length > 0) {
+    return variants.reduce((sum, v) => sum + Math.max(0, Number(v.stock) || 0), 0);
+  }
+  if (colors.length > 0) {
+    return colors.reduce((sum, c) => sum + Math.max(0, Number(c.stock) || 0), 0);
+  }
+  return Math.max(0, Number(p.stock) || 0);
+}
+
 function pendantShapeClassName(pendantType: string | null | undefined): string {
   const t = String(pendantType ?? "").trim();
   if (!t) return "";
@@ -173,13 +184,21 @@ function pendantShapeClassName(pendantType: string | null | undefined): string {
 const ENGRAVE_MIN_PX = 8;
 const ENGRAVE_MAX_PX = 44;
 
+/** Canvas measureText must use the same stacks as `.studio-engrave-text.*` in CSS. */
+const CANVAS_FONT_FAMILIES: Record<string, string> = {
+  assistant: "Assistant, Arial, sans-serif",
+  david: '"David Libre", Georgia, serif',
+  heebo: "Heebo, Arial, sans-serif",
+  rubik: "Rubik, Arial, sans-serif",
+  noto: '"Noto Sans Hebrew", Arial, sans-serif',
+  alef: "Alef, Arial, sans-serif",
+  secular: '"Secular One", Arial, sans-serif',
+  frank: '"Frank Ruhl Libre", Georgia, serif',
+  varela: '"Varela Round", Arial, sans-serif',
+};
+
 function canvasFontString(fontId: string, fontSize: number, weight = 600) {
-  const fam =
-    fontId === "assistant"
-      ? "Assistant, Arial, sans-serif"
-      : fontId === "david"
-        ? '"David Libre", Georgia, serif'
-        : "Heebo, Arial, sans-serif";
+  const fam = CANVAS_FONT_FAMILIES[fontId] ?? CANVAS_FONT_FAMILIES.heebo;
   return `${weight} ${fontSize}px ${fam}`;
 }
 
@@ -433,7 +452,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             image: p.image ?? imgs[0] ?? null,
             images: imgs.length ? imgs : (p.image ? [p.image] : []).filter(Boolean) as string[],
             colors,
-            totalStock: Number(p.stock) || 0,
+            totalStock: getProductTotalStock(p, colors),
             allowCustomerImageUpload: Boolean(p.allowCustomerImageUpload),
             lowThreshold: typeof p.lowThreshold === "number" ? p.lowThreshold : 5,
           };
@@ -662,9 +681,60 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const goNext = () => setStep((s) => Math.min(3, s + 1));
   const goBack = () => setStep((s) => Math.max(0, s - 1));
   const selectProductAndGoDesign = (id: string) => {
+    const p = runtimeProducts.find((x) => x.id === id);
+    if (!p || p.totalStock <= 0) return;
     setProductId(id);
     setStep(1);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const renderProductCard = (product: StudioRuntimeProduct) => {
+    const outOfStock = product.totalStock <= 0;
+    const lowStock = !outOfStock && product.totalStock <= product.lowThreshold;
+    const selectedIndex = selectedColorByProduct[product.id] ?? 0;
+    return (
+      <article
+        key={product.id}
+        className={`studio-product-card ${productId === product.id ? "selected" : ""} ${outOfStock ? "out-of-stock" : ""}`}
+        onClick={outOfStock ? undefined : () => selectProductAndGoDesign(product.id)}
+        aria-disabled={outOfStock}
+      >
+        <span className="studio-product-category-label">{categoryLabelById[product.category] ?? "קטגוריה"}</span>
+        <div className={`studio-product-thumb ${product.category}`}>
+          {product.image ? (
+            <img
+              src={product.image}
+              alt={product.title}
+              loading="lazy"
+              decoding="async"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          ) : null}
+          {outOfStock ? <span className="studio-stock-badge studio-stock-badge--overlay">אזל מהמלאי</span> : null}
+          {lowStock ? <span className="studio-stock-badge studio-stock-badge--low studio-stock-badge--overlay-low">מלאי מוגבל</span> : null}
+        </div>
+        <h3>{product.title}</h3>
+        <strong className="studio-product-price">{shekel(product.price)}</strong>
+        <div className="studio-swatch-row">
+          {product.colors.map((color, index) => (
+            <button
+              key={`${product.id}-${color.name}-${index}`}
+              type="button"
+              className={`studio-color-swatch ${index === selectedIndex ? "active" : ""}`}
+              style={{ ["--swatch" as string]: color.swatch, opacity: color.stock > 0 ? 1 : 0.35 }}
+              aria-label={color.name}
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelectedColorByProduct((prev) => ({ ...prev, [product.id]: index }));
+              }}
+            />
+          ))}
+        </div>
+        <button type="button" className="studio-select-btn" disabled={outOfStock}>
+          {outOfStock ? "אזל המלאי" : "בחר"}
+        </button>
+      </article>
+    );
   };
 
   return (
@@ -728,180 +798,24 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             {isGroupedMenWomenCouple && groupedProducts.men.length > 0 ? (
               <>
                 <div className="studio-subsection-title">גברים</div>
-                {groupedProducts.men.map((product) => {
-                  const outOfStock = product.totalStock <= 0;
-                  const lowStock = !outOfStock && product.totalStock > 0 && product.totalStock <= product.lowThreshold;
-                  return (
-                    <article
-                      key={product.id}
-                      className={`studio-product-card ${productId === product.id ? "selected" : ""} ${outOfStock ? "out-of-stock" : ""}`}
-                      onClick={() => selectProductAndGoDesign(product.id)}
-                    >
-                      <span className="studio-product-category-label">
-                        {categoryLabelById[product.category] ?? "קטגוריה"}
-                      </span>
-                      {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
-                      {lowStock ? <span className="studio-stock-badge studio-stock-badge--low">מלאי מוגבל</span> : null}
-                      <div className={`studio-product-thumb ${product.category}`}>
-                        {product.image ? <img src={product.image} alt={product.title} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-                      </div>
-                      <h3>{product.title}</h3>
-                      <strong className="studio-product-price">{shekel(product.price)}</strong>
-                      <div className="studio-swatch-row">
-                        {product.colors.map((color, index) => (
-                          <button
-                            key={`${product.id}-${color.name}-${index}`}
-                            type="button"
-                            className={`studio-color-swatch ${index === (selectedColorByProduct[product.id] ?? 0) ? "active" : ""}`}
-                            style={{ ["--swatch" as string]: color.swatch, opacity: color.stock > 0 ? 1 : 0.35 }}
-                            aria-label={color.name}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setSelectedColorByProduct((prev) => ({ ...prev, [product.id]: index }));
-                            }}
-                          />
-                        ))}
-                      </div>
-                      <button type="button" className="studio-select-btn" disabled={outOfStock}>
-                        {outOfStock ? "אזל המלאי" : "בחר"}
-                      </button>
-                    </article>
-                  );
-                })}
+                {groupedProducts.men.map(renderProductCard)}
               </>
             ) : null}
             {isGroupedMenWomenCouple && groupedProducts.women.length > 0 ? (
               <>
                 <div className="studio-subsection-divider" />
                 <div className="studio-subsection-title">נשים</div>
-                {groupedProducts.women.map((product) => {
-                  const outOfStock = product.totalStock <= 0;
-                  const lowStock = !outOfStock && product.totalStock > 0 && product.totalStock <= product.lowThreshold;
-                  return (
-                    <article
-                      key={product.id}
-                      className={`studio-product-card ${productId === product.id ? "selected" : ""} ${outOfStock ? "out-of-stock" : ""}`}
-                      onClick={() => selectProductAndGoDesign(product.id)}
-                    >
-                      <span className="studio-product-category-label">
-                        {categoryLabelById[product.category] ?? "קטגוריה"}
-                      </span>
-                      {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
-                      {lowStock ? <span className="studio-stock-badge studio-stock-badge--low">מלאי מוגבל</span> : null}
-                      <div className={`studio-product-thumb ${product.category}`}>
-                        {product.image ? <img src={product.image} alt={product.title} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-                      </div>
-                      <h3>{product.title}</h3>
-                      <strong className="studio-product-price">{shekel(product.price)}</strong>
-                      <div className="studio-swatch-row">
-                        {product.colors.map((color, index) => (
-                          <button
-                            key={`${product.id}-${color.name}-${index}`}
-                            type="button"
-                            className={`studio-color-swatch ${index === (selectedColorByProduct[product.id] ?? 0) ? "active" : ""}`}
-                            style={{ ["--swatch" as string]: color.swatch, opacity: color.stock > 0 ? 1 : 0.35 }}
-                            aria-label={color.name}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setSelectedColorByProduct((prev) => ({ ...prev, [product.id]: index }));
-                            }}
-                          />
-                        ))}
-                      </div>
-                      <button type="button" className="studio-select-btn" disabled={outOfStock}>
-                        {outOfStock ? "אזל המלאי" : "בחר"}
-                      </button>
-                    </article>
-                  );
-                })}
+                {groupedProducts.women.map(renderProductCard)}
               </>
             ) : null}
             {isGroupedMenWomenCouple && groupedProducts.couple.length > 0 ? (
               <>
                 <div className="studio-subsection-divider" />
                 <div className="studio-subsection-title">זוגיים</div>
-                {groupedProducts.couple.map((product) => {
-                  const outOfStock = product.totalStock <= 0;
-                  const lowStock = !outOfStock && product.totalStock > 0 && product.totalStock <= product.lowThreshold;
-                  return (
-                    <article
-                      key={product.id}
-                      className={`studio-product-card ${productId === product.id ? "selected" : ""} ${outOfStock ? "out-of-stock" : ""}`}
-                      onClick={() => selectProductAndGoDesign(product.id)}
-                    >
-                      <span className="studio-product-category-label">
-                        {categoryLabelById[product.category] ?? "קטגוריה"}
-                      </span>
-                      {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
-                      {lowStock ? <span className="studio-stock-badge studio-stock-badge--low">מלאי מוגבל</span> : null}
-                      <div className={`studio-product-thumb ${product.category}`}>
-                        {product.image ? <img src={product.image} alt={product.title} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-                      </div>
-                      <h3>{product.title}</h3>
-                      <strong className="studio-product-price">{shekel(product.price)}</strong>
-                      <div className="studio-swatch-row">
-                        {product.colors.map((color, index) => (
-                          <button
-                            key={`${product.id}-${color.name}-${index}`}
-                            type="button"
-                            className={`studio-color-swatch ${index === (selectedColorByProduct[product.id] ?? 0) ? "active" : ""}`}
-                            style={{ ["--swatch" as string]: color.swatch, opacity: color.stock > 0 ? 1 : 0.35 }}
-                            aria-label={color.name}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setSelectedColorByProduct((prev) => ({ ...prev, [product.id]: index }));
-                            }}
-                          />
-                        ))}
-                      </div>
-                      <button type="button" className="studio-select-btn" disabled={outOfStock}>
-                        {outOfStock ? "אזל המלאי" : "בחר"}
-                      </button>
-                    </article>
-                  );
-                })}
+                {groupedProducts.couple.map(renderProductCard)}
               </>
             ) : null}
-            {(!isGroupedMenWomenCouple ? filteredProducts : groupedProducts.others).map((product) => {
-              const outOfStock = product.totalStock <= 0;
-              const lowStock = !outOfStock && product.totalStock > 0 && product.totalStock <= product.lowThreshold;
-              return (
-                <article
-                  key={product.id}
-                  className={`studio-product-card ${productId === product.id ? "selected" : ""} ${outOfStock ? "out-of-stock" : ""}`}
-                  onClick={() => selectProductAndGoDesign(product.id)}
-                >
-                  <span className="studio-product-category-label">
-                    {categoryLabelById[product.category] ?? "קטגוריה"}
-                  </span>
-                  {outOfStock ? <span className="studio-stock-badge">אזל מהמלאי</span> : null}
-                  {lowStock ? <span className="studio-stock-badge studio-stock-badge--low">מלאי מוגבל</span> : null}
-                  <div className={`studio-product-thumb ${product.category}`}>
-                    {product.image ? <img src={product.image} alt={product.title} loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
-                  </div>
-                  <h3>{product.title}</h3>
-                  <strong className="studio-product-price">{shekel(product.price)}</strong>
-                  <div className="studio-swatch-row">
-                    {product.colors.map((color, index) => (
-                      <button
-                        key={`${product.id}-${color.name}-${index}`}
-                        type="button"
-                        className={`studio-color-swatch ${index === (selectedColorByProduct[product.id] ?? 0) ? "active" : ""}`}
-                        style={{ ["--swatch" as string]: color.swatch, opacity: color.stock > 0 ? 1 : 0.35 }}
-                        aria-label={color.name}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setSelectedColorByProduct((prev) => ({ ...prev, [product.id]: index }));
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <button type="button" className="studio-select-btn" disabled={outOfStock}>
-                    {outOfStock ? "אזל המלאי" : "בחר"}
-                  </button>
-                </article>
-              );
-            })}
+            {(!isGroupedMenWomenCouple ? filteredProducts : groupedProducts.others).map(renderProductCard)}
           </div>
         </section>
       ) : null}
@@ -1048,62 +962,64 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             </aside>
 
             <div className="studio-preview-panel">
-              <div className="studio-preview-stage">
-                <div
-                  ref={objectRef}
-                  className={`studio-3d-object ${activeProduct?.category ?? "other"} ${pendantExtraClass} ${engraveStageImageUrl ? "has-photo" : ""}`}
-                  style={
-                    {
-                      transform: `rotateY(${rotation}deg) rotateX(8deg) scale(${zoom})`,
-                      ["--studio-metal" as string]: activeColor?.swatch ?? "#d4af37"
-                    } as CSSProperties
-                  }
-                >
-                  {engraveStageImageUrl ? (
-                    <img className="studio-3d-fill" src={engraveStageImageUrl} alt="" loading="eager" decoding="async" />
-                  ) : null}
-                  {customerImageDataUrl ? (
-                    <img className="studio-customer-overlay" src={customerImageDataUrl} alt="" />
-                  ) : null}
-                  {engravings.map((item) => {
-                    const inkDark = activeColor?.colorKey !== "black";
-                    const px = Math.min(ENGRAVE_MAX_PX, Math.max(ENGRAVE_MIN_PX, Math.round(item.size)));
-                    return (
-                      <span
-                        key={item.id}
-                        className={`studio-engrave-text ${item.font} ${activeEngravingId === item.id ? "is-active" : ""} ${
-                          inkDark ? "engrave-ink--dark" : "engrave-ink--light"
-                        }`}
-                        style={
-                          {
-                            left: `calc(50% + ${item.x}%)`,
-                            top: `calc(50% + ${item.y}%)`,
-                            fontSize: `${px}px`,
-                          } as CSSProperties
-                        }
-                        onPointerDown={() => startDragEngraving(item.id)}
+              <div className="studio-preview-mockup-block">
+                <div className="studio-preview-stage">
+                  <div
+                    ref={objectRef}
+                    className={`studio-3d-object ${activeProduct?.category ?? "other"} ${pendantExtraClass} ${engraveStageImageUrl ? "has-photo" : ""}`}
+                    style={
+                      {
+                        transform: `rotateY(${rotation}deg) rotateX(8deg) scale(${zoom})`,
+                        ["--studio-metal" as string]: activeColor?.swatch ?? "#d4af37"
+                      } as CSSProperties
+                    }
+                  >
+                    {engraveStageImageUrl ? (
+                      <img className="studio-3d-fill" src={engraveStageImageUrl} alt="" loading="eager" decoding="async" />
+                    ) : null}
+                    {customerImageDataUrl ? (
+                      <img className="studio-customer-overlay" src={customerImageDataUrl} alt="" />
+                    ) : null}
+                    {engravings.map((item) => {
+                      const inkDark = activeColor?.colorKey !== "black";
+                      const px = Math.min(ENGRAVE_MAX_PX, Math.max(ENGRAVE_MIN_PX, Math.round(item.size)));
+                      return (
+                        <span
+                          key={item.id}
+                          className={`studio-engrave-text ${item.font} ${activeEngravingId === item.id ? "is-active" : ""} ${
+                            inkDark ? "engrave-ink--dark" : "engrave-ink--light"
+                          }`}
+                          style={
+                            {
+                              left: `calc(50% + ${item.x}%)`,
+                              top: `calc(50% + ${item.y}%)`,
+                              fontSize: `${px}px`,
+                            } as CSSProperties
+                          }
+                          onPointerDown={() => startDragEngraving(item.id)}
+                        >
+                          {item.text !== "" ? item.text : "•"}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+                {galleryUrls.length > 0 ? (
+                  <div className="studio-subgallery" role="list" aria-label="גלריית תמונות המוצר">
+                    {galleryUrls.map((url, idx) => (
+                      <button
+                        key={`${url}-${idx}`}
+                        type="button"
+                        className={`studio-subgallery-thumb ${galleryModalUrl === url ? "active" : ""}`}
+                        onClick={() => setGalleryModalUrl(url)}
+                        aria-label={galleryUrls.length > 1 ? `פתיחת תמונה ${idx + 1} בגודל מלא` : "פתיחת תמונה בגודל מלא"}
                       >
-                        {item.text !== "" ? item.text : "•"}
-                      </span>
-                    );
-                  })}
-                </div>
+                        <img src={url} alt="" loading="lazy" decoding="async" />
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
-              {galleryUrls.length > 0 ? (
-                <div className="studio-subgallery" role="list" aria-label="גלריית תמונות המוצר">
-                  {galleryUrls.map((url, idx) => (
-                    <button
-                      key={`${url}-${idx}`}
-                      type="button"
-                      className={`studio-subgallery-thumb ${galleryModalUrl === url ? "active" : ""}`}
-                      onClick={() => setGalleryModalUrl(url)}
-                      aria-label={galleryUrls.length > 1 ? `פתיחת תמונה ${idx + 1} בגודל מלא` : "פתיחת תמונה בגודל מלא"}
-                    >
-                      <img src={url} alt="" loading="lazy" decoding="async" />
-                    </button>
-                  ))}
-                </div>
-              ) : null}
               <div className="studio-slider-row">
                 <label>
                   זווית

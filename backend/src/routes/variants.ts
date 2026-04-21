@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { requireAdmin } from "../lib/auth.js";
+import { isDatabaseConnectionError, respondDatabaseUnavailable } from "../lib/dbErrors.js";
 
 export const variantsRouter = Router();
 
@@ -16,7 +17,8 @@ variantsRouter.get("/", requireAdmin, async (req, res) => {
       include: { product: { select: { id: true, title: true, slug: true } } },
     });
     res.json({ variants });
-  } catch {
+  } catch (e) {
+    if (isDatabaseConnectionError(e)) return respondDatabaseUnavailable(res, e);
     res.status(500).json({ error: "SERVER_ERROR" });
   }
 });

@@ -134,7 +134,13 @@ export const studioProducts: StudioProduct[] = [
 export const studioFonts = [
   { id: "heebo", label: "Heebo" },
   { id: "assistant", label: "Assistant" },
-  { id: "david", label: "David Libre" }
+  { id: "david", label: "David Libre" },
+  { id: "rubik", label: "Rubik" },
+  { id: "noto", label: "Noto Sans Hebrew" },
+  { id: "alef", label: "Alef" },
+  { id: "secular", label: "Secular One" },
+  { id: "frank", label: "Frank Ruhl Libre" },
+  { id: "varela", label: "Varela Round" }
 ] as const;
 
 export const studioMaterials = [

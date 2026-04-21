@@ -544,9 +544,13 @@ export function CustomersPage() {
           return c;
         });
         setCustomers(mapped);
-      } catch {
+      } catch (e: any) {
         setCustomers([]);
-        toast("טעינת לקוחות נכשלה", "error");
+        if (e?.status === 503 && e?.error === "DATABASE_UNAVAILABLE") {
+          toast("מסד הנתונים לא זמין — לא ניתן לטעון לקוחות מההזמנות.", "error");
+        } else {
+          toast("טעינת לקוחות נכשלה", "error");
+        }
       } finally {
         setLoading(false);
         setRefreshing(false);

@@ -655,7 +655,12 @@ textarea:focus-visible {
 }
 
 .studio-product-card.out-of-stock {
-  opacity: .85;
+  opacity: .56;
+  cursor: not-allowed;
+}
+
+.studio-product-card.out-of-stock:hover {
+  transform: none;
 }
 
 .studio-product-card h3 {
@@ -667,6 +672,7 @@ textarea:focus-visible {
 }
 
 .studio-product-thumb {
+  position: relative;
   width: 100%;
   aspect-ratio: 3 / 2;
   border-radius: 12px;
@@ -704,6 +710,22 @@ textarea:focus-visible {
   color: #b42318;
   font-size: .68rem;
   font-weight: 700;
+}
+
+.studio-stock-badge--overlay {
+  position: absolute;
+  top: 10px;
+  inset-inline-end: 10px;
+  margin: 0;
+  z-index: 2;
+  background: #b42318;
+  border-color: #b42318;
+  color: #fff;
+}
+
+.studio-stock-badge--overlay-low {
+  top: auto;
+  bottom: 10px;
 }
 
 .studio-stock-badge--low {
@@ -808,10 +830,24 @@ textarea:focus-visible {
   box-sizing: border-box;
 }
 
+/** מוקאפ + גלריה כיחידה ויזואלית; לחיצה על ממוזאירה פותחת lightbox (לא מחליפה את תמונת ה־3D). */
+.studio-preview-mockup-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.studio-preview-mockup-block .studio-subgallery {
+  margin-top: 0;
+}
+
 .studio-preview-stage {
   position: relative;
   border-radius: 16px;
   min-height: 360px;
+  width: 100%;
   background: radial-gradient(120% 85% at 50% 18%, #fffefb 0%, #f4ebe2 42%, #e8dfd4 100%);
   display: grid;
   place-items: center;
@@ -1055,6 +1091,12 @@ textarea:focus-visible {
 .studio-engrave-text.assistant { font-family: "Assistant", sans-serif; }
 .studio-engrave-text.heebo { font-family: "Heebo", sans-serif; }
 .studio-engrave-text.david { font-family: "David Libre", serif; }
+.studio-engrave-text.rubik { font-family: "Rubik", sans-serif; }
+.studio-engrave-text.noto { font-family: "Noto Sans Hebrew", sans-serif; }
+.studio-engrave-text.alef { font-family: "Alef", sans-serif; }
+.studio-engrave-text.secular { font-family: "Secular One", sans-serif; }
+.studio-engrave-text.frank { font-family: "Frank Ruhl Libre", serif; }
+.studio-engrave-text.varela { font-family: "Varela Round", sans-serif; }
 
 .studio-slider-row {
   margin-top: 10px;

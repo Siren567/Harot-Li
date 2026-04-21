@@ -5,8 +5,22 @@ import { reasonToHebrew, validateCoupon } from "../logic/coupons/validateCoupon.
 import { getAnalyticsForRange } from "../services/analytics.service.js";
 import { getSupabaseAdminClient } from "../supabase/client.js";
 import { requireAdmin } from "../lib/auth.js";
+import { isDatabaseConnectionError, respondDatabaseUnavailable } from "../lib/dbErrors.js";
 
 export const ordersRouter = Router();
+
+/** Dashboard reads only these columns so DBs without newer optional columns (e.g. `deliveryDetails`) still work. */
+const dashboardOrderSelect = {
+  id: true,
+  orderNumber: true,
+  customerId: true,
+  total: true,
+  status: true,
+  createdAt: true,
+  items: true,
+  customer: { select: { fullName: true, email: true } },
+  orderItems: { select: { nameSnapshot: true, qty: true } },
+} as const;
 
 const OrderItemSchema = z.object({
   productId: z.string().min(1).max(120),
@@ -61,7 +75,8 @@ ordersRouter.get("/", requireAdmin, async (req, res) => {
       },
     });
     res.json({ orders });
-  } catch {
+  } catch (e) {
+    if (isDatabaseConnectionError(e)) return respondDatabaseUnavailable(res, e);
     res.status(500).json({ error: "SERVER_ERROR" });
   }
 });
@@ -76,10 +91,10 @@ ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
     prevMonthStart.setDate(prevMonthStart.getDate() - 30);
 
     const [allOrders, recentOrders, allCustomers, newCustomersLast30, newCustomersPrev30, analyticsLast30, analyticsPrev30, lowStockVariants] = await Promise.all([
-      prisma.order.findMany({ include: { customer: true, orderItems: true }, orderBy: { createdAt: "desc" } }),
+      prisma.order.findMany({ select: dashboardOrderSelect, orderBy: { createdAt: "desc" } }),
       prisma.order.findMany({
         where: { createdAt: { gte: monthAgo } },
-        include: { customer: true },
+        select: dashboardOrderSelect,
         orderBy: { createdAt: "desc" },
       }),
       prisma.customer.findMany(),
@@ -324,6 +339,7 @@ ordersRouter.get("/dashboard", requireAdmin, async (_req, res) => {
     console.error("[GET /api/orders/dashboard] FAILED meta=", JSON.stringify(err?.meta ?? null));
     console.error("[GET /api/orders/dashboard] FAILED message=", String(err?.message ?? err));
     console.error("[GET /api/orders/dashboard] FAILED stack=", err?.stack);
+    if (isDatabaseConnectionError(err)) return respondDatabaseUnavailable(res, err);
     res.status(500).json({ error: "SERVER_ERROR" });
   }
 });
