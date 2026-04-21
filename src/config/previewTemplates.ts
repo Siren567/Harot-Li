@@ -171,12 +171,13 @@ export const PREVIEW_TEMPLATES: Record<string, PreviewTemplate> = {
   puzzle: {
     id: "puzzle",
     shape: "puzzle",
-    width: 1.75,
-    height: 2.15,
-    thickness: 0.14,
+    /** Slightly narrower / taller so the tab + bail read like product photos. */
+    width: 1.62,
+    height: 2.2,
+    thickness: 0.15,
     cornerRadius: 0,
     hasBail: true,
-    safeArea: { x: 0.62, y: 0.42 },
+    safeArea: { x: 0.58, y: 0.46 },
     minFontSize: 8,
     maxFontSize: 40,
     defaultFontSize: 22,
@@ -210,6 +211,8 @@ type ProductLike = {
   mainCategoryId?: string | null;
   title?: string | null;
   subcategoryLabel?: string | null;
+  /** Studio runtime audience bucket: men | women | couple | null */
+  subcategory?: string | null;
 };
 
 function isBraceletCategory(product: ProductLike | null | undefined): boolean {
@@ -246,6 +249,26 @@ function splitHeartFromProductLabel(product: ProductLike | null | undefined): bo
     category.includes("couple") ||
     category.includes("זוג")
   );
+}
+
+/**
+ * Couple sets with two identical pieces (two puzzle charms or two horizontal bars):
+ * two separate engravings, 3D preview shows one piece at a time with tab switching.
+ * Excludes fused {@link splitHeartFromProductLabel} geometry.
+ */
+export function isCouplePairTabsTemplate(
+  product: ProductLike | null | undefined,
+  template: PreviewTemplate
+): boolean {
+  if (!product || template.shape === "splitHeart") return false;
+  const sub = normalize(product.subcategory ?? "");
+  const title = normalize(product.title ?? "");
+  const coupleSet =
+    sub === "couple" ||
+    (title.includes("סט") && (title.includes("זוג") || title.includes("זוגי")));
+  if (!coupleSet) return false;
+  if (template.shape === "puzzle" && splitHeartFromProductLabel(product)) return false;
+  return template.shape === "puzzle" || template.id === "bar-bracelet";
 }
 
 /** Map a pendant-type id to its rendering template. Single place to change geometry-per-type. */

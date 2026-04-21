@@ -888,6 +888,43 @@ textarea:focus-visible {
   margin-top: 0;
 }
 
+/* Couple set (two identical pieces): browser-style tabs to switch 3D preview piece. */
+.studio-couple-piece-tabs {
+  display: flex;
+  width: 100%;
+  max-width: 380px;
+  gap: 0;
+  padding: 0;
+  box-sizing: border-box;
+  border-bottom: 1px solid #e0d0c4;
+}
+.studio-couple-piece-tab {
+  flex: 1;
+  margin: 0;
+  padding: 9px 12px 8px;
+  border: none;
+  border-radius: 9px 9px 0 0;
+  background: transparent;
+  color: #8a7565;
+  font-family: "Heebo", system-ui, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.studio-couple-piece-tab:hover {
+  color: #5c4332;
+  background: rgba(255, 255, 255, 0.35);
+}
+.studio-couple-piece-tab.is-active {
+  color: #3d2a1c;
+  font-weight: 600;
+  background: rgba(255, 251, 247, 0.75);
+  border-bottom-color: #ad7d56;
+}
+
 .studio-preview-stage {
   position: relative;
   border-radius: 16px;
@@ -909,6 +946,23 @@ textarea:focus-visible {
   min-height: 360px;
 }
 
+/* Warm radial backdrop behind transparent WebGL — matches puzzle product renders. */
+.studio-three-wrap--puzzle .studio-three-canvas-host {
+  isolation: isolate;
+}
+.studio-three-wrap--puzzle .studio-three-canvas-host::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse 92% 78% at 50% 44%, #fdf9f4 0%, #f4ebe3 45%, #e9dfd4 100%);
+}
+.studio-three-wrap--puzzle .studio-three-canvas-host canvas {
+  position: relative;
+  z-index: 1;
+}
+
 .studio-three-canvas-host {
   position: absolute;
   inset: 0;
@@ -919,6 +973,43 @@ textarea:focus-visible {
   height: 100% !important;
   display: block;
   touch-action: none;
+}
+
+.studio-three-zoom-stack {
+  position: absolute;
+  inset-inline-end: 11px;
+  bottom: 11px;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+.studio-three-zoom-stack .studio-three-zoom-btn {
+  pointer-events: auto;
+}
+.studio-three-zoom-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(139, 94, 60, 0.32);
+  background: rgba(255, 252, 248, 0.94);
+  color: #6f5644;
+  font-family: "Heebo", system-ui, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(50, 32, 18, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.08s ease;
+}
+.studio-three-zoom-btn:hover {
+  border-color: rgba(139, 94, 60, 0.5);
+  background: #fffefb;
+}
+.studio-three-zoom-btn:active {
+  transform: scale(0.96);
 }
 
 .studio-three-overlay {

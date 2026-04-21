@@ -7,7 +7,12 @@ import { loadBootstrapOnce, loadPublicProductsOnce } from "../lib/studioDataLoad
 import { studioCategories, studioFonts, studioShippingMethods } from "../constants/studioData";
 import CheckoutForm, { type CheckoutFormData } from "./checkout/CheckoutForm";
 import Pendant3DPreview, { type EngravingLine } from "./Pendant3DPreview";
-import { getTemplateForProduct, getTemplateForPendantType, normalizePendantType } from "../config/previewTemplates";
+import {
+  getTemplateForProduct,
+  getTemplateForPendantType,
+  isCouplePairTabsTemplate,
+  normalizePendantType,
+} from "../config/previewTemplates";
 
 type StudioPageProps = {
   onBackToLanding: () => void;
@@ -343,6 +348,8 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const engravingsRef = useRef(engravings);
   engravingsRef.current = engravings;
   const [activeEngravingId, setActiveEngravingId] = useState("engraving-1");
+  /** Couple pair (two identical pieces): which piece the 3D preview shows — 0 or 1. */
+  const [couplePieceTab, setCouplePieceTab] = useState<0 | 1>(0);
   const [customerImageDataUrl, setCustomerImageDataUrl] = useState<string | null>(null);
   const [isImageDropActive, setIsImageDropActive] = useState(false);
   const customerImageInputRef = useRef<HTMLInputElement | null>(null);
@@ -395,7 +402,10 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   }
 
   function addEngraving() {
-    if (previewTemplate.shape === "splitHeart" && engravingsRef.current.length >= 2) return;
+    const dualLineMode =
+      previewTemplate.shape === "splitHeart" ||
+      (!!activeProductRef.current && isCouplePairTabsTemplate(activeProductRef.current, previewTemplate));
+    if (dualLineMode && engravingsRef.current.length >= 2) return;
     if (engravingsRef.current.length >= 3) return;
     const id = `engraving-${Date.now()}`;
     setEngravings((prev) => {
@@ -416,7 +426,10 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   }
 
   function removeEngraving(id: string) {
-    if (previewTemplate.shape === "splitHeart") return;
+    const dualLineMode =
+      previewTemplate.shape === "splitHeart" ||
+      (!!activeProductRef.current && isCouplePairTabsTemplate(activeProductRef.current, previewTemplate));
+    if (dualLineMode) return;
     setEngravings((prev) => {
       if (prev.length <= 1) return prev;
       const idx = prev.findIndex((x) => x.id === id);
@@ -534,6 +547,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     if (runtimeProducts.length === 0) return null;
     return runtimeProducts.find((p) => p.id === productId) ?? runtimeProducts[0];
   }, [productId, runtimeProducts]);
+  const activeProductRef = useRef<StudioRuntimeProduct | null>(null);
+  activeProductRef.current = activeProduct;
+
   const activeColor = useMemo(() => {
     if (!activeProduct || !activeProduct.colors?.length) return null;
     const raw = selectedColorByProduct[activeProduct.id];
@@ -556,6 +572,11 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     [variantPendantTypeId, activeProduct]
   );
   const isCoupleSplitHeart = previewTemplate.shape === "splitHeart";
+  const isCouplePairTabs = useMemo(
+    () => !!activeProduct && isCouplePairTabsTemplate(activeProduct, previewTemplate),
+    [activeProduct, previewTemplate]
+  );
+  const isDualLineProduct = isCoupleSplitHeart || isCouplePairTabs;
 
   const previewLines = useMemo<EngravingLine[]>(() => {
     const mapLine = (item: EngravingItem): EngravingLine => ({
@@ -589,14 +610,38 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       };
       return [mapLine(d0), mapLine(d1)];
     }
+    if (isCouplePairTabs) {
+      const e0 = engravings[0];
+      const e1 = engravings[1];
+      const d0 = e0 ?? {
+        id: "engraving-1",
+        text: "",
+        font: "heebo",
+        size: previewTemplate.defaultFontSize,
+        x: 0,
+        y: 0,
+        angle: 0,
+      };
+      const d1 = e1 ?? {
+        id: "engraving-2",
+        text: "",
+        font: d0.font,
+        size: d0.size,
+        x: 0,
+        y: 0,
+        angle: 0,
+      };
+      const pick = couplePieceTab === 0 ? d0 : d1;
+      return [mapLine(pick)];
+    }
     return engravings
       .map(mapLine)
       .filter((l) => l.text)
       .slice(0, 3);
-  }, [engravings, previewTemplate, isCoupleSplitHeart]);
+  }, [engravings, previewTemplate, isCoupleSplitHeart, isCouplePairTabs, couplePieceTab]);
 
   useEffect(() => {
-    if (!isCoupleSplitHeart) return;
+    if (!isCoupleSplitHeart && !isCouplePairTabs) return;
     setEngravings((prev) => {
       let next = prev.slice(0, 2);
       if (next.length > 2) next = next.slice(0, 2);
@@ -621,7 +666,11 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       }
       return next;
     });
-  }, [isCoupleSplitHeart, activeProduct?.id]);
+  }, [isCoupleSplitHeart, isCouplePairTabs, activeProduct?.id, previewTemplate.defaultFontSize]);
+
+  useEffect(() => {
+    setCouplePieceTab(0);
+  }, [activeProduct?.id]);
 
   useEffect(() => {
     setSelectedGalleryIndex(0);
@@ -1075,7 +1124,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   <div className="studio-field-hint">טקסט לחריטה</div>
                   <div className="studio-engraving-title-actions">
                     <span className="studio-engraving-counter" aria-live="polite">
-                      {isCoupleSplitHeart ? "2/2" : `${engravings.length}/3`}
+                      {isDualLineProduct ? "2/2" : `${engravings.length}/3`}
                     </span>
                     <button
                       type="button"
@@ -1083,7 +1132,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                       aria-label="הוסף שדה טקסט"
                       title="הוסף שדה טקסט"
                       onClick={addEngraving}
-                      disabled={engravings.length >= 3 || isCoupleSplitHeart}
+                      disabled={engravings.length >= 3 || (isDualLineProduct && engravings.length >= 2)}
                     >
                       <Plus size={14} />
                     </button>
@@ -1096,13 +1145,22 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                         <div className="studio-field-hint" style={{ marginBottom: 4 }}>
                           {idx === 0 ? "חצי א׳ — טקסט לחריטה" : "חצי ב׳ — טקסט לחריטה"}
                         </div>
+                      ) : isCouplePairTabs ? (
+                        <div className="studio-field-hint" style={{ marginBottom: 4 }}>
+                          {idx === 0 ? "פריט א׳ בזוג — טקסט לחריטה" : "פריט ב׳ בזוג — טקסט לחריטה"}
+                        </div>
                       ) : null}
                       <textarea
                         className="studio-engraving-input studio-engraving-input--multiline"
                         value={item.text}
                         rows={2}
                         placeholder="הכנס טקסט לחריטה"
-                        onFocus={() => setActiveEngravingId(item.id)}
+                        onFocus={() => {
+                          setActiveEngravingId(item.id);
+                          if (isCouplePairTabs && idx <= 1) {
+                            setCouplePieceTab(idx === 0 ? 0 : 1);
+                          }
+                        }}
                         onChange={(e) => {
                           setEngraveFitError(null);
                           updateEngraving(item.id, { text: e.target.value });
@@ -1117,7 +1175,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                       >
                         <Smile size={12} />
                       </button>
-                      {!isCoupleSplitHeart && idx > 0 ? (
+                      {!isDualLineProduct && idx > 0 ? (
                         <button
                           type="button"
                           className="studio-icon-btn studio-icon-btn--trash-corner"
@@ -1403,6 +1461,36 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     </label>
                     <button type="button" className="studio-generator-btn" onClick={applyGeneratedEngraving}>
                       צור לי רעיון
+                    </button>
+                  </div>
+                ) : null}
+                {isCouplePairTabs ? (
+                  <div className="studio-couple-piece-tabs" role="tablist" aria-label="בחירת פריט בזוג לתצוגה">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={couplePieceTab === 0}
+                      className={`studio-couple-piece-tab ${couplePieceTab === 0 ? "is-active" : ""}`}
+                      onClick={() => {
+                        setCouplePieceTab(0);
+                        const id = engravings[0]?.id;
+                        if (id) setActiveEngravingId(id);
+                      }}
+                    >
+                      פריט א׳
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={couplePieceTab === 1}
+                      className={`studio-couple-piece-tab ${couplePieceTab === 1 ? "is-active" : ""}`}
+                      onClick={() => {
+                        setCouplePieceTab(1);
+                        const id = engravings[1]?.id;
+                        if (id) setActiveEngravingId(id);
+                      }}
+                    >
+                      פריט ב׳
                     </button>
                   </div>
                 ) : null}

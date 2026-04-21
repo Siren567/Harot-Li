@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
@@ -21,6 +21,14 @@ type Pendant3DPreviewProps = {
   metalColor: string;
   lines: EngravingLine[];
   autoRotate?: boolean;
+};
+
+/** Resolved OrbitControls + dolly props (TS can widen `new OrbitControls()` to base Controls). */
+type StudioOrbitControls = OrbitControls & {
+  target: THREE.Vector3;
+  zoomSpeed: number;
+  minDistance: number;
+  maxDistance: number;
 };
 
 /* ----------------------------- shape builders ----------------------------- */
@@ -84,21 +92,22 @@ function buildHalfHeartShape(side: -1 | 1, w: number, h: number): THREE.Shape {
   return shape;
 }
 
-/** One classic jigsaw piece: flat body + tab on top + side “holes” (inward notches) like a real puzzle. */
+/** One classic jigsaw piece: flat body + rounded tab on top + side “blanks” (inward semicircular notches). */
 function buildPuzzlePieceShape(w: number, h: number): THREE.Shape {
   const hw = w / 2;
   const hh = h / 2;
-  const c = Math.min(w, h) * 0.07;
-  let tr = Math.min(w, h) * 0.26;
-  tr = Math.min(tr, Math.max(0.12, hw - c - 0.04));
+  const c = Math.min(w, h) * 0.065;
+  /** Tab radius — a bit rounder / fuller like physical puzzle charms. */
+  let tr = Math.min(w, h) * 0.235;
+  tr = Math.min(tr, Math.max(0.11, hw - c - 0.035));
   const bodyTop = hh - tr;
   const bodyBottom = -hh;
   const yMid = (bodyTop + bodyBottom) * 0.5;
   const bodyH = bodyTop - bodyBottom;
-  /** Half-height of each side notch opening on the vertical edge. */
-  let nHalf = Math.min(h * 0.1, bodyH * 0.16);
-  /** How deep the notch bites into the plate (toward ±x). */
-  const nDep = Math.min(w, h) * 0.13;
+  /** Half-height of each side notch — slightly taller for clearer “classic” puzzle silhouette. */
+  let nHalf = Math.min(h * 0.115, bodyH * 0.175);
+  /** Notch depth — deeper bite reads closer to interlocking product photos. */
+  const nDep = Math.min(w, h) * 0.148;
   const margin = c + 0.04;
   nHalf = Math.min(nHalf, (yMid - (bodyBottom + margin)) * 0.92, (bodyTop - margin - yMid) * 0.92);
 
@@ -192,19 +201,20 @@ type EngravingPreset = {
  * light metals get dark engraving; all share a layered highlight+shadow
  * to sell the recessed-engraving effect.
  */
-function getEngravingPreset(metalColor: string): EngravingPreset {
+function getEngravingPreset(metalColor: string, template?: PreviewTemplate): EngravingPreset {
   const lum = luminance(metalColor);
 
   // Black (or any very dark metal) — light engraving, readability-first.
   if (lum < 0.22) {
+    const puzzle = template?.shape === "puzzle";
     return {
-      ink: "rgba(240,238,232,0.92)",
-      edge: "rgba(255,255,255,0.35)",
-      highlight: "rgba(255,255,255,0.55)",
-      highlightOffset: -0.035,
-      shadow: "rgba(0,0,0,0.55)",
-      shadowOffset: 0.04,
-      blur: 0.6,
+      ink: puzzle ? "rgba(252,250,255,0.96)" : "rgba(240,238,232,0.92)",
+      edge: puzzle ? "rgba(255,255,255,0.42)" : "rgba(255,255,255,0.35)",
+      highlight: puzzle ? "rgba(255,255,255,0.62)" : "rgba(255,255,255,0.55)",
+      highlightOffset: puzzle ? -0.03 : -0.035,
+      shadow: puzzle ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.55)",
+      shadowOffset: puzzle ? 0.035 : 0.04,
+      blur: puzzle ? 0.45 : 0.6,
     };
   }
 
@@ -261,11 +271,15 @@ function drawEngraving({ canvas, template, lines, metalColor }: DrawOpts) {
   ctx.textAlign = template.textAlign === "center" ? "center" : "left";
   ctx.textBaseline = "middle";
 
+  const fontWeight =
+    template.shape === "puzzle" && luminance(metalColor) < 0.28 ? "500" : "600";
+  const preset = getEngravingPreset(metalColor, template);
+
   // Per-line font sizes: slider value is the base; only shrink if overflow.
   const perLine = cleanLines.map((line) => {
     const family = resolveFontFamily(line.fontId);
     let fontSize = Math.max(template.minFontSize, line.size) * sliderToCanvas;
-    ctx.font = `600 ${fontSize}px ${family}`;
+    ctx.font = `${fontWeight} ${fontSize}px ${family}`;
     const measured = ctx.measureText(line.text).width;
     if (measured > safeW) fontSize *= safeW / measured;
     return { ...line, family, fontSize };
@@ -278,10 +292,8 @@ function drawEngraving({ canvas, template, lines, metalColor }: DrawOpts) {
   const totalBlockH = perLine.reduce((acc, l) => acc + l.fontSize * 1.22, 0);
   let y = -totalBlockH / 2 + perLine[0].fontSize * 0.61;
 
-  const preset = getEngravingPreset(metalColor);
-
   for (const l of perLine) {
-    ctx.font = `600 ${l.fontSize}px ${l.family}`;
+    ctx.font = `${fontWeight} ${l.fontSize}px ${l.family}`;
     const hOff = l.fontSize * preset.highlightOffset;
     const sOff = l.fontSize * preset.shadowOffset;
 
@@ -353,7 +365,7 @@ function drawEngravingSingleOnHalf({ canvas, template, line, metalColor }: DrawH
   ctx.font = `600 ${fontSize}px ${family}`;
 
   const y = 0;
-  const preset = getEngravingPreset(metalColor);
+  const preset = getEngravingPreset(metalColor, template);
   const hOff = fontSize * preset.highlightOffset;
   const sOff = fontSize * preset.shadowOffset;
 
@@ -417,8 +429,29 @@ export default function Pendant3DPreview({
   const engravingTexLeftRef = useRef<THREE.CanvasTexture | null>(null);
   const engravingTexRightRef = useRef<THREE.CanvasTexture | null>(null);
   const [webglFailed, setWebglFailed] = useState(false);
+  /** Live OrbitControls + camera for zoom buttons (set in useLayoutEffect). */
+  const orbitCtxRef = useRef<{
+    controls: StudioOrbitControls;
+    camera: THREE.PerspectiveCamera;
+    minD: number;
+    maxD: number;
+  } | null>(null);
 
   const templateKey = template.id;
+
+  const handleZoomStep = useCallback((closer: boolean) => {
+    const ctx = orbitCtxRef.current;
+    if (!ctx) return;
+    const { controls, camera, minD, maxD } = ctx;
+    const target = new THREE.Vector3().copy(controls.target);
+    const offset = camera.position.clone().sub(target);
+    const dist = offset.length();
+    const factor = closer ? 0.9 : 1 / 0.9;
+    const newDist = THREE.MathUtils.clamp(dist * factor, minD, maxD);
+    offset.setLength(newDist);
+    camera.position.copy(target).add(offset);
+    controls.update();
+  }, []);
 
   const linesSignature = useMemo(
     () => JSON.stringify(lines.map((l) => ({ t: l.text, f: l.fontId, s: l.size }))),
@@ -428,6 +461,8 @@ export default function Pendant3DPreview({
   useLayoutEffect(() => {
     const mountEl = mountRef.current;
     if (!mountEl) return;
+
+    const isPuzzle = template.shape === "puzzle";
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -446,52 +481,65 @@ export default function Pendant3DPreview({
     renderer.setClearColor(0x000000, 0);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    renderer.toneMappingExposure = isPuzzle ? 0.98 : 1.05;
     mountEl.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 50);
-    camera.position.set(0, 0, 5.4);
+    const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
+    // Puzzle: pull back + tiny vertical bias so tab, bail, and side notches stay in frame like product shots.
+    const camZ = isPuzzle ? 7.95 : 6.65;
+    const camY = isPuzzle ? 0.1 : 0;
+    camera.position.set(0, camY, camZ);
 
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(
       new RoomEnvironment() as unknown as THREE.Scene,
-      0.04
+      isPuzzle ? 0.035 : 0.04
     ).texture;
 
-    const key = new THREE.DirectionalLight(0xffffff, 1.35);
-    key.position.set(2.4, 3.2, 3.8);
+    const key = new THREE.DirectionalLight(0xffffff, isPuzzle ? 1.12 : 1.35);
+    if (isPuzzle) {
+      key.position.set(0.25, 4.6, 5.4);
+    } else {
+      key.position.set(2.4, 3.2, 3.8);
+    }
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0xfff0dc, 0.55);
-    fill.position.set(-2.8, 1.2, 2.0);
+    const fill = new THREE.DirectionalLight(isPuzzle ? 0xeef0f4 : 0xfff0dc, isPuzzle ? 0.36 : 0.55);
+    fill.position.set(isPuzzle ? -3.0 : -2.8, isPuzzle ? 2.2 : 1.2, isPuzzle ? 1.4 : 2.0);
     scene.add(fill);
-    const rim = new THREE.DirectionalLight(0xffe9c9, 0.5);
-    rim.position.set(0, -2.4, -2.6);
+    const rim = new THREE.DirectionalLight(isPuzzle ? 0xd8dce2 : 0xffe9c9, isPuzzle ? 0.32 : 0.5);
+    rim.position.set(0.15, isPuzzle ? -2.6 : -2.4, isPuzzle ? -2.0 : -2.6);
     scene.add(rim);
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x9a8470, 0.28));
+    scene.add(
+      new THREE.HemisphereLight(
+        isPuzzle ? 0xf4f2f0 : 0xffffff,
+        isPuzzle ? 0x5c5855 : 0x9a8470,
+        isPuzzle ? 0.2 : 0.28
+      )
+    );
 
     const extrudeSettings: THREE.ExtrudeGeometryOptions = {
       depth: template.thickness,
       bevelEnabled: true,
-      bevelSegments: 4,
-      bevelSize: 0.035,
-      bevelThickness: 0.035,
-      curveSegments: 64,
+      bevelSegments: isPuzzle ? 3 : 4,
+      bevelSize: isPuzzle ? 0.022 : 0.035,
+      bevelThickness: isPuzzle ? 0.022 : 0.035,
+      curveSegments: isPuzzle ? 80 : 64,
       steps: 1,
     };
 
     const base = new THREE.Color(metalColor);
     const frontMat = new THREE.MeshStandardMaterial({
       color: base.clone(),
-      metalness: 1.0,
-      roughness: 0.24,
-      envMapIntensity: 1.2,
+      metalness: isPuzzle ? 0.93 : 1.0,
+      roughness: isPuzzle ? 0.38 : 0.24,
+      envMapIntensity: isPuzzle ? 1.02 : 1.2,
     });
     const sideMat = new THREE.MeshStandardMaterial({
       color: base.clone(),
-      metalness: 1.0,
-      roughness: 0.18,
-      envMapIntensity: 1.3,
+      metalness: isPuzzle ? 0.94 : 1.0,
+      roughness: isPuzzle ? 0.32 : 0.18,
+      envMapIntensity: isPuzzle ? 1.08 : 1.3,
     });
     frontMatRef.current = frontMat;
     backMatRef.current = frontMat;
@@ -636,10 +684,12 @@ export default function Pendant3DPreview({
       pendant.add(body, overlay);
 
       if (template.hasBail) {
-        const bailRadius = 0.13;
-        const bailGeo = new THREE.TorusGeometry(bailRadius, 0.034, 20, 48);
+        const bailRadius = isPuzzle ? 0.1 : 0.13;
+        const bailTube = isPuzzle ? 0.021 : 0.034;
+        const bailGeo = new THREE.TorusGeometry(bailRadius, bailTube, isPuzzle ? 18 : 20, isPuzzle ? 44 : 48);
         const bail = new THREE.Mesh(bailGeo, sideMat);
-        bail.position.set(0, template.height / 2 + bailRadius - 0.02, 0);
+        const bailY = template.height / 2 + bailRadius - (isPuzzle ? 0.015 : 0.02);
+        bail.position.set(0, bailY, 0);
         pendant.add(bail);
       }
 
@@ -652,9 +702,14 @@ export default function Pendant3DPreview({
     scene.add(pendant);
 
     // Controls
-    const controls = new OrbitControls(camera, renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement) as StudioOrbitControls;
     controls.enablePan = false;
-    controls.enableZoom = false;
+    controls.enableZoom = true;
+    controls.zoomSpeed = isPuzzle ? 0.52 : 0.58;
+    const minZoomDist = isPuzzle ? 6.45 : 5.25;
+    const maxZoomDist = isPuzzle ? 13.2 : 11.2;
+    controls.minDistance = minZoomDist;
+    controls.maxDistance = maxZoomDist;
     controls.enableDamping = true;
     controls.dampingFactor = 0.09;
     controls.rotateSpeed = 0.55;
@@ -668,6 +723,8 @@ export default function Pendant3DPreview({
       controls.autoRotate = false;
     };
     (controls as unknown as { addEventListener: (t: string, h: () => void) => void }).addEventListener("start", onStart);
+
+    orbitCtxRef.current = { controls, camera, minD: minZoomDist, maxD: maxZoomDist };
 
     const resize = () => {
       const w = Math.max(120, mountEl.clientWidth || 1);
@@ -692,6 +749,7 @@ export default function Pendant3DPreview({
       window.cancelAnimationFrame(rafId);
       ro.disconnect();
       (controls as unknown as { removeEventListener: (t: string, h: () => void) => void }).removeEventListener("start", onStart);
+      orbitCtxRef.current = null;
       controls.dispose();
       pmrem.dispose();
       if (splitMode) {
@@ -802,8 +860,32 @@ export default function Pendant3DPreview({
   }, [linesSignature, templateKey, metalColor, template.shape]);
 
   return (
-    <div className="studio-three-wrap">
+    <div className={`studio-three-wrap${template.shape === "puzzle" ? " studio-three-wrap--puzzle" : ""}`}>
       <div ref={mountRef} className="studio-three-canvas-host" />
+      {!webglFailed ? (
+        <div className="studio-three-zoom-stack">
+          <button
+            type="button"
+            className="studio-three-zoom-btn"
+            aria-label="התקרב לתכשיט"
+            title="התקרב"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => handleZoomStep(true)}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            className="studio-three-zoom-btn"
+            aria-label="התרחק מהתכשיט"
+            title="התרחק"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => handleZoomStep(false)}
+          >
+            −
+          </button>
+        </div>
+      ) : null}
       {webglFailed ? (
         <div className="studio-three-fallback">
           {fallbackImageUrl ? (
