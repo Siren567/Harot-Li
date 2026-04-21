@@ -8,6 +8,20 @@ let cachedProductsPayload: { products: any[] } | null = null;
 let cachedProductsUntil = 0;
 let productsInFlight: Promise<{ products: any[] }> | null = null;
 
+function getDatabaseFingerprint() {
+  const raw = String(process.env.DATABASE_URL ?? "").trim();
+  if (!raw) return { configured: false };
+  try {
+    const url = new URL(raw);
+    const host = url.hostname || "unknown-host";
+    const port = url.port || "default";
+    const dbName = url.pathname.replace(/^\//, "") || "unknown-db";
+    return { configured: true, host, port, dbName };
+  } catch {
+    return { configured: true, parseError: true };
+  }
+}
+
 export function invalidatePublicProductsCache() {
   cachedProductsPayload = null;
   cachedProductsUntil = 0;
@@ -94,16 +108,20 @@ function normalizeColorToken(raw?: string | null): "gold" | "silver" | "rose" | 
 
 publicRouter.get("/products", async (_req, res) => {
   try {
+    const requestStartedAt = Date.now();
     const now = Date.now();
     if (cachedProductsPayload && now < cachedProductsUntil) {
+      console.info("[GET /api/public/products] cache-hit products=", cachedProductsPayload.products.length);
       return res.json(cachedProductsPayload);
     }
     if (productsInFlight) {
       const payload = await productsInFlight;
+      console.info("[GET /api/public/products] in-flight-shared products=", payload.products.length);
       return res.json(payload);
     }
 
     productsInFlight = (async () => {
+      console.info("[GET /api/public/products] db-fingerprint=", JSON.stringify(getDatabaseFingerprint()));
       const rows = await prisma.product.findMany({
       where: { isActive: true },
       orderBy: { updatedAt: "desc" },
@@ -135,6 +153,7 @@ publicRouter.get("/products", async (_req, res) => {
         },
       },
       });
+      console.info("[GET /api/public/products] prisma-rows=", Array.isArray(rows) ? rows.length : 0);
 
       const products = (rows ?? []).map((p: any) => {
       const rawCategoryRows = Array.isArray(p?.categories) ? p.categories : [];
@@ -220,6 +239,7 @@ publicRouter.get("/products", async (_req, res) => {
         })),
       };
       });
+      console.info("[GET /api/public/products] mapped-products=", products.length, "durationMs=", Date.now() - requestStartedAt);
       return { products };
     })();
     const payload = await productsInFlight;
@@ -236,6 +256,8 @@ publicRouter.get("/products", async (_req, res) => {
     console.error("[GET /api/public/products] FAILED meta=", JSON.stringify(err?.meta ?? null));
     console.error("[GET /api/public/products] FAILED message=", String(err?.message ?? err));
     console.error("[GET /api/public/products] FAILED stack=", err?.stack);
+    console.error("[GET /api/public/products] fallback-empty-products=true");
+    res.setHeader("x-public-products-fallback", "1");
     // Keep the storefront / Studio alive even if the DB misbehaves: return an
     // empty, well-formed payload instead of a 500 so the page renders.
     res.status(200).json({ products: [] });
