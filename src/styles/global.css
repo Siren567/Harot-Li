@@ -600,8 +600,8 @@ textarea:focus-visible {
   gap: 16px;
   align-items: stretch;
   width: 100%;
-  max-width: 920px;
-  margin-inline: 0 auto;
+  max-width: none;
+  margin-inline: 0;
 }
 
 .studio-products-grid.studio-products-grid--uniform .studio-product-card {
@@ -986,18 +986,37 @@ textarea:focus-visible {
 
 .studio-subgallery {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 10px;
-  margin-top: 12px;
-  justify-content: flex-start;
-  overflow: visible;
+  margin-top: 0;
+  justify-content: center;
+  overflow-x: auto;
   max-width: 100%;
 }
 
-.studio-gallery-grid-wrap {
-  display: block;
+.studio-gallery-carousel {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   margin-top: 6px;
+}
+
+.studio-gallery-nav {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid #d8c6b6;
+  background: #fff;
+  color: #6f5644;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .studio-subgallery-thumb {
@@ -1195,7 +1214,7 @@ textarea:focus-visible {
   border: 1px solid #e9d9ca;
   border-radius: 10px;
   background: #fff;
-  padding: 8px 12px 8px 42px;
+  padding: 8px 12px 28px 12px;
   transition: border-color .16s ease, box-shadow .16s ease;
 }
 
@@ -1221,6 +1240,7 @@ textarea:focus-visible {
   min-height: 56px;
   resize: vertical;
   line-height: 1.45;
+  padding-bottom: 2px;
 }
 
 .studio-engraving-title-row {
@@ -1287,6 +1307,9 @@ textarea:focus-visible {
 .studio-icon-btn--add {
   width: 24px;
   height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .studio-icon-btn--emoji {
@@ -1299,6 +1322,19 @@ textarea:focus-visible {
 .studio-icon-btn--emoji-left {
   right: auto;
   left: 8px;
+}
+
+.studio-icon-btn--emoji-corner {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  top: auto;
+  transform: none;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .studio-icon-btn:hover:not(:disabled) {
@@ -1329,9 +1365,9 @@ textarea:focus-visible {
   left: 8px;
   right: auto;
   width: min(320px, calc(100vw - 40px));
-  grid-template-columns: repeat(8, 1fr);
-  max-height: 220px;
-  overflow: auto;
+  padding: 0;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .studio-emoji-choice {

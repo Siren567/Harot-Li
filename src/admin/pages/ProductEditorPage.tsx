@@ -616,7 +616,7 @@ export function ProductEditorPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: 12, minHeight: "70vh" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ fontSize: 28, fontWeight: 900, color: "var(--foreground)" }}>קטלוג מוצרים</div>
-          <div style={{ display: "flex", justifyContent: "flex-start", direction: "ltr" }}>
+          <div style={{ display: "flex", justifyContent: "flex-start", direction: "ltr", marginInlineStart: "auto" }}>
             <PrimaryButton
               type="button"
               onClick={() => {
@@ -624,7 +624,7 @@ export function ProductEditorPage() {
                 setForm(toForm());
                 setOpenCreateWhenEmpty(true);
               }}
-              style={{ padding: "12px 20px", minWidth: 150, fontSize: 14, lineHeight: 1.1 }}
+              style={{ padding: "9px 14px", minWidth: 120, fontSize: 13, lineHeight: 1.1 }}
             >
               <Plus size={16} />
               מוצר חדש
@@ -675,7 +675,7 @@ export function ProductEditorPage() {
               title="מוצרים"
               subtitle="ניהול מוצרים אמיתי המחובר ל־Backend החדש."
               actions={
-                <div style={{ direction: "ltr" }}>
+                <div style={{ direction: "ltr", marginInlineStart: "auto" }}>
                   <PrimaryButton
                     type="button"
                     onClick={() => {
@@ -683,7 +683,7 @@ export function ProductEditorPage() {
                       setForm(toForm());
                       setOpenCreateWhenEmpty(true);
                     }}
-                    style={{ minWidth: 156, padding: "11px 18px", fontSize: 15, lineHeight: 1.1 }}
+                    style={{ minWidth: 120, padding: "9px 14px", fontSize: 13, lineHeight: 1.1 }}
                   >
                     <Plus size={16} />
                     הוסף מוצר

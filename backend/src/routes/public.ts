@@ -39,8 +39,8 @@ function sanitizeImageRef(raw?: unknown, options?: { allowBase64?: boolean; maxB
   if (!value) return null;
   if (value.startsWith("data:image/")) {
     if (!options?.allowBase64) return null;
-    const maxChars = Number(options?.maxBase64Chars ?? 350_000);
-    if (value.length > maxChars) return null;
+    const maxChars = Number(options?.maxBase64Chars ?? 0);
+    if (maxChars > 0 && value.length > maxChars) return null;
   }
   return value;
 }

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Plus, Smile } from "lucide-react";
+import EmojiPicker, { type EmojiClickData } from "emoji-picker-react";
 import type { StudioSubcategory } from "../constants/studioData";
 import { getApiBaseUrl } from "../lib/apiBase";
 import { loadBootstrapOnce, loadPublicProductsOnce } from "../lib/studioDataLoader";
@@ -10,12 +12,6 @@ type StudioPageProps = {
 };
 
 const stepLabels = ["בחירת מוצר", "עיצוב אישי", "פרטים ותשלום", "סיום הזמנה"];
-const EMOJI_CHOICES = [
-  "😀", "😁", "😂", "😊", "😍", "🥰", "😘", "😎", "🤍", "❤️", "💛", "✨",
-  "🌟", "⭐", "🔥", "💫", "🕊️", "🙏", "💍", "🧿", "🌙", "🎁", "🎉", "🎀",
-  "💐", "🌸", "🌷", "🌹", "🍀", "☀️", "🌈", "⚡", "🪬", "👑", "🫶", "🤝",
-  "💖", "💝", "💞", "💓", "💗", "💘", "😇", "😉", "🙂", "🙌", "👏", "🤞"
-];
 
 const shekel = (n: number) => `₪${n.toLocaleString("he-IL")}`;
 
@@ -229,6 +225,28 @@ function lineBlockHeightPx(text: string, fontSize: number): number {
   return n * fontSize * 1.22;
 }
 
+function fitsTextInBox(text: string, fontId: string, fontSize: number, maxWidthPx: number, maxHeightPx: number): boolean {
+  return widestLinePx(text || " ", fontSize, fontId) <= maxWidthPx && lineBlockHeightPx(text || " ", fontSize) <= maxHeightPx;
+}
+
+function maxCharsThatFitAtSize(text: string, fontId: string, fontSize: number, maxWidthPx: number, maxHeightPx: number): number {
+  const source = String(text ?? "");
+  let lo = 0;
+  let hi = source.length;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const candidate = source.slice(0, mid);
+    if (fitsTextInBox(candidate, fontId, fontSize, maxWidthPx, maxHeightPx)) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return Math.max(0, best);
+}
+
 /** Largest font size in [minPx, maxPx] that fits width+height; returns minPx-1 if none fit. */
 function fitFontSizeToBox(text: string, fontId: string, maxWidthPx: number, maxHeightPx: number, startHigh: number): number {
   const hi = Math.min(ENGRAVE_MAX_PX, Math.max(ENGRAVE_MIN_PX, Math.round(startHigh)));
@@ -312,6 +330,17 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     setEngravings((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
 
+  function addEngraving() {
+    const id = `engraving-${Date.now()}`;
+    setEngravings((prev) => {
+      const idx = prev.length;
+      const y = clampPercent(-18 + idx * 12);
+      const next = [...prev, { id, text: "", font: activeEngraving?.font ?? "heebo", size: activeEngraving?.size ?? 26, x: 0, y }];
+      queueMicrotask(() => setActiveEngravingId(id));
+      return next;
+    });
+  }
+
   function appendEmojiToEngraving(id: string, emoji: string) {
     setEngravings((prev) =>
       prev.map((item) => (item.id === id ? { ...item, text: `${item.text ?? ""}${emoji}` } : item))
@@ -320,9 +349,8 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     setEmojiPickerForId(null);
   }
 
-  function appendEmojiToActiveEngraving(emoji: string) {
-    if (!activeEngraving) return;
-    appendEmojiToEngraving(activeEngraving.id, emoji);
+  function onEmojiPicked(id: string, emojiData: EmojiClickData) {
+    appendEmojiToEngraving(id, emojiData.emoji);
   }
 
   function clampPercent(value: number) {
@@ -350,8 +378,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     for (const item of items) {
       const fitted = fitFontSizeToBox(item.text || " ", item.font, maxW, maxHPer, item.size);
       if (fitted < ENGRAVE_MIN_PX) {
+        const maxChars = maxCharsThatFitAtSize(item.text || " ", item.font, ENGRAVE_MIN_PX, maxW, maxHPer);
         setEngraveFitError(
-          "הטקסט ארוך מדי גם בגודל המינימלי על התכשיט. יש לקצר, לרדת שורה (Enter), או לפצל למספר שדות."
+          `הטקסט ארוך מדי גם בגודל המינימלי על התכשיט: עד כ-${maxChars} תווים. יש לקצר, לרדת שורה (Enter), או לפצל למספר שדות.`
         );
         return;
       }
@@ -880,47 +909,63 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               <div>
                 <div className="studio-engraving-title-row">
                   <div className="studio-field-hint">טקסט לחריטה</div>
-                  <div className="studio-engraving-title-actions" />
-                </div>
-                <div className="studio-engraving-input-list">
-                  <div className="studio-engraving-input-wrap active">
+                  <div className="studio-engraving-title-actions">
                     <button
                       type="button"
-                      className="studio-icon-btn studio-icon-btn--emoji studio-icon-btn--emoji-left"
-                      aria-label="בחר אימוגי"
-                      title="בחר אימוגי"
-                      onClick={() => setEmojiPickerForId((prev) => (prev === "single" ? null : "single"))}
+                      className="studio-icon-btn studio-icon-btn--add"
+                      aria-label="הוסף שדה טקסט"
+                      title="הוסף שדה טקסט"
+                      onClick={addEngraving}
                     >
-                      😊
+                      <Plus size={14} />
                     </button>
-                    <textarea
-                      className="studio-engraving-input studio-engraving-input--multiline"
-                      value={activeEngraving?.text ?? ""}
-                      rows={2}
-                      placeholder="הכנס טקסט לחריטה (אפשר לרדת שורה)"
-                      onFocus={() => setActiveEngravingId(activeEngraving?.id ?? "engraving-1")}
-                      onChange={(e) => {
-                        setEngraveFitError(null);
-                        if (!activeEngraving) return;
-                        updateEngraving(activeEngraving.id, { text: e.target.value });
-                      }}
-                    />
-                    {emojiPickerForId === "single" ? (
-                      <div className="studio-emoji-popover studio-emoji-popover--full">
-                        {EMOJI_CHOICES.map((emoji) => (
-                          <button
-                            key={`single-${emoji}`}
-                            type="button"
-                            className="studio-emoji-choice"
-                            onClick={() => appendEmojiToActiveEngraving(emoji)}
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
                   </div>
                 </div>
+                <div className="studio-engraving-input-list">
+                  {engravings.map((item) => (
+                    <div key={item.id} className={`studio-engraving-input-wrap ${activeEngravingId === item.id ? "active" : ""}`}>
+                      <textarea
+                        className="studio-engraving-input studio-engraving-input--multiline"
+                        value={item.text}
+                        rows={2}
+                        placeholder="הכנס טקסט לחריטה (אפשר לרדת שורה)"
+                        onFocus={() => setActiveEngravingId(item.id)}
+                        onChange={(e) => {
+                          setEngraveFitError(null);
+                          updateEngraving(item.id, { text: e.target.value });
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="studio-icon-btn studio-icon-btn--emoji-corner"
+                        aria-label="בחר אימוגי"
+                        title="בחר אימוגי"
+                        onClick={() => setEmojiPickerForId((prev) => (prev === item.id ? null : item.id))}
+                      >
+                        <Smile size={14} />
+                      </button>
+                      {emojiPickerForId === item.id ? (
+                        <div className="studio-emoji-popover studio-emoji-popover--full">
+                          <EmojiPicker
+                            onEmojiClick={(emojiData) => onEmojiPicked(item.id, emojiData)}
+                            lazyLoadEmojis
+                            autoFocusSearch={false}
+                            skinTonesDisabled={false}
+                            width={320}
+                            height={360}
+                            searchDisabled={false}
+                            previewConfig={{ showPreview: false }}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+                {engraveFitError ? (
+                  <p className="studio-engrave-fit-error" role="alert">
+                    {engraveFitError}
+                  </p>
+                ) : null}
               </div>
               <div className="studio-font-tools-row">
                 <button
@@ -981,11 +1026,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   ) : null}
                 </label>
               </div>
-              {engraveFitError ? (
-                <p className="studio-engrave-fit-error" role="alert">
-                  {engraveFitError}
-                </p>
-              ) : null}
               {activeProduct ? (
                 <div className="studio-chip-row studio-color-pick-row" aria-label="צבע מוצר">
                   {activeProduct.colors.map((c, i) => (
@@ -1107,7 +1147,15 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   </div>
                 </div>
                 {galleryUrls.length > 0 ? (
-                  <div className="studio-gallery-grid-wrap" aria-label="גלריית תמונות המוצר">
+                  <div className="studio-gallery-carousel" aria-label="גלריית תמונות המוצר">
+                    <button
+                      type="button"
+                      className="studio-gallery-nav"
+                      onClick={() => setSelectedGalleryIndex((prev) => (prev <= 0 ? galleryUrls.length - 1 : prev - 1))}
+                      aria-label="תמונה קודמת"
+                    >
+                      ‹
+                    </button>
                     <div className="studio-subgallery" role="list">
                       {galleryUrls.map((url, idx) => (
                         <button
@@ -1132,6 +1180,14 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                         </button>
                       ))}
                     </div>
+                    <button
+                      type="button"
+                      className="studio-gallery-nav"
+                      onClick={() => setSelectedGalleryIndex((prev) => (prev >= galleryUrls.length - 1 ? 0 : prev + 1))}
+                      aria-label="תמונה הבאה"
+                    >
+                      ›
+                    </button>
                   </div>
                 ) : null}
               </div>
