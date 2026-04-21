@@ -108,28 +108,50 @@ function CheckoutForm({ onSubmit, id, className, disabled }: CheckoutFormProps) 
         הערות
         <textarea name="notes" rows={3} value={notes} onChange={(ev) => setNotes(ev.target.value)} placeholder="הערות נוספות למשלוח או ליצירה" />
       </label>
-      <fieldset className="studio-checkout-form-payment" style={{ gridColumn: "1 / -1", border: "none", padding: 0, margin: 0 }}>
-        <legend style={{ fontSize: "0.9rem", marginBottom: "0.35rem" }}>אמצעי תשלום</legend>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", marginInlineEnd: "1rem" }}>
-          <input
-            type="radio"
-            name="paymentMethod"
-            value="cash"
-            checked={paymentMethod === "cash"}
-            onChange={() => setPaymentMethod("cash")}
-          />
-          מזומן
-        </label>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
-          <input
-            type="radio"
-            name="paymentMethod"
-            value="payplus"
-            checked={paymentMethod === "payplus"}
-            onChange={() => setPaymentMethod("payplus")}
-          />
-          כרטיס אשראי (PayPlus)
-        </label>
+      <fieldset
+        className="studio-checkout-form-payment"
+        style={{ gridColumn: "1 / -1", border: "none", padding: 0, margin: 0 }}
+      >
+        <legend style={{ fontSize: "0.9rem", marginBottom: "0.5rem", fontWeight: 600 }}>אמצעי תשלום</legend>
+        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+          {(
+            [
+              { value: "cash" as const, label: "מזומן", icon: "💵" },
+              { value: "payplus" as const, label: "כרטיס אשראי (PayPlus)", icon: "💳" },
+            ]
+          ).map((opt) => {
+            const selected = paymentMethod === opt.value;
+            return (
+              <label
+                key={opt.value}
+                style={{
+                  flex: "1 1 160px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  padding: "0.7rem 0.9rem",
+                  borderRadius: 10,
+                  border: `1.5px solid ${selected ? "#111" : "#d9d9d9"}`,
+                  background: selected ? "#f5f5f5" : "#fff",
+                  cursor: "pointer",
+                  transition: "border-color .15s ease, background .15s ease",
+                  fontSize: "0.95rem",
+                }}
+              >
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value={opt.value}
+                  checked={selected}
+                  onChange={() => setPaymentMethod(opt.value)}
+                  style={{ accentColor: "#111" }}
+                />
+                <span aria-hidden="true" style={{ fontSize: "1.1rem" }}>{opt.icon}</span>
+                <span>{opt.label}</span>
+              </label>
+            );
+          })}
+        </div>
       </fieldset>
       {error ? (
         <p role="alert" style={{ color: "#b42318", fontSize: "0.85rem", margin: 0, gridColumn: "1 / -1" }}>

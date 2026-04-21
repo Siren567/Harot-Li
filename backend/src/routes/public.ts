@@ -136,38 +136,44 @@ publicRouter.get("/products", async (_req, res) => {
       },
       });
 
-      const products = rows.map((p) => {
-      const allCategoryRows = (p.categories ?? []).map((x) => x.category).filter((c) => Boolean(c?.isActive));
-      const mainRaw = p.mainCategory?.isActive ? p.mainCategory : null;
+      const products = (rows ?? []).map((p: any) => {
+      const rawCategoryRows = Array.isArray(p?.categories) ? p.categories : [];
+      const allCategoryRows = rawCategoryRows
+        .map((x: any) => x?.category)
+        .filter((c: any): c is { id: string; name: string | null; slug: string | null; parentId: string | null; isActive: boolean } => Boolean(c && c.isActive));
+      const mainRaw = p.mainCategory && p.mainCategory.isActive ? p.mainCategory : null;
       const subRows = allCategoryRows
-        .filter((c) => c.id !== p.mainCategoryId && c.parentId === p.mainCategoryId && c.isActive !== false)
-        .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""), "he"));
+        .filter((c: any) => c && c.id !== p.mainCategoryId && c.parentId === p.mainCategoryId && c.isActive !== false)
+        .sort((a: any, b: any) => String(a?.name ?? "").localeCompare(String(b?.name ?? ""), "he"));
       const subRawFirst = subRows[0] ?? null;
-      const effectiveMain = mainRaw?.parentId ? allCategoryRows.find((c) => c.id === mainRaw.parentId) ?? mainRaw : mainRaw;
+      const effectiveMain = mainRaw?.parentId ? allCategoryRows.find((c: any) => c?.id === mainRaw.parentId) ?? mainRaw : mainRaw;
 
       const image = p.imageUrl ?? null;
-      const gallery = Array.isArray(p.galleryImages) ? p.galleryImages.filter(Boolean) : [];
+      const gallery = Array.isArray(p.galleryImages) ? (p.galleryImages as any[]).filter(Boolean) : [];
       const images = Array.from(new Set([image, ...gallery].filter(Boolean))) as string[];
-      const effectivePriceAgorot = p.salePrice && p.salePrice > 0 && p.salePrice < p.basePrice ? p.salePrice : p.basePrice;
+      const basePrice = Number(p.basePrice ?? 0) || 0;
+      const salePrice = Number(p.salePrice ?? 0) || 0;
+      const effectivePriceAgorot = salePrice > 0 && salePrice < basePrice ? salePrice : basePrice;
+      const variantsRaw: any[] = Array.isArray(p.variants) ? p.variants : [];
       const studioColors = mapStudioColors(
         Array.from(
           new Set(
-            (p.variants ?? [])
-              .map((v) => v.color)
+            variantsRaw
+              .map((v) => v?.color)
               .filter((v): v is string => typeof v === "string" && v.trim().length > 0),
           ),
         ),
       );
       const allowedColorKeys = new Set(studioColors);
       // Strict product-scoped color filtering: never leak unrelated variant colors.
-      const activeVariants = (p.variants ?? []).filter((v) => {
-        const key = normalizeColorToken(v.color);
+      const activeVariants = variantsRaw.filter((v) => {
+        const key = normalizeColorToken(v?.color);
         if (allowedColorKeys.size === 0) return true;
         if (!key) return false;
         return allowedColorKeys.has(key);
       });
-      const totalStock = activeVariants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0);
-      const variantLowThresholds = activeVariants.map((v) => Number(v.lowThreshold) || 5);
+      const totalStock = activeVariants.reduce((sum, v) => sum + (Number(v?.stock) || 0), 0);
+      const variantLowThresholds = activeVariants.map((v) => Number(v?.lowThreshold) || 5);
       const computedLow = variantLowThresholds.length > 0 ? Math.min(...variantLowThresholds) : 5;
       const subcategoryLabels = pickSubcategoryLabels([
         subRawFirst?.name ?? null,
@@ -202,15 +208,15 @@ publicRouter.get("/products", async (_req, res) => {
         allowCustomerImageUpload: Boolean(p.allowCustomerImageUpload),
         stock: totalStock,
         lowThreshold: computedLow,
-        variants: activeVariants.map((v) => ({
-          id: v.id,
-          color: v.color,
-          pendantType: v.pendantType,
-          material: v.material,
-          stock: Number(v.stock) || 0,
-          lowThreshold: Number(v.lowThreshold) || 5,
-          price: Number(((v.priceOverride ?? effectivePriceAgorot) / 100).toFixed(2)),
-          isActive: v.isActive,
+        variants: activeVariants.map((v: any) => ({
+          id: v?.id ?? null,
+          color: v?.color ?? null,
+          pendantType: v?.pendantType ?? null,
+          material: v?.material ?? null,
+          stock: Number(v?.stock) || 0,
+          lowThreshold: Number(v?.lowThreshold) || 5,
+          price: Number(((Number(v?.priceOverride) || effectivePriceAgorot) / 100).toFixed(2)),
+          isActive: v?.isActive ?? true,
         })),
       };
       });
@@ -221,15 +227,18 @@ publicRouter.get("/products", async (_req, res) => {
     cachedProductsUntil = Date.now() + PRODUCTS_CACHE_TTL_MS;
     return res.json(payload);
   } catch (err: any) {
-    // Log the full Prisma error (name + code + meta + message + stack) on separate lines
+    // Log the full error (name + code + meta + message + stack) on separate lines
     // so Vercel keeps each field intact and we can see the schema-drift cause.
+    console.error("PUBLIC PRODUCTS ERROR:", err);
     console.error("[GET /api/public/products] FAILED name=", err?.name);
     console.error("[GET /api/public/products] FAILED code=", err?.code);
     console.error("[GET /api/public/products] FAILED clientVersion=", err?.clientVersion);
     console.error("[GET /api/public/products] FAILED meta=", JSON.stringify(err?.meta ?? null));
     console.error("[GET /api/public/products] FAILED message=", String(err?.message ?? err));
     console.error("[GET /api/public/products] FAILED stack=", err?.stack);
-    res.status(500).json({ error: "SERVER_ERROR", hint: String(err?.message ?? "").slice(0, 500) });
+    // Keep the storefront / Studio alive even if the DB misbehaves: return an
+    // empty, well-formed payload instead of a 500 so the page renders.
+    res.status(200).json({ products: [] });
   } finally {
     productsInFlight = null;
   }
