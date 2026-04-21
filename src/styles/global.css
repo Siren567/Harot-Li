@@ -1348,7 +1348,7 @@ textarea:focus-visible {
   width: 100%;
   border: 0;
   background: transparent;
-  font-weight: 800;
+  font-weight: 500;
   color: #2c1b10;
   font-size: .86rem;
   outline: none;
@@ -1383,7 +1383,9 @@ textarea:focus-visible {
 }
 
 .studio-personalization-btn--gift {
-  justify-content: space-between;
+  justify-content: flex-start;
+  align-items: flex-start;
+  min-height: 24px;
 }
 
 .studio-personalization-dot {
@@ -1411,6 +1413,7 @@ textarea:focus-visible {
 
 .studio-personalization-tile--color {
   background-image: linear-gradient(120deg, color-mix(in srgb, var(--selected-color) 11%, #fafafa), #fafafa 50%);
+  overflow: visible;
 }
 
 .studio-personalization-tile--gift {
@@ -1459,8 +1462,8 @@ textarea:focus-visible {
 .studio-size-value {
   font-size: .95rem;
   line-height: 1;
-  font-weight: 800;
-  color: #3d2a1b;
+  font-weight: 500;
+  color: #8b5e3c;
 }
 
 .studio-size-input:focus {
@@ -1473,6 +1476,20 @@ textarea:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.studio-gift-head-row {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.studio-gift-state {
+  font-size: .72rem;
+  line-height: 1;
+  margin-top: 1px;
 }
 
 .studio-gift-reveal-inline {
@@ -1496,7 +1513,7 @@ textarea:focus-visible {
   position: absolute;
   top: calc(100% + 8px);
   inset-inline-end: 0;
-  z-index: 20;
+  z-index: 50;
   width: min(300px, calc(100vw - 40px));
   border-radius: 14px;
   border: 1px solid #e4d4c5;
@@ -1507,21 +1524,21 @@ textarea:focus-visible {
 
 .studio-color-swatches {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: 1fr;
+  gap: 8px;
 }
 
 .studio-product-color-option {
   width: 100%;
-  min-height: 74px;
-  border-radius: 12px;
+  min-height: 42px;
+  border-radius: 10px;
   border: 1px solid rgba(0,0,0,.12);
   cursor: pointer;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 10px;
   font-size: .75rem;
   font-weight: 800;
   color: #2f2218;
@@ -1530,8 +1547,8 @@ textarea:focus-visible {
 }
 
 .studio-product-color-option-dot {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   border: 1px solid rgba(0,0,0,.18);
   background: var(--option-color, #c0c0c0);

@@ -76,6 +76,25 @@ type StudioRuntimeProduct = {
   lowThreshold: number;
 };
 
+const COLOR_IMAGE_HINTS: Record<ColorKey, string[]> = {
+  gold: ["gold", "זהב", "gld"],
+  silver: ["silver", "כסף", "slv"],
+  rose: ["rose", "rosegold", "רוז"],
+  black: ["black", "שחור", "blk"],
+};
+
+const FONT_FAMILY_BY_ID: Record<string, string> = {
+  assistant: '"Assistant", sans-serif',
+  heebo: '"Heebo", sans-serif',
+  david: '"David Libre", serif',
+  rubik: '"Rubik", sans-serif',
+  noto: '"Noto Sans Hebrew", sans-serif',
+  alef: '"Alef", sans-serif',
+  secular: '"Secular One", sans-serif',
+  frank: '"Frank Ruhl Libre", serif',
+  varela: '"Varela Round", sans-serif',
+};
+
 type EngravingItem = {
   id: string;
   text: string;
@@ -182,6 +201,18 @@ function getProductTotalStock(p: PublicProduct, colors: StudioColorRow[]): numbe
     return colors.reduce((sum, c) => sum + Math.max(0, Number(c.stock) || 0), 0);
   }
   return Math.max(0, Number(p.stock) || 0);
+}
+
+function resolveImageIndexForColor(product: StudioRuntimeProduct, color: StudioColorRow | null | undefined): number {
+  const images = Array.isArray(product.images) ? product.images : [];
+  if (images.length === 0 || !color?.colorKey) return 0;
+  const hints = COLOR_IMAGE_HINTS[color.colorKey] ?? [];
+  if (hints.length === 0) return 0;
+  const idx = images.findIndex((url) => {
+    const normalized = decodeURIComponent(String(url || "")).toLowerCase();
+    return hints.some((hint) => normalized.includes(hint));
+  });
+  return idx >= 0 ? idx : 0;
 }
 
 const ENGRAVE_MIN_PX = 8;
@@ -411,6 +442,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   useEffect(() => {
     setSelectedGalleryIndex(0);
   }, [activeProduct?.id]);
+
+  useEffect(() => {
+    if (!activeProduct || !activeColor) return;
+    const imageIdx = resolveImageIndexForColor(activeProduct, activeColor);
+    setSelectedGalleryIndex((prev) => (prev === imageIdx ? prev : imageIdx));
+  }, [activeProduct, activeColor]);
 
   useEffect(() => {
     const onDocPointerDown = (event: PointerEvent) => {
@@ -677,7 +714,10 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     const outOfStock = product.totalStock <= 0;
     const lowStock = !outOfStock && product.totalStock <= product.lowThreshold;
     const selectedIndex = selectedColorByProduct[product.id] ?? 0;
+    const selectedColor = product.colors[selectedIndex] ?? product.colors[0] ?? null;
+    const colorImageIndex = resolveImageIndexForColor(product, selectedColor);
     const previewImage =
+      product.images[colorImageIndex] ??
       product.images[selectedIndex] ??
       product.images[0] ??
       product.image ??
@@ -909,13 +949,14 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     <select
                       className="studio-personalization-select"
                       value={activeEngraving?.font ?? "heebo"}
+                      style={{ fontFamily: FONT_FAMILY_BY_ID[activeEngraving?.font ?? "heebo"] ?? '"Heebo", sans-serif' }}
                       onChange={(e) => {
                         setEngraveFitError(null);
                         activeEngraving && updateEngraving(activeEngraving.id, { font: e.target.value });
                       }}
                     >
                       {studioFonts.map((f) => (
-                        <option key={f.id} value={f.id}>
+                        <option key={f.id} value={f.id} style={{ fontFamily: FONT_FAMILY_BY_ID[f.id] ?? '"Heebo", sans-serif' }}>
                           {f.label}
                         </option>
                       ))}
@@ -1020,11 +1061,13 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     aria-label="אריזת מתנה"
                     title="אריזת מתנה"
                   >
-                    <span className="studio-gift-head">
-                      <Gift size={15} aria-hidden />
-                      <span className="studio-personalization-label">אריזת מתנה</span>
+                    <span className="studio-gift-head-row">
+                      <span className="studio-gift-head">
+                        <Gift size={15} aria-hidden />
+                        <span className="studio-personalization-label">אריזת מתנה</span>
+                      </span>
+                      <span className="studio-personalization-value studio-gift-state">{giftWrap ? "פעיל" : "כבוי"}</span>
                     </span>
-                    <span className="studio-personalization-value">{giftWrap ? "פעיל" : "כבוי"}</span>
                   </button>
                   <div className={`studio-gift-reveal-inline ${giftWrap ? "open" : ""}`} aria-hidden={!giftWrap}>
                     {giftWrap ? (
