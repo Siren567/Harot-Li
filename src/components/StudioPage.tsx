@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Eye, Gift, Palette, Plus, Smile, Trash2 } from "lucide-react";
+import { ChevronDown, Eye, Gift, Plus, Smile, Trash2 } from "lucide-react";
 import EmojiPicker, { type EmojiClickData } from "emoji-picker-react";
 import type { StudioSubcategory } from "../constants/studioData";
 import { getApiBaseUrl } from "../lib/apiBase";
@@ -94,6 +94,78 @@ const FONT_FAMILY_BY_ID: Record<string, string> = {
   frank: '"Frank Ruhl Libre", serif',
   varela: '"Varela Round", sans-serif',
 };
+
+type EngravingRecipient = "partner" | "mom" | "dad" | "friend" | "child" | "self";
+type EngravingStyle = "romantic" | "classic" | "minimal" | "playful" | "blessing";
+
+const ENGRAVING_RECIPIENT_LABELS: Record<EngravingRecipient, string> = {
+  partner: "בן/בת זוג",
+  mom: "אמא",
+  dad: "אבא",
+  friend: "חבר/ה",
+  child: "ילד/ה",
+  self: "עצמי",
+};
+
+const ENGRAVING_STYLE_LABELS: Record<EngravingStyle, string> = {
+  romantic: "רומנטי",
+  classic: "קלאסי",
+  minimal: "מינימלי",
+  playful: "קליל",
+  blessing: "ברכה",
+};
+
+const ENGRAVING_SUGGESTIONS: Record<EngravingRecipient, Record<EngravingStyle, string[]>> = {
+  partner: {
+    romantic: ["לנצח שלי", "אהבה שלי", "את/ה הבית שלי"],
+    classic: ["שלך תמיד", "באהבה גדולה", "לנצח ביחד"],
+    minimal: ["Forever", "Love", "יחד"],
+    playful: ["החיוך שלך", "My Person", "שלי. תמיד."],
+    blessing: ["אהבה שמחה ושלווה", "שנמשיך לבחור אחד בשנייה", "לב אחד לשניים"],
+  },
+  mom: {
+    romantic: ["לאמא באהבה", "הלב של הבית", "תודה על הכל"],
+    classic: ["אמא יקרה", "עם אהבה ענקית", "אמא מספר 1"],
+    minimal: ["אמא", "תודה אמא", "לב ענק"],
+    playful: ["Queen Mom", "אמא אלופה", "Home = Mom"],
+    blessing: ["בריאות ושמחה", "אור, שלווה ואהבה", "שתמיד תחייכי"],
+  },
+  dad: {
+    romantic: ["לאבא אהוב", "תודה אבא", "הלב הכי חזק"],
+    classic: ["אבא יקר", "בהערכה גדולה", "אבא מספר 1"],
+    minimal: ["אבא", "My Hero", "תודה"],
+    playful: ["Best Dad", "אבא אלוף", "הגיבור שלי"],
+    blessing: ["בריאות ואושר", "כוח ושקט בלב", "שתמיד תהיה מאושר"],
+  },
+  friend: {
+    romantic: ["חבר/ה בלב", "איתך תמיד", "לזכרון מתוק"],
+    classic: ["באהבה", "חברות אמיתית", "תודה שאת/ה פה"],
+    minimal: ["Bestie", "חברות", "Always"],
+    playful: ["Partners in crime", "חבר/ה זהב", "צחוק זה החיים"],
+    blessing: ["שמחה ושפע", "שתמיד יהיה לך אור", "ימים טובים בלב"],
+  },
+  child: {
+    romantic: ["אהבה קטנה גדולה", "הלב שלי", "כוכב/ת שלי"],
+    classic: ["אהוב/ה שלי", "באהבה מהלב", "ילד/ה יקר/ה"],
+    minimal: ["Love", "נסיך/ה", "כוכב/ת"],
+    playful: ["חלום שלי", "מאמי", "שמש קטנה"],
+    blessing: ["גדל/י באהבה", "שמחה ובריאות תמיד", "לב מלא אור"],
+  },
+  self: {
+    romantic: ["אני בוחרת בי", "לב שלם", "מגיעה לי אהבה"],
+    classic: ["כוח פנימי", "דרך חדשה", "אני מסוגל/ת"],
+    minimal: ["Breathe", "Shine", "Believe"],
+    playful: ["Main Character", "Own Your Story", "You Got This"],
+    blessing: ["שפע ושקט", "אהבה לעצמי", "כל יום התחלה חדשה"],
+  },
+};
+
+function generateEngravingSuggestion(recipient: EngravingRecipient, style: EngravingStyle) {
+  const pool = ENGRAVING_SUGGESTIONS[recipient]?.[style] ?? [];
+  if (pool.length === 0) return "באהבה";
+  const pick = Math.floor(Math.random() * pool.length);
+  return pool[pick];
+}
 
 type EngravingItem = {
   id: string;
@@ -254,6 +326,8 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [galleryModalUrl, setGalleryModalUrl] = useState<string | null>(null);
   const [engraveFitError, setEngraveFitError] = useState<string | null>(null);
   const [showEngravingHelp, setShowEngravingHelp] = useState(false);
+  const [generatorRecipient, setGeneratorRecipient] = useState<EngravingRecipient>("partner");
+  const [generatorStyle, setGeneratorStyle] = useState<EngravingStyle>("romantic");
   const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(0);
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
@@ -332,6 +406,14 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   function onEmojiPicked(id: string, emojiData: EmojiClickData) {
     appendEmojiToEngraving(id, emojiData.emoji);
+  }
+
+  function applyGeneratedEngraving() {
+    const suggestion = generateEngravingSuggestion(generatorRecipient, generatorStyle);
+    if (!activeEngraving) return;
+    setEngraveFitError(null);
+    updateEngraving(activeEngraving.id, { text: suggestion });
+    setShowEngravingHelp(false);
   }
 
   useEffect(() => {
@@ -979,14 +1061,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     aria-label="בחירת צבע מוצר"
                     title="בחירת צבע מוצר"
                   >
-                    <Palette size={16} />
-                    <span className="studio-personalization-label">צבע</span>
-                    <span
-                      className="studio-personalization-dot studio-personalization-dot--large"
-                      style={{ background: activeColor?.swatch ?? "linear-gradient(135deg,#111827,#d4af37)" }}
-                      aria-hidden
-                    />
-                    <span className="studio-personalization-value">{activeColor?.name ?? "בחר צבע"}</span>
+                    <span className="studio-color-card-name">{activeColor?.name ?? "בחר צבע"}</span>
                   </button>
                   {showProductColorPicker && activeProduct ? (
                     <div className="studio-color-popover" role="dialog" aria-label="בחירת צבע מוצר">
@@ -1165,7 +1240,30 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 </button>
                 {showEngravingHelp ? (
                   <div className="studio-engraving-help-pop studio-engraving-help-pop--mockup">
-                    רעיונות לחריטה: שמות בני זוג, תאריך מיוחד, מילה קצרה עם משמעות, או אימוג׳י קטן שמוסיף טאץ׳ אישי.
+                    <div className="studio-generator-title">מחולל רעיונות לחריטה</div>
+                    <label className="studio-generator-row">
+                      <span>למי המתנה?</span>
+                      <select value={generatorRecipient} onChange={(e) => setGeneratorRecipient(e.target.value as EngravingRecipient)}>
+                        {(Object.keys(ENGRAVING_RECIPIENT_LABELS) as EngravingRecipient[]).map((key) => (
+                          <option key={key} value={key}>
+                            {ENGRAVING_RECIPIENT_LABELS[key]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="studio-generator-row">
+                      <span>סגנון חריטה</span>
+                      <select value={generatorStyle} onChange={(e) => setGeneratorStyle(e.target.value as EngravingStyle)}>
+                        {(Object.keys(ENGRAVING_STYLE_LABELS) as EngravingStyle[]).map((key) => (
+                          <option key={key} value={key}>
+                            {ENGRAVING_STYLE_LABELS[key]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="button" className="studio-generator-btn" onClick={applyGeneratedEngraving}>
+                      צור לי רעיון
+                    </button>
                   </div>
                 ) : null}
                 <div className="studio-preview-stage">

@@ -1412,19 +1412,24 @@ textarea:focus-visible {
 }
 
 .studio-personalization-tile--color {
-  background-image: linear-gradient(120deg, color-mix(in srgb, var(--selected-color) 11%, #fafafa), #fafafa 50%);
+  background-image: linear-gradient(120deg, color-mix(in srgb, var(--selected-color) 26%, #fafafa), color-mix(in srgb, var(--selected-color) 14%, #fafafa));
   overflow: visible;
 }
 
 .studio-personalization-tile--gift {
   position: relative;
   justify-content: flex-start;
+  order: 4;
 }
 
 .studio-personalization-tile--size {
   gap: 8px;
   justify-content: flex-start;
+  order: 3;
 }
+
+.studio-personalization-tile--font { order: 1; }
+.studio-personalization-tile--color { order: 2; }
 
 .studio-personalization-size-head {
   display: flex;
@@ -1490,6 +1495,14 @@ textarea:focus-visible {
   font-size: .72rem;
   line-height: 1;
   margin-top: 1px;
+}
+
+.studio-color-card-name {
+  width: 100%;
+  text-align: center;
+  font-size: .92rem;
+  font-weight: 700;
+  color: #4a3223;
 }
 
 .studio-gift-reveal-inline {
@@ -1703,6 +1716,43 @@ textarea:focus-visible {
   font-size: .78rem;
   line-height: 1.5;
   padding: 8px 10px;
+}
+
+.studio-generator-title {
+  font-size: .8rem;
+  font-weight: 800;
+  color: #6f5644;
+  margin-bottom: 8px;
+}
+
+.studio-generator-row {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+  font-size: .74rem;
+  color: #7b6452;
+}
+
+.studio-generator-row select {
+  border: 1px solid #e4d4c5;
+  border-radius: 8px;
+  background: #fff;
+  color: #3d2a1b;
+  font-size: .78rem;
+  padding: 7px 9px;
+  font-family: inherit;
+}
+
+.studio-generator-btn {
+  width: 100%;
+  border: 1px solid #c9b39f;
+  background: #fff;
+  color: #5d4230;
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: .78rem;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .studio-engraving-input-actions {
