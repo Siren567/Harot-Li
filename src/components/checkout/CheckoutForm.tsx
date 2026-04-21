@@ -1,4 +1,4 @@
-import { memo, useState, type FormEvent } from "react";
+import { memo, useMemo, useState, type FormEvent } from "react";
 
 export type PaymentMethod = "payplus";
 
@@ -35,7 +35,46 @@ function CheckoutForm({ onSubmit, paymentMethod, id, className, disabled }: Chec
   const [apartment, setApartment] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [notes, setNotes] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [invalid, setInvalid] = useState<Record<string, boolean>>({});
+  const [zipLoading, setZipLoading] = useState(false);
+  const [zipHint, setZipHint] = useState<string | null>(null);
+
+  const parsedStreetAndHouse = useMemo(() => {
+    const raw = address.trim();
+    const m = raw.match(/^(.*?)(?:\s+(\d+[א-תA-Za-z]?))?$/u);
+    return {
+      street: (m?.[1] ?? raw).trim(),
+      house: (m?.[2] ?? "").trim(),
+    };
+  }, [address]);
+
+  async function tryAutoFillZip() {
+    if (zipLoading) return;
+    const cityVal = city.trim();
+    const streetVal = parsedStreetAndHouse.street;
+    if (!cityVal || !streetVal) return;
+    setZipLoading(true);
+    setZipHint(null);
+    try {
+      const query = new URLSearchParams({
+        city: cityVal,
+        street: streetVal,
+        ...(parsedStreetAndHouse.house ? { house: parsedStreetAndHouse.house } : {}),
+      });
+      const res = await fetch(`/api/public/zip-lookup?${query.toString()}`);
+      const out = await res.json().catch(() => ({}));
+      if (res.ok && out?.zip) {
+        setZipCode(String(out.zip));
+        setZipHint("המיקוד מולא אוטומטית");
+      } else {
+        setZipHint("לא נמצא מיקוד אוטומטי לכתובת הזו");
+      }
+    } catch {
+      setZipHint("שירות המיקוד לא זמין כרגע");
+    } finally {
+      setZipLoading(false);
+    }
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -45,15 +84,18 @@ function CheckoutForm({ onSubmit, paymentMethod, id, className, disabled }: Chec
     const e = email.trim().toLowerCase();
     const c = city.trim();
     const a = address.trim();
-    if (!n || !p || !e) {
-      setError("נא למלא שם מלא, טלפון ואימייל");
+    const nextInvalid: Record<string, boolean> = {
+      fullName: !n,
+      phone: !p,
+      email: !e || !EMAIL_RE.test(e),
+      city: !c,
+      address: !a,
+    };
+    setInvalid(nextInvalid);
+    if (nextInvalid.fullName || nextInvalid.phone || nextInvalid.email || nextInvalid.city || nextInvalid.address) {
       return;
     }
-    if (!EMAIL_RE.test(e)) {
-      setError("כתובת אימייל אינה תקינה");
-      return;
-    }
-    setError(null);
+    setInvalid({});
     onSubmit({
       fullName: n,
       phone: p,
@@ -72,47 +114,117 @@ function CheckoutForm({ onSubmit, paymentMethod, id, className, disabled }: Chec
     <form id={id} className={className} onSubmit={handleSubmit} noValidate>
       <label>
         שם מלא
-        <input name="fullName" autoComplete="name" value={fullName} onChange={(ev) => setFullName(ev.target.value)} />
+        <input
+          name="fullName"
+          autoComplete="name"
+          placeholder="ישראל ישראלי"
+          value={fullName}
+          onChange={(ev) => {
+            setFullName(ev.target.value);
+            setInvalid((prev) => ({ ...prev, fullName: false }));
+          }}
+          style={invalid.fullName ? { borderColor: "#c9372c", boxShadow: "0 0 0 1px rgba(201,55,44,0.18)" } : undefined}
+        />
       </label>
       <label>
         טלפון
-        <input name="phone" type="tel" autoComplete="tel" value={phone} onChange={(ev) => setPhone(ev.target.value)} />
+        <input
+          name="phone"
+          type="tel"
+          autoComplete="tel"
+          placeholder="050-1234567"
+          value={phone}
+          onChange={(ev) => {
+            setPhone(ev.target.value);
+            setInvalid((prev) => ({ ...prev, phone: false }));
+          }}
+          style={invalid.phone ? { borderColor: "#c9372c", boxShadow: "0 0 0 1px rgba(201,55,44,0.18)" } : undefined}
+        />
       </label>
       <label>
         אימייל
-        <input name="email" type="email" autoComplete="email" value={email} onChange={(ev) => setEmail(ev.target.value)} />
+        <input
+          name="email"
+          type="email"
+          autoComplete="email"
+          placeholder="israel@example.com"
+          value={email}
+          onChange={(ev) => {
+            setEmail(ev.target.value);
+            setInvalid((prev) => ({ ...prev, email: false }));
+          }}
+          style={invalid.email ? { borderColor: "#c9372c", boxShadow: "0 0 0 1px rgba(201,55,44,0.18)" } : undefined}
+        />
       </label>
       <label>
         עיר
-        <input name="city" autoComplete="address-level2" value={city} onChange={(ev) => setCity(ev.target.value)} />
+        <input
+          name="city"
+          autoComplete="address-level2"
+          placeholder="תל אביב"
+          value={city}
+          onChange={(ev) => {
+            setCity(ev.target.value);
+            setInvalid((prev) => ({ ...prev, city: false }));
+          }}
+          onBlur={tryAutoFillZip}
+          style={invalid.city ? { borderColor: "#c9372c", boxShadow: "0 0 0 1px rgba(201,55,44,0.18)" } : undefined}
+        />
       </label>
       <label>
         כתובת
-        <input name="address" autoComplete="street-address" value={address} onChange={(ev) => setAddress(ev.target.value)} />
+        <input
+          name="address"
+          autoComplete="street-address"
+          placeholder="דիզנגוף 120"
+          value={address}
+          onChange={(ev) => {
+            setAddress(ev.target.value);
+            setInvalid((prev) => ({ ...prev, address: false }));
+          }}
+          onBlur={tryAutoFillZip}
+          style={invalid.address ? { borderColor: "#c9372c", boxShadow: "0 0 0 1px rgba(201,55,44,0.18)" } : undefined}
+        />
       </label>
       <div className="studio-checkout-form-address-row">
         <label>
           קומה
-          <input name="floor" autoComplete="off" value={floor} onChange={(ev) => setFloor(ev.target.value)} />
+          <input name="floor" autoComplete="off" placeholder="3" value={floor} onChange={(ev) => setFloor(ev.target.value)} />
         </label>
         <label>
           דירה
-          <input name="apartment" autoComplete="off" value={apartment} onChange={(ev) => setApartment(ev.target.value)} />
+          <input name="apartment" autoComplete="off" placeholder="12" value={apartment} onChange={(ev) => setApartment(ev.target.value)} />
         </label>
         <label>
           מיקוד
-          <input name="zipCode" autoComplete="postal-code" value={zipCode} onChange={(ev) => setZipCode(ev.target.value)} />
+          <input name="zipCode" autoComplete="postal-code" placeholder="6100001" value={zipCode} onChange={(ev) => setZipCode(ev.target.value)} />
         </label>
+      </div>
+      <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
+        <button
+          type="button"
+          onClick={tryAutoFillZip}
+          disabled={zipLoading || !city.trim() || !parsedStreetAndHouse.street}
+          style={{
+            border: "1px solid var(--border)",
+            background: "var(--input)",
+            color: "var(--foreground-secondary)",
+            borderRadius: 10,
+            padding: "7px 10px",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: zipLoading ? "not-allowed" : "pointer",
+            opacity: zipLoading ? 0.7 : 1,
+          }}
+        >
+          {zipLoading ? "מאתר מיקוד..." : "איתור מיקוד אוטומטי"}
+        </button>
+        {zipHint ? <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>{zipHint}</span> : null}
       </div>
       <label className="studio-checkout-form-notes">
         הערות
         <textarea name="notes" rows={3} value={notes} onChange={(ev) => setNotes(ev.target.value)} placeholder="הערות נוספות למשלוח או ליצירה" />
       </label>
-      {error ? (
-        <p role="alert" style={{ color: "#b42318", fontSize: "0.85rem", margin: 0, gridColumn: "1 / -1" }}>
-          {error}
-        </p>
-      ) : null}
     </form>
   );
 }

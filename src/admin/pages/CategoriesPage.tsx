@@ -523,6 +523,7 @@ export function CategoriesPage() {
   const [q, setQ] = useState("");
   const [type, setType] = useState<"all" | "main" | "sub">("all");
   const [status, setStatus] = useState<"all" | "active" | "inactive">("all");
+  const [viewMode, setViewMode] = useState<"tree" | "list">("tree");
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerMode, setDrawerMode] = useState<"create" | "edit">("create");
@@ -616,17 +617,10 @@ export function CategoriesPage() {
   }, [flat, selectedId, tree]);
 
   async function onSave(payload: any) {
-    console.log("[CategoriesPage] create/update request", {
-      mode: drawerMode,
-      id: editing?.id ?? null,
-      payload,
-    });
     if (drawerMode === "create") {
-      const out = await apiFetch<{ category: Category }>("/api/categories", { method: "POST", body: JSON.stringify(payload) });
-      console.log("[CategoriesPage] create response", out);
+      await apiFetch<{ category: Category }>("/api/categories", { method: "POST", body: JSON.stringify(payload) });
     } else if (editing) {
-      const out = await apiFetch<{ category: Category }>(`/api/categories/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
-      console.log("[CategoriesPage] update response", out);
+      await apiFetch<{ category: Category }>(`/api/categories/${editing.id}`, { method: "PATCH", body: JSON.stringify(payload) });
     }
     await refresh();
   }
@@ -688,9 +682,7 @@ export function CategoriesPage() {
     const label = c.parentId ? "תת קטגוריה" : "קטגוריה";
     try {
       setDeleting(true);
-      console.log("[CategoriesPage] delete request", { id: c.id, name: c.name, parentId: c.parentId });
       const out = await apiFetch<{ deleted?: boolean }>(`/api/categories/${c.id}`, { method: "DELETE" });
-      console.log("[CategoriesPage] delete response", out);
       if (!out?.deleted) {
         throw { status: 500, error: "DELETE_FAILED" };
       }
@@ -771,7 +763,7 @@ export function CategoriesPage() {
       </div>
 
       <Card padding={12}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr auto", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, alignItems: "center" }}>
           <SearchField value={q} onChange={setQ} placeholder="חיפוש לפי שם או slug" />
           <SelectInput value={type} onChange={(e) => setType(e.target.value as any)} aria-label="סוג">
             <option value="all">כל הסוגים</option>
@@ -783,7 +775,7 @@ export function CategoriesPage() {
             <option value="active">פעילות</option>
             <option value="inactive">לא פעילות</option>
           </SelectInput>
-          <SecondaryButton type="button" onClick={() => refresh()}>
+          <SecondaryButton type="button" onClick={() => refresh()} style={{ justifyContent: "center" }}>
             רענון
           </SecondaryButton>
         </div>
@@ -792,9 +784,55 @@ export function CategoriesPage() {
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 14, alignItems: "start" }}>
         <Card padding={12}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 900, color: "var(--foreground)" }}>עץ קטגוריות</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ fontSize: 13, fontWeight: 900, color: "var(--foreground)" }}>עץ קטגוריות</div>
+              <div
+                style={{
+                  display: "inline-flex",
+                  background: "var(--input)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 10,
+                  padding: 2,
+                  gap: 2,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setViewMode("tree")}
+                  style={{
+                    border: "none",
+                    background: viewMode === "tree" ? "rgba(201,169,110,0.2)" : "transparent",
+                    color: viewMode === "tree" ? "var(--foreground)" : "var(--muted-foreground)",
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  עץ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  style={{
+                    border: "none",
+                    background: viewMode === "list" ? "rgba(201,169,110,0.2)" : "transparent",
+                    color: viewMode === "list" ? "var(--foreground)" : "var(--muted-foreground)",
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    fontSize: 12,
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                >
+                  רשימה
+                </button>
+              </div>
+            </div>
             <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>{loading ? "טוען..." : `${filtered.length} רשומות`}</div>
           </div>
+          {viewMode === "tree" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {filteredTree.length === 0 && !loading ? (
               <div style={{ ...cardStyle, padding: 14, color: "var(--muted-foreground)", fontSize: 13 }}>אין קטגוריות להצגה לפי הסינון.</div>
@@ -898,9 +936,15 @@ export function CategoriesPage() {
               })
             )}
           </div>
+          ) : (
+            <div style={{ padding: 10, fontSize: 12, color: "var(--muted-foreground)" }}>
+              תצוגת הרשימה פעילה. ניתן לחזור לתצוגת עץ מהמתג למעלה.
+            </div>
+          )}
         </Card>
       </div>
 
+      {viewMode === "list" ? (
       <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
         <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <div style={{ fontSize: 13, fontWeight: 900, color: "var(--foreground)" }}>רשימת קטגוריות</div>
@@ -964,6 +1008,7 @@ export function CategoriesPage() {
           </div>
         )}
       </div>
+      ) : null}
 
       <Drawer
         open={drawerOpen}

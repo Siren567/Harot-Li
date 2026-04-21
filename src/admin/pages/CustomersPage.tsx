@@ -1286,12 +1286,6 @@ export function CustomersPage() {
             </div>
           </div>
 
-          <div style={{ ...cardStyle, padding: "14px" }}>
-            <div style={{ fontSize: "13px", fontWeight: 900, color: "var(--foreground)" }}>טיפ מהיר</div>
-            <div style={{ marginTop: 8, fontSize: 12, color: "var(--muted-foreground)", lineHeight: 1.7 }}>
-              בדמו ניתן לזהות מהר לקוחות עם עיצובים שמורים ללא הזמנה — הם יעד מצוין להודעת וואטסאפ/מייל (בעתיד, אחרי חיבור מערכת).
-            </div>
-          </div>
         </div>
       </div>
 

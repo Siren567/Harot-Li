@@ -767,7 +767,15 @@ export function ProductEditorPage() {
                             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                               <div style={{ width: 42, height: 42, borderRadius: 8, overflow: "hidden", border: "1px solid var(--border)", background: "var(--input)", flexShrink: 0 }}>
                                 {p.image_url ? (
-                                  <img src={p.image_url} alt={p.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                  <img
+                                    src={p.image_url}
+                                    alt={p.title}
+                                    loading="lazy"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = "none";
+                                    }}
+                                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                  />
                                 ) : null}
                               </div>
                               <div style={{ minWidth: 0 }}>
@@ -1323,7 +1331,17 @@ export function ProductEditorPage() {
               }}
             >
               <div style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 14, overflow: "hidden", background: "#e8e0d7" }}>
-                {previewImage ? <img src={previewImage} alt={form.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+                {previewImage ? (
+                  <img
+                    src={previewImage}
+                    alt={form.title}
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                ) : null}
               </div>
               <div style={{ marginTop: 12, textAlign: "center" }}>
                 <div style={{ fontSize: 28, fontWeight: 900, color: "#1f1f1f", letterSpacing: "-0.01em" }}>

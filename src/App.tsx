@@ -557,7 +557,14 @@ const App = () => {
               <article key={product.id} className="product-card">
                 <div className="product-image">
                   <div className="product-image-inner">
-                    <img src={product.imageUrl} alt={product.name} loading="lazy" />
+                    <img
+                      src={product.imageUrl}
+                      alt={product.name}
+                      loading="lazy"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
                   </div>
                 </div>
                 <div className="product-info">

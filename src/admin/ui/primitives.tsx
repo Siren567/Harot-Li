@@ -12,14 +12,14 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-      <div>
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+      <div style={{ flex: "1 1 320px", minWidth: 0 }}>
         <h1 style={{ fontSize: 22, fontWeight: 900, color: "var(--foreground)" }}>{title}</h1>
         {subtitle ? (
           <p style={{ fontSize: 13, color: "var(--muted-foreground)", marginTop: 3, lineHeight: 1.6 }}>{subtitle}</p>
         ) : null}
       </div>
-      {actions ? <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{actions}</div> : null}
+      {actions ? <div style={{ display: "flex", gap: 10, flexWrap: "wrap", flex: "1 1 280px", justifyContent: "flex-start" }}>{actions}</div> : null}
     </div>
   );
 }

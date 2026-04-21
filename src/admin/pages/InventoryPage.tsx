@@ -4,13 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../ui/badge";
 import { useToast } from "../ui/toast";
 import { apiFetch } from "../lib/api";
-import { InputGroup, SecondaryButton, TextInput } from "../ui/primitives";
+import { InputGroup, TextInput } from "../ui/primitives";
 import {
   AlertTriangle,
   Boxes,
   CheckCircle2,
-  Edit3,
-  Eye,
+  Plus,
   RefreshCw,
   Search,
   Trash2,
@@ -197,6 +196,9 @@ function Drawer({
   const toast = useToast();
   const [variantDrafts, setVariantDrafts] = useState<Record<string, VariantDraft>>({});
   const [savingVariantId, setSavingVariantId] = useState<string | null>(null);
+  const [savingAllVariants, setSavingAllVariants] = useState(false);
+  const [addingVariant, setAddingVariant] = useState(false);
+  const [deletingVariantId, setDeletingVariantId] = useState<string | null>(null);
 
   const variantsSyncKey = useMemo(
     () => variants.map((v) => `${v.id}:${v.stock}:${v.priceOverride}:${v.color}:${v.pendantType}:${v.material}`).join("|"),
@@ -228,7 +230,7 @@ function Drawer({
     });
   }, []);
 
-  async function saveVariant(variantId: string) {
+  async function saveVariant(variantId: string, options?: { skipRefresh?: boolean; silent?: boolean }) {
     const d = variantDrafts[variantId];
     if (!d) return;
     const stockNum = Math.max(0, Math.floor(Number(d.stock) || 0));
@@ -250,12 +252,70 @@ function Drawer({
           isActive: Boolean(d.isActive),
         }),
       });
-      toast("הוריאציה נשמרה", "success");
-      await onVariantsSaved();
+      if (!options?.silent) toast("הוריאציה נשמרה", "success");
+      if (!options?.skipRefresh) await onVariantsSaved();
     } catch {
       toast("שמירת וריאציה נכשלה", "error");
     } finally {
       setSavingVariantId(null);
+    }
+  }
+
+  async function addVariant() {
+    if (!product) return;
+    setAddingVariant(true);
+    try {
+      await apiFetch("/api/variants", {
+        method: "POST",
+        body: JSON.stringify({
+          productId: product.id,
+          color: "חדש",
+          stock: 0,
+          lowThreshold: 5,
+          isActive: true,
+        }),
+      });
+      toast("ווריאציה נוספה", "success");
+      await onVariantsSaved();
+    } catch (e: any) {
+      if (e?.error === "VARIANT_COMBINATION_EXISTS") {
+        toast("כבר קיימת וריאציה זהה. עדכן צבע/צורה בווריאציה קיימת.", "warning");
+      } else {
+        toast("הוספת וריאציה נכשלה", "error");
+      }
+    } finally {
+      setAddingVariant(false);
+    }
+  }
+
+  async function deleteVariant(variantId: string) {
+    if (variants.length <= 1) {
+      toast("חייבת להישאר לפחות וריאציה אחת", "warning");
+      return;
+    }
+    setDeletingVariantId(variantId);
+    try {
+      await apiFetch(`/api/variants/${variantId}`, { method: "DELETE" });
+      toast("ווריאציה נמחקה", "success");
+      await onVariantsSaved();
+    } catch {
+      toast("מחיקת וריאציה נכשלה", "error");
+    } finally {
+      setDeletingVariantId(null);
+    }
+  }
+
+  async function saveAllVariants() {
+    if (variants.length === 0) return;
+    setSavingAllVariants(true);
+    try {
+      for (const v of variants) {
+        await saveVariant(v.id, { skipRefresh: true, silent: true });
+      }
+      toast("כל הווריאציות נשמרו", "success");
+      await onVariantsSaved();
+    } finally {
+      setSavingAllVariants(false);
     }
   }
 
@@ -325,7 +385,15 @@ function Drawer({
             <>
               <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
                 <div style={{ width: 96, height: 96, borderRadius: 14, overflow: "hidden", background: "var(--input)", border: "1px solid var(--border)", flexShrink: 0 }}>
-                  <img src={product.imageUrl} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  <img
+                    src={product.imageUrl}
+                    alt={product.name}
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 900, color: "var(--foreground)", lineHeight: 1.2 }}>{product.name}</div>
@@ -351,8 +419,32 @@ function Drawer({
               </div>
 
               <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
-                <div style={{ fontSize: 13, fontWeight: 900, color: "var(--foreground)", marginBottom: 10 }}>
-                  ווריאציות מוצר ({variants.length})
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 13, fontWeight: 900, color: "var(--foreground)" }}>
+                    ווריאציות מוצר ({variants.length})
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addVariant}
+                    disabled={addingVariant}
+                    style={{
+                      border: "1px solid var(--border)",
+                      background: "var(--input)",
+                      color: "var(--foreground-secondary)",
+                      borderRadius: 999,
+                      padding: "6px 10px",
+                      fontSize: 12,
+                      fontWeight: 800,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      cursor: addingVariant ? "not-allowed" : "pointer",
+                      opacity: addingVariant ? 0.65 : 1,
+                    }}
+                  >
+                    <Plus size={14} />
+                    {addingVariant ? "מוסיף..." : "הוסף וריאציה"}
+                  </button>
                 </div>
                 {variants.length === 0 ? (
                   <div style={{ fontSize: 13, color: "var(--muted-foreground)", lineHeight: 1.6 }}>
@@ -405,14 +497,34 @@ function Drawer({
                               </span>
                             </label>
                           </InputGroup>
-                          <SecondaryButton
-                            type="button"
-                            style={{ height: 40, alignSelf: "end" }}
-                            disabled={savingVariantId === v.id}
-                            onClick={() => saveVariant(v.id)}
-                          >
-                            {savingVariantId === v.id ? "שומר..." : "שמור"}
-                          </SecondaryButton>
+                          <div style={{ display: "flex", alignItems: "end", gap: 8 }}>
+                            <button
+                              type="button"
+                              aria-label="מחק וריאציה"
+                              title="מחק וריאציה"
+                              onClick={() => deleteVariant(v.id)}
+                              disabled={deletingVariantId === v.id || variants.length <= 1}
+                              style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 10,
+                                border: "1px solid rgba(239,68,68,0.3)",
+                                background: "rgba(239,68,68,0.08)",
+                                color: "var(--destructive)",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                cursor:
+                                  deletingVariantId === v.id || variants.length <= 1 || savingAllVariants
+                                    ? "not-allowed"
+                                    : "pointer",
+                                opacity: deletingVariantId === v.id || variants.length <= 1 || savingAllVariants ? 0.5 : 1,
+                                alignSelf: "end",
+                              }}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -426,6 +538,9 @@ function Drawer({
         </div>
 
         <div style={{ padding: "14px 18px", borderTop: "1px solid var(--border)", display: "flex", gap: 10, alignItems: "center", justifyContent: "flex-start", flexShrink: 0 }}>
+          <SmallButton tone="primary" onClick={saveAllVariants} disabled={savingAllVariants || Boolean(savingVariantId)}>
+            {savingAllVariants ? "שומר שינויים..." : "שמור שינויים"}
+          </SmallButton>
           <SmallButton tone="primary" onClick={onClose}>
             סיום
           </SmallButton>
@@ -613,45 +728,6 @@ export function InventoryPage() {
     setSelectedIds([]);
   }
 
-  async function updateVariantStock(productId: string, variantId: string, stock: number) {
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id !== productId
-          ? p
-          : {
-              ...p,
-              variants: p.variants.map((v) => (v.id === variantId ? { ...v, stock } : v)),
-              stock: p.variants.reduce((sum, v) => sum + (v.id === variantId ? stock : v.stock), 0),
-            }
-      )
-    );
-    pulseRow(productId);
-    try {
-      await apiFetch(`/api/variants/${variantId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ stock }),
-      });
-    } catch {
-      toast("שמירת מלאי וריאציה נכשלה", "error");
-      await refreshInventory(true);
-    }
-  }
-
-  async function updateProduct(id: string, patch: Partial<InventoryProduct>) {
-    setProducts((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
-    pulseRow(id);
-    try {
-      await apiFetch(`/api/products/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          low_threshold: patch.lowThreshold,
-        }),
-      });
-    } catch {
-      toast("שמירת מלאי נכשלה", "error");
-    }
-  }
-
   async function applyBulkUpdate() {
     if (selectedIds.length === 0) return;
     for (const id of selectedIds) {
@@ -703,14 +779,14 @@ export function InventoryPage() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "16px", paddingBottom: "18px" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px" }}>
-        <div>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+        <div style={{ flex: "1 1 320px", minWidth: 0 }}>
           <h1 style={{ fontSize: "22px", fontWeight: 900, color: "var(--foreground)" }}>מלאי</h1>
           <p style={{ fontSize: "13px", color: "var(--muted-foreground)", marginTop: "3px", lineHeight: 1.6 }}>
             ניהול מלאי חי לפי וריאציות פעילות — מחובר ישירות להזמנות ולחנות.
           </p>
         </div>
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-start" }}>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "flex-start", flex: "1 1 260px" }}>
           <button
             type="button"
             onClick={() => refreshInventory(true)}
@@ -781,7 +857,7 @@ export function InventoryPage() {
 
       {/* Filters bar */}
       <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: 14 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr auto", gap: "10px", alignItems: "center" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "10px", alignItems: "center" }}>
           <div style={{ position: "relative" }}>
             <Search size={16} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "var(--muted-foreground)" }} />
             <input
@@ -886,6 +962,7 @@ export function InventoryPage() {
               justifyContent: "center",
               gap: "8px",
               whiteSpace: "nowrap",
+              width: "100%",
             }}
             aria-disabled={!hasFilters}
           >
@@ -1036,7 +1113,15 @@ export function InventoryPage() {
                     >
                       <td style={{ padding: "13px 14px", width: 110 }}>
                         <div style={{ width: 48, height: 48, borderRadius: 12, overflow: "hidden", background: "var(--input)", border: "1px solid var(--border)" }}>
-                          <img src={p.imageUrl} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                          <img
+                            src={p.imageUrl}
+                            alt={p.name}
+                            loading="lazy"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                          />
                         </div>
                       </td>
                       <td style={{ padding: "13px 14px", minWidth: 220 }}>
@@ -1087,7 +1172,7 @@ export function InventoryPage() {
                                   type="number"
                                   min="0"
                                   value={v.stock}
-                                  onChange={(e) => updateVariantStock(p.id, v.id, Math.max(0, Number(e.target.value) || 0))}
+                                  readOnly
                                   style={{ ...inputStyle(false), width: "100%" }}
                                   aria-label={`מלאי וריאציה ${v.label}`}
                                 />
@@ -1100,7 +1185,7 @@ export function InventoryPage() {
                         <input
                           type="number"
                           value={p.lowThreshold}
-                          onChange={(e) => updateProduct(p.id, { lowThreshold: Number(e.target.value) })}
+                          readOnly
                           style={inputStyle(pulsing)}
                           aria-label={`עריכת התראה עבור ${p.name}`}
                         />
@@ -1131,17 +1216,9 @@ export function InventoryPage() {
                           />
 
                           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                            <SmallButton tone="default" onClick={() => setDrawerProductId(p.id)}>
-                              <Edit3 size={16} />
-                              וריאציות ומלאי
-                            </SmallButton>
                             <SmallButton tone="primary" onClick={() => setDrawerProductId(p.id)}>
                               <RefreshCw size={16} />
                               עדכן מלאי
-                            </SmallButton>
-                            <SmallButton tone="default" onClick={() => setDrawerProductId(p.id)}>
-                              <Eye size={16} />
-                              צפייה
                             </SmallButton>
                           </div>
                         </div>

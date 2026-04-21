@@ -7,19 +7,38 @@ const PRODUCTS_CACHE_TTL_MS = 30_000;
 let cachedProductsPayload: { products: any[] } | null = null;
 let cachedProductsUntil = 0;
 let productsInFlight: Promise<{ products: any[] }> | null = null;
+const ISRAEL_POST_BASE_URL = "https://apimftprd.israelpost.co.il";
+const ISRAEL_POST_HEADERS = {
+  "Application-API-Key": "CA4ED65C-DC64-4969-B47D-EF564E3763E7",
+  "Ocp-Apim-Subscription-Key": "97a72e22d26044f68b29cb6e94a6cd14",
+  "Application-Name": "PostIL",
+  "User-Agent": "HarotLi/1.0",
+};
+const ISRAEL_POST_CREDENTIALS = { Username: "ono@aadftprd.onmicrosoft.com", Password: "Saxo3239" };
+let israelPostAccessToken: string | null = null;
 
-function getDatabaseFingerprint() {
-  const raw = String(process.env.DATABASE_URL ?? "").trim();
-  if (!raw) return { configured: false };
-  try {
-    const url = new URL(raw);
-    const host = url.hostname || "unknown-host";
-    const port = url.port || "default";
-    const dbName = url.pathname.replace(/^\//, "") || "unknown-db";
-    return { configured: true, host, port, dbName };
-  } catch {
-    return { configured: true, parseError: true };
-  }
+async function getIsraelPostAccessToken() {
+  if (israelPostAccessToken) return israelPostAccessToken;
+  const res = await fetch(`${ISRAEL_POST_BASE_URL}/auth/GetToken`, {
+    method: "POST",
+    headers: {
+      ...ISRAEL_POST_HEADERS,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(ISRAEL_POST_CREDENTIALS),
+  });
+  const out: any = await res.json().catch(() => ({}));
+  const token = out?.AccessToken;
+  if (!res.ok || !token) throw new Error(`ISRAEL_POST_AUTH_FAILED:${res.status}`);
+  israelPostAccessToken = `Bearer ${token}`;
+  return israelPostAccessToken;
+}
+
+function sanitizeImageRef(raw?: unknown): string | null {
+  const value = String(raw ?? "").trim();
+  if (!value) return null;
+  if (value.startsWith("data:image/")) return null;
+  return value;
 }
 
 export function invalidatePublicProductsCache() {
@@ -108,29 +127,47 @@ function normalizeColorToken(raw?: string | null): "gold" | "silver" | "rose" | 
 
 publicRouter.get("/products", async (_req, res) => {
   try {
-    const requestStartedAt = Date.now();
     const now = Date.now();
     if (cachedProductsPayload && now < cachedProductsUntil) {
-      console.info("[GET /api/public/products] cache-hit products=", cachedProductsPayload.products.length);
       return res.json(cachedProductsPayload);
     }
     if (productsInFlight) {
       const payload = await productsInFlight;
-      console.info("[GET /api/public/products] in-flight-shared products=", payload.products.length);
       return res.json(payload);
     }
 
     productsInFlight = (async () => {
-      console.info("[GET /api/public/products] db-fingerprint=", JSON.stringify(getDatabaseFingerprint()));
       const rows = await prisma.product.findMany({
-        include: {
-          categories: true,
-          variants: true,
-          mainCategory: true,
+        where: { isActive: true },
+        orderBy: { updatedAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          basePrice: true,
+          salePrice: true,
+          imageUrl: true,
+          galleryImages: true,
+          allowCustomerImageUpload: true,
+          mainCategoryId: true,
+          mainCategory: { select: { id: true, name: true, slug: true, parentId: true, isActive: true } },
+          categories: { select: { category: { select: { id: true, name: true, slug: true, parentId: true, isActive: true } } } },
+          variants: {
+            where: { isActive: true },
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              color: true,
+              pendantType: true,
+              material: true,
+              stock: true,
+              lowThreshold: true,
+              priceOverride: true,
+              isActive: true,
+            },
+          },
         },
       });
-      console.log("RAW ROWS COUNT:", Array.isArray(rows) ? rows.length : 0);
-      console.info("[GET /api/public/products] prisma-rows=", Array.isArray(rows) ? rows.length : 0);
 
       const products = (rows ?? []).map((p: any) => {
       const rawCategoryRows = Array.isArray(p?.categories) ? p.categories : [];
@@ -144,9 +181,9 @@ publicRouter.get("/products", async (_req, res) => {
       const subRawFirst = subRows[0] ?? null;
       const effectiveMain = mainRaw?.parentId ? allCategoryRows.find((c: any) => c?.id === mainRaw.parentId) ?? mainRaw : mainRaw;
 
-      const image = p.imageUrl ?? null;
-      const gallery = Array.isArray(p.galleryImages) ? (p.galleryImages as any[]).filter(Boolean) : [];
-      const images = Array.from(new Set([image, ...gallery].filter(Boolean))) as string[];
+      const image = sanitizeImageRef(p.imageUrl);
+      const gallery = Array.isArray(p.galleryImages) ? (p.galleryImages as any[]).map(sanitizeImageRef).filter(Boolean) : [];
+      const images = Array.from(new Set([image, ...gallery].filter(Boolean))).slice(0, 4) as string[];
       const basePrice = Number(p.basePrice ?? 0) || 0;
       const salePrice = Number(p.salePrice ?? 0) || 0;
       const effectivePriceAgorot = salePrice > 0 && salePrice < basePrice ? salePrice : basePrice;
@@ -216,7 +253,6 @@ publicRouter.get("/products", async (_req, res) => {
         })),
       };
       });
-      console.info("[GET /api/public/products] mapped-products=", products.length, "durationMs=", Date.now() - requestStartedAt);
       return { products };
     })();
     const payload = await productsInFlight;
@@ -224,19 +260,7 @@ publicRouter.get("/products", async (_req, res) => {
     cachedProductsUntil = Date.now() + PRODUCTS_CACHE_TTL_MS;
     return res.json(payload);
   } catch (err: any) {
-    // Log the full error (name + code + meta + message + stack) on separate lines
-    // so Vercel keeps each field intact and we can see the schema-drift cause.
-    console.error("PUBLIC PRODUCTS ROOT CAUSE:", err);
-    console.error("[GET /api/public/products] FAILED name=", err?.name);
-    console.error("[GET /api/public/products] FAILED code=", err?.code);
-    console.error("[GET /api/public/products] FAILED clientVersion=", err?.clientVersion);
-    console.error("[GET /api/public/products] FAILED meta=", JSON.stringify(err?.meta ?? null));
-    console.error("[GET /api/public/products] FAILED message=", String(err?.message ?? err));
-    console.error("[GET /api/public/products] FAILED stack=", err?.stack);
-    console.error("[GET /api/public/products] fallback-empty-products=true");
-    res.setHeader("x-public-products-fallback", "1");
-    // Keep the storefront / Studio alive even if the DB misbehaves: return an
-    // empty, well-formed payload instead of a 500 so the page renders.
+    console.error("[GET /api/public/products] FAILED", err?.message ?? err);
     res.status(200).json({ products: [] });
   } finally {
     productsInFlight = null;
@@ -261,6 +285,56 @@ publicRouter.get("/site", async (_req, res) => {
     console.warn("[GET /api/public/site] site_settings lookup failed:", err?.message);
   }
   res.json({ whatsapp: whatsapp ?? "" });
+});
+
+// GET /api/public/zip-lookup?city=...&street=...&house=... — auto lookup mikud via Israel Post.
+publicRouter.get("/zip-lookup", async (req, res) => {
+  const city = String(req.query.city ?? "").trim();
+  const street = String(req.query.street ?? "").trim();
+  const house = String(req.query.house ?? "").trim();
+  if (!city || !street) return res.status(400).json({ error: "MISSING_CITY_OR_STREET" });
+  try {
+    const token = await getIsraelPostAccessToken();
+    const payload = {
+      ByMaanimID: "false",
+      City: city,
+      CityID: "",
+      Entry: "",
+      House: house,
+      POB: "",
+      Street: street,
+      StreetID: "",
+    };
+    let lookupRes = await fetch(`${ISRAEL_POST_BASE_URL}/zip/SearchZip`, {
+      method: "POST",
+      headers: {
+        ...ISRAEL_POST_HEADERS,
+        Authorization: token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (lookupRes.status === 401) {
+      israelPostAccessToken = null;
+      const retryToken = await getIsraelPostAccessToken();
+      lookupRes = await fetch(`${ISRAEL_POST_BASE_URL}/zip/SearchZip`, {
+        method: "POST",
+        headers: {
+          ...ISRAEL_POST_HEADERS,
+          Authorization: retryToken,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    }
+    const lookupOut: any = await lookupRes.json().catch(() => ({}));
+    const zip = String(lookupOut?.Result?.zip ?? "").trim();
+    if (!lookupRes.ok || !zip) return res.status(404).json({ error: "ZIP_NOT_FOUND" });
+    return res.json({ zip });
+  } catch (err: any) {
+    console.error("[GET /api/public/zip-lookup] FAILED", err?.message ?? err);
+    return res.status(500).json({ error: "ZIP_LOOKUP_FAILED" });
+  }
 });
 
 const orderStatusSelect = {

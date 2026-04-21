@@ -26,7 +26,7 @@ async function fetchJsonFirstOk(path: string): Promise<{ ok: boolean; data: any 
   for (let i = 0; i < bases.length; i += 1) {
     const url = joinApiUrl(bases[i], path);
     try {
-      const res = await fetch(url, { credentials: "omit", cache: "no-store", mode: "cors" });
+      const res = await fetch(url, { credentials: "omit", cache: "default", mode: "cors" });
       if (res.ok) {
         const data = await res.json();
         return { ok: true, data };

@@ -10,6 +10,7 @@ type StudioPageProps = {
 };
 
 const stepLabels = ["בחירת מוצר", "עיצוב אישי", "פרטים ותשלום", "סיום הזמנה"];
+const EMOJI_CHOICES = ["❤️", "✨", "😊", "🫶", "🌸", "⭐", "🔥", "💍", "👑", "🙏"];
 
 const shekel = (n: number) => `₪${n.toLocaleString("he-IL")}`;
 
@@ -266,10 +267,14 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const customerImageInputRef = useRef<HTMLInputElement | null>(null);
   const [galleryModalUrl, setGalleryModalUrl] = useState<string | null>(null);
   const [engraveFitError, setEngraveFitError] = useState<string | null>(null);
+  const [showEngravingHelp, setShowEngravingHelp] = useState(false);
   const [rotation, setRotation] = useState(14);
   const [zoom, setZoom] = useState(1);
+  const [selectedGalleryIndex, setSelectedGalleryIndex] = useState(0);
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
+  const [giftWrap, setGiftWrap] = useState(false);
+  const [greetingCard, setGreetingCard] = useState(false);
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<null | { code: string; discountAmount: number; freeShipping: boolean }>(null);
   const [couponMsg, setCouponMsg] = useState<string | null>(null);
@@ -287,6 +292,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   const objectRef = useRef<HTMLDivElement | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [emojiPickerForId, setEmojiPickerForId] = useState<string | null>(null);
   const apiBase = useMemo(() => getApiBaseUrl(), []);
 
   const activeEngraving = useMemo(
@@ -326,6 +332,14 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       queueMicrotask(() => setActiveEngravingId(fallback));
       return next;
     });
+  }
+
+  function appendEmojiToEngraving(id: string, emoji: string) {
+    setEngravings((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, text: `${item.text ?? ""}${emoji}` } : item))
+    );
+    setActiveEngravingId(id);
+    setEmojiPickerForId(null);
   }
 
   function clampPercent(value: number) {
@@ -499,7 +513,11 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   const galleryUrls = activeProduct?.images?.length ? activeProduct.images : activeProduct?.image ? [activeProduct.image] : [];
   /** תמונת הרקע בתוך מודל החריטה — תמיד התמונה הראשית; שאר התמונות נצפות בגלריה למטה ובפופאפ בלבד. */
-  const engraveStageImageUrl = galleryUrls[0] ?? activeProduct?.image ?? null;
+  const engraveStageImageUrl = galleryUrls[selectedGalleryIndex] ?? galleryUrls[0] ?? activeProduct?.image ?? null;
+
+  useEffect(() => {
+    setSelectedGalleryIndex(0);
+  }, [activeProduct?.id]);
 
   const normalizedTab = useMemo(() => {
     const n = normalizeCategoryKey(category);
@@ -519,9 +537,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   }, [normalizedTab]);
 
   const filteredProducts = useMemo(() => {
-    // Debug trace: helps diagnose "no products in this category" without touching the backend.
-    // Safe to keep — logs only when in DEV mode.
-    const traceOn = typeof import.meta !== "undefined" && (import.meta as any).env?.DEV;
     const byTab = runtimeProducts.filter((p) => {
       return tabMatchesMainCategoryId
         ? p.mainCategoryId === category
@@ -537,18 +552,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       // the `others` bucket so they remain visible under the tab.
       return true;
     });
-
-    if (traceOn) {
-      // eslint-disable-next-line no-console
-      console.log("[studio/filter]", {
-        total: runtimeProducts.length,
-        category,
-        normalizedTab,
-        afterCategory: byTab.length,
-        afterAudience: final.length,
-        sample: final.slice(0, 3).map((p) => ({ id: p.id, title: p.title, audience: p.subcategory })),
-      });
-    }
 
     return final;
   }, [category, runtimeProducts, normalizedTab, tabMatchesMainCategoryId]);
@@ -634,6 +637,13 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       setSubmitting(true);
       setCouponMsg(null);
       try {
+        const extrasNote = [
+          giftWrap ? "אריזת מתנה: כן" : null,
+          greetingCard ? "כרטיס ברכה: כן" : null,
+        ]
+          .filter(Boolean)
+          .join(" | ");
+        const mergedOrderNotes = [notes.trim(), extrasNote].filter(Boolean).join(" | ") || null;
         const res = await fetch(`${apiBase}/api/orders`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -642,7 +652,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             customer,
             shippingFee: shipping.fee,
             shippingMethodId: shippingId,
-            orderNotes: notes.trim() || null,
+            orderNotes: mergedOrderNotes,
             couponCode: appliedCoupon?.code || null,
             paymentMethod: customer.paymentMethod ?? "payplus",
             items: [
@@ -722,7 +732,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       engravingSummary,
       customerImageDataUrl,
       notes,
-      shippingId
+      shippingId,
+      giftWrap,
+      greetingCard
     ]
   );
 
@@ -755,6 +767,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               alt={product.title}
               loading="lazy"
               decoding="async"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
               style={{ width: "100%", height: "100%", objectFit: "cover" }}
             />
           ) : null}
@@ -789,11 +804,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     <div className="studio-shell" dir="rtl">
       <header className="studio-topbar">
         <div className="studio-top-actions">
-          {step === 1 ? (
-            <button type="button" className="studio-secondary-btn studio-top-fit" onClick={autoFitEngravingSizes}>
-              התאמת טקסט לתכשיט
-            </button>
-          ) : null}
           <button
             type={step === 2 ? "submit" : "button"}
             form={step === 2 ? "studio-checkout-form" : undefined}
@@ -841,7 +851,11 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           </div>
 
           <div className="studio-products-grid studio-products-grid--uniform">
-            {loadingProducts ? <p>טוען מוצרים...</p> : null}
+            {loadingProducts
+              ? Array.from({ length: 4 }).map((_, idx) => (
+                  <div key={`studio-skeleton-${idx}`} className="studio-product-card studio-product-card--skeleton" />
+                ))
+              : null}
             {!loadingProducts && filteredProducts.length === 0 ? <p>אין מוצרים זמינים כרגע בקטגוריה זו.</p> : null}
             {isGroupedMenWomenCouple && groupedProducts.men.length > 0 ? (
               <>
@@ -877,12 +891,41 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           <div className="studio-custom-layout">
             <aside className="studio-control-panel">
               <div>
-                <div className="studio-field-hint">טקסט לחריטה</div>
+                <div className="studio-engraving-title-row">
+                  <div className="studio-field-hint">טקסט לחריטה</div>
+                  <div className="studio-engraving-title-actions">
+                    <button
+                      type="button"
+                      className="studio-help-btn"
+                      aria-label="עזרה בבחירת טקסט"
+                      title="עזרה בבחירת טקסט"
+                      onClick={() => setShowEngravingHelp((v) => !v)}
+                    >
+                      ?
+                    </button>
+                    <button
+                      type="button"
+                      className="studio-icon-btn studio-icon-btn--add"
+                      aria-label="הוסף שדה טקסט"
+                      title="הוסף שדה טקסט"
+                      onClick={() => addEngraving()}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                {showEngravingHelp ? (
+                  <div className="studio-engraving-help-pop">
+                    רעיונות לחריטה: שמות בני זוג, תאריך מיוחד, מילה קצרה עם משמעות, או אימוג׳י קטן שמוסיף טאץ׳ אישי.
+                  </div>
+                ) : null}
                 <div className="studio-engraving-input-list">
                   {engravings.map((item, idx) => (
                     <div
                       key={item.id}
-                      className={`studio-engraving-input-wrap ${activeEngravingId === item.id ? "active" : ""}`}
+                      className={`studio-engraving-input-wrap ${activeEngravingId === item.id ? "active" : ""} ${
+                        idx === 0 ? "default-row" : ""
+                      }`}
                     >
                       <input
                         className="studio-engraving-input"
@@ -894,28 +937,41 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                           updateEngraving(item.id, { text: e.target.value });
                         }}
                       />
-                      <div className="studio-engraving-input-meta">טקסט {idx + 1}: {item.text.trim() || "הכנס טקסט לחריטה"}</div>
+                      <button
+                        type="button"
+                        className="studio-icon-btn studio-icon-btn--emoji"
+                        aria-label="בחר אימוגי"
+                        title="בחר אימוגי"
+                        onClick={() => setEmojiPickerForId((prev) => (prev === item.id ? null : item.id))}
+                      >
+                        🙂
+                      </button>
                       <div className="studio-engraving-input-actions">
-                        <button
-                          type="button"
-                          className="studio-icon-btn"
-                          aria-label="הוסף שדה טקסט"
-                          title="הוסף שדה טקסט"
-                          onClick={() => addEngraving(item.id)}
-                        >
-                          +
-                        </button>
                         <button
                           type="button"
                           className="studio-icon-btn"
                           aria-label="מחק שדה טקסט"
                           title="מחק שדה טקסט"
                           onClick={() => removeEngraving(item.id)}
-                          disabled={engravings.length <= 1}
+                          disabled={idx === 0}
                         >
                           ×
                         </button>
                       </div>
+                      {emojiPickerForId === item.id ? (
+                        <div className="studio-emoji-popover">
+                          {EMOJI_CHOICES.map((emoji) => (
+                            <button
+                              key={`${item.id}-${emoji}`}
+                              type="button"
+                              className="studio-emoji-choice"
+                              onClick={() => appendEmojiToEngraving(item.id, emoji)}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -936,6 +992,16 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   ))}
                 </select>
               </label>
+              <div className="studio-font-tools-row">
+                <button
+                  type="button"
+                  className="studio-chip light studio-fit-inline-btn"
+                  onClick={autoFitEngravingSizes}
+                  title="מקטין או מגדיל כך שכל הטקסט ייכנס לתכשיט"
+                >
+                  התאמת טקסט
+                </button>
+              </div>
               <label>
                 גודל טקסט (חריטה)
                 <input
@@ -949,10 +1015,15 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   }}
                 />
               </label>
-              <div className="studio-engraving-tools">
-                <button type="button" className="studio-chip light" onClick={autoFitEngravingSizes} title="מקטין או מגדיל כך שכל הטקסט ייכנס לתכשיט">
-                  התאמת גודל אוטומטית
-                </button>
+              <div className="studio-option-tiles-row">
+                <label className="studio-option-tile">
+                  <input type="checkbox" checked={greetingCard} onChange={(e) => setGreetingCard(e.target.checked)} />
+                  <span>כרטיס ברכה</span>
+                </label>
+                <label className="studio-option-tile">
+                  <input type="checkbox" checked={giftWrap} onChange={(e) => setGiftWrap(e.target.checked)} />
+                  <span>אריזת מתנה</span>
+                </label>
               </div>
               {engraveFitError ? (
                 <p className="studio-engrave-fit-error" role="alert">
@@ -1066,18 +1137,51 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   </div>
                 </div>
                 {galleryUrls.length > 0 ? (
-                  <div className="studio-subgallery" role="list" aria-label="גלריית תמונות המוצר">
-                    {galleryUrls.map((url, idx) => (
-                      <button
-                        key={`${url}-${idx}`}
-                        type="button"
-                        className={`studio-subgallery-thumb ${galleryModalUrl === url ? "active" : ""}`}
-                        onClick={() => setGalleryModalUrl(url)}
-                        aria-label={galleryUrls.length > 1 ? `פתיחת תמונה ${idx + 1} בגודל מלא` : "פתיחת תמונה בגודל מלא"}
-                      >
-                        <img src={url} alt="" loading="lazy" decoding="async" />
-                      </button>
-                    ))}
+                  <div className="studio-gallery-carousel" aria-label="גלריית תמונות המוצר">
+                    <button
+                      type="button"
+                      className="studio-gallery-nav"
+                      onClick={() =>
+                        setSelectedGalleryIndex((prev) => (prev <= 0 ? galleryUrls.length - 1 : prev - 1))
+                      }
+                      aria-label="תמונה קודמת"
+                    >
+                      ‹
+                    </button>
+                    <div className="studio-subgallery" role="list">
+                      {galleryUrls.map((url, idx) => (
+                        <button
+                          key={`${url}-${idx}`}
+                          type="button"
+                          className={`studio-subgallery-thumb ${selectedGalleryIndex === idx ? "active" : ""}`}
+                          onClick={() => {
+                            setSelectedGalleryIndex(idx);
+                            setGalleryModalUrl(url);
+                          }}
+                          aria-label={galleryUrls.length > 1 ? `פתיחת תמונה ${idx + 1} בגודל מלא` : "פתיחת תמונה בגודל מלא"}
+                        >
+                          <img
+                            src={url}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      className="studio-gallery-nav"
+                      onClick={() =>
+                        setSelectedGalleryIndex((prev) => (prev >= galleryUrls.length - 1 ? 0 : prev + 1))
+                      }
+                      aria-label="תמונה הבאה"
+                    >
+                      ›
+                    </button>
                   </div>
                 ) : null}
               </div>
@@ -1154,7 +1258,15 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
               <h3>סיכום הזמנה</h3>
               <div className="studio-summary-product-head">
                 {activeProduct?.image ? (
-                  <img src={activeProduct.image} alt={activeProduct.title} className="studio-summary-thumb" />
+                  <img
+                    src={activeProduct.image}
+                    alt={activeProduct.title}
+                    className="studio-summary-thumb"
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
                 ) : (
                   <div className="studio-summary-thumb studio-summary-thumb--placeholder">אין תמונה</div>
                 )}
@@ -1162,11 +1274,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   <strong className="studio-summary-product-title">{activeProduct?.title ?? "מוצר לא נבחר"}</strong>
                   {activeColor ? <span className="studio-summary-subtitle">{activeColor.name}</span> : null}
                 </div>
-              </div>
-
-              <div className="studio-summary-section">
-                <div className="studio-summary-section-title">פרטי המוצר</div>
-                <div className="studio-summary-rows">
+                <div className="studio-summary-rows studio-summary-rows--inline">
                   <div className="studio-summary-row">
                     <span>כמות</span>
                     <strong>{qty}</strong>
@@ -1191,7 +1299,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   ) : null}
                   <div className="studio-summary-row">
                     <span>משלוח</span>
-                    <strong>{shipping.label}</strong>
+                    <strong>{effectiveShippingFee === 0 ? `${shipping.label} (ללא עלות)` : shipping.label}</strong>
                   </div>
                 </div>
               </div>
@@ -1210,6 +1318,18 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                       <div className="studio-summary-row studio-summary-row--stack">
                         <span>הערות</span>
                         <strong>{notes.trim()}</strong>
+                      </div>
+                    ) : null}
+                    {giftWrap ? (
+                      <div className="studio-summary-row">
+                        <span>אריזת מתנה</span>
+                        <strong>כן</strong>
+                      </div>
+                    ) : null}
+                    {greetingCard ? (
+                      <div className="studio-summary-row">
+                        <span>כרטיס ברכה</span>
+                        <strong>כן</strong>
                       </div>
                     ) : null}
                   </div>

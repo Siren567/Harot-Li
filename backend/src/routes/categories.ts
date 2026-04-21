@@ -463,12 +463,6 @@ categoriesRouter.post("/", requireAdmin, async (req, res) => {
 
   const data = parsed.data;
   const slug = slugify(data.slug?.trim() ? data.slug : data.name);
-  console.log("[POST /api/categories] request", {
-    name: data.name,
-    slug,
-    parentId: data.parentId ?? null,
-    isActive: data.isActive ?? true,
-  });
 
   if (data.parentId) {
     const okParent = await ensureParentIsMain(data.parentId);
@@ -490,13 +484,9 @@ categoriesRouter.post("/", requireAdmin, async (req, res) => {
       },
     });
     invalidatePublicProductsCache();
-    console.log("[POST /api/categories] response", { ok: true, id: category.id, slug: category.slug });
     res.status(201).json({ category });
   } catch (e: any) {
-    console.error("[POST /api/categories] FAILED name=", e?.name);
-    console.error("[POST /api/categories] FAILED code=", e?.code);
-    console.error("[POST /api/categories] FAILED meta=", JSON.stringify(e?.meta ?? null));
-    console.error("[POST /api/categories] FAILED message=", String(e?.message ?? e));
+    console.error("[POST /api/categories] FAILED", e?.message ?? e);
     if (String(e?.code) === "P2002") return res.status(409).json({ error: "SLUG_EXISTS" });
     return res.status(500).json({ error: "SERVER_ERROR" });
   }
@@ -654,7 +644,6 @@ categoriesRouter.post("/:id/toggle", requireAdmin, async (req, res) => {
 
 categoriesRouter.delete("/:id", requireAdmin, async (req, res) => {
   const id = req.params.id;
-  console.log("[DELETE /api/categories/:id] request", { id });
 
   let existing: { id: string; parentId: string | null } | null = null;
   try {
@@ -690,7 +679,6 @@ categoriesRouter.delete("/:id", requireAdmin, async (req, res) => {
         await tx.category.delete({ where: { id } });
       });
       invalidatePublicProductsCache();
-      console.log("[DELETE /api/categories/:id] response", { ok: true, id, deleted: true });
       return res.status(200).json({ deleted: true });
     } catch (err: any) {
       // eslint-disable-next-line no-console

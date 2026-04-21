@@ -35,6 +35,44 @@ const VariantPatchSchema = z.object({
   note: z.string().max(200).optional().nullable(),
 });
 
+const VariantCreateSchema = z.object({
+  productId: z.string().min(1),
+  color: z.string().max(80).optional().nullable(),
+  pendantType: z.string().max(80).optional().nullable(),
+  material: z.string().max(80).optional().nullable(),
+  stock: z.number().int().min(0).max(1_000_000).optional(),
+  lowThreshold: z.number().int().min(0).max(1_000_000).optional(),
+  priceOverride: z.number().int().min(0).optional().nullable(),
+  isActive: z.boolean().optional(),
+});
+
+// POST /api/variants — admin add a variant for a product.
+variantsRouter.post("/", requireAdmin, async (req, res) => {
+  const parsed = VariantCreateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "VALIDATION", details: parsed.error.flatten() });
+  const { productId, color, pendantType, material, stock, lowThreshold, priceOverride, isActive } = parsed.data;
+  try {
+    const product = await prisma.product.findUnique({ where: { id: productId }, select: { id: true } });
+    if (!product) return res.status(404).json({ error: "PRODUCT_NOT_FOUND" });
+    const variant = await prisma.productVariant.create({
+      data: {
+        productId,
+        color: color ?? "חדש",
+        pendantType: pendantType ?? null,
+        material: material ?? null,
+        stock: stock ?? 0,
+        lowThreshold: lowThreshold ?? 5,
+        priceOverride: priceOverride ?? null,
+        isActive: isActive ?? true,
+      },
+    });
+    return res.status(201).json({ variant });
+  } catch (e: any) {
+    if (String(e?.code) === "P2002") return res.status(409).json({ error: "VARIANT_COMBINATION_EXISTS" });
+    return res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
 // PATCH /api/variants/:id — admin edit with InventoryLog on stock change.
 variantsRouter.patch("/:id", requireAdmin, async (req, res) => {
   const parsed = VariantPatchSchema.safeParse(req.body);
@@ -83,6 +121,17 @@ variantsRouter.patch("/:id", requireAdmin, async (req, res) => {
     if (String(e?.message || "").includes("variant_stock_nonneg")) {
       return res.status(400).json({ error: "INVALID_STOCK" });
     }
+    return res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// DELETE /api/variants/:id — admin remove a variant.
+variantsRouter.delete("/:id", requireAdmin, async (req, res) => {
+  try {
+    await prisma.productVariant.delete({ where: { id: req.params.id } });
+    return res.json({ deleted: true });
+  } catch (e: any) {
+    if (String(e?.code) === "P2025") return res.status(404).json({ error: "NOT_FOUND" });
     return res.status(500).json({ error: "SERVER_ERROR" });
   }
 });
