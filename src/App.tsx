@@ -269,6 +269,7 @@ const App = () => {
       ? manualTopSellers
       : []
   ).slice(0, Number(topSellerSection.limit ?? 3));
+  const showTopSellersSection = topSellerSection.isVisible !== false && (!bootstrapReady || topSellersData.length > 0);
 
   const legalDefaults: Record<"terms" | "privacy" | "usage", { title: string; html: string }> = {
     terms: {
@@ -553,38 +554,63 @@ const App = () => {
           </p>
         </section>
 
-        {topSellerSection.isVisible === false || topSellersData.length === 0 ? null : <section className="products" id="products">
+        {showTopSellersSection ? <section className="products" id="products">
           <div className="section-header section-header-center">
             <div className="section-label">{topSellerSection.subtitle ?? "הקולקציה שלנו"}</div>
             <h2 className="section-title">{topSellerSection.title ?? "נבחרים במיוחד"}</h2>
           </div>
           <div className="products-grid">
-            {topSellersData.map((product: any) => (
-              <article key={product.id} className="product-card">
-                <div className="product-image">
-                  <div className="product-image-inner">
-                    <img
-                      src={product.imageUrl}
-                      alt={product.name}
-                      loading="lazy"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="product-info">
-                  <h3>{product.name}</h3>
-                  <div className="price">החל מ-{product.priceFrom}</div>
-                  <a href="#" className="btn-secondary" onClick={openStudio}>
-                    <Icon name="bag" className="icon-sm" />
-                    לעיצוב
-                  </a>
-                </div>
-              </article>
-            ))}
+            {!bootstrapReady
+              ? Array.from({ length: 3 }).map((_, idx) => (
+                  <article
+                    key={`top-seller-skeleton-${idx}`}
+                    className="product-card"
+                    aria-hidden="true"
+                    style={{ opacity: 0.85 }}
+                  >
+                    <div className="product-image">
+                      <div
+                        className="product-image-inner"
+                        style={{
+                          background: "linear-gradient(90deg, #f6efe7 25%, #efe4d8 50%, #f6efe7 75%)",
+                          backgroundSize: "220% 100%",
+                          animation: "studio-skeleton-shimmer 1.25s ease-in-out infinite",
+                        }}
+                      />
+                    </div>
+                    <div className="product-info">
+                      <h3 style={{ minHeight: 22, background: "#f3ebe2", borderRadius: 8 }} />
+                      <div className="price" style={{ minHeight: 18, background: "#f3ebe2", borderRadius: 8 }} />
+                      <div style={{ height: 34, borderRadius: 999, border: "1px solid #eadbcc", marginTop: 10 }} />
+                    </div>
+                  </article>
+                ))
+              : topSellersData.map((product: any) => (
+                  <article key={product.id} className="product-card">
+                    <div className="product-image">
+                      <div className="product-image-inner">
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          loading="lazy"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="product-info">
+                      <h3>{product.name}</h3>
+                      <div className="price">החל מ-{product.priceFrom}</div>
+                      <a href="#" className="btn-secondary" onClick={openStudio}>
+                        <Icon name="bag" className="icon-sm" />
+                        לעיצוב
+                      </a>
+                    </div>
+                  </article>
+                ))}
           </div>
-        </section>}
+        </section> : null}
 
         <section className="final-cta">
           <div className="section-label">{finalCta.label ?? "מוכנים?"}</div>

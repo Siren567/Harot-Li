@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Plus, Smile } from "lucide-react";
+import { Palette, Plus, Smile, Trash2 } from "lucide-react";
 import EmojiPicker, { type EmojiClickData } from "emoji-picker-react";
 import type { StudioSubcategory } from "../constants/studioData";
 import { getApiBaseUrl } from "../lib/apiBase";
@@ -82,6 +82,7 @@ type EngravingItem = {
   size: number;
   x: number;
   y: number;
+  angle: number;
 };
 
 const COLOR_META: Record<ColorKey, { name: string; swatch: string }> = {
@@ -183,78 +184,24 @@ function pendantShapeClassName(pendantType: string | null | undefined): string {
   return "";
 }
 
+function mockupShapeClassName(category: string | null | undefined, pendantType: string | null | undefined, title?: string | null): string {
+  const c = String(category ?? "").trim().toLowerCase();
+  const hint = `${String(pendantType ?? "")} ${String(title ?? "")}`.toLowerCase();
+
+  if (hint.includes("לב")) return "pendant-heart";
+  if (hint.includes("עיגול")) return "pendant-circle";
+  if (hint.includes("ריבוע")) return "pendant-square";
+  if (hint.includes("מלבן") || hint.includes("bar") || hint.includes("plate") || hint.includes("לוחית")) return "pendant-tag";
+
+  if (c === "bracelets") return "bracelets";
+  if (c === "necklaces") return "pendant-tag";
+  if (c === "keychains") return "keychains";
+
+  return pendantShapeClassName(pendantType);
+}
+
 const ENGRAVE_MIN_PX = 8;
 const ENGRAVE_MAX_PX = 44;
-
-/** Canvas measureText must use the same stacks as `.studio-engrave-text.*` in CSS. */
-const CANVAS_FONT_FAMILIES: Record<string, string> = {
-  assistant: "Assistant, Arial, sans-serif",
-  david: '"David Libre", Georgia, serif',
-  heebo: "Heebo, Arial, sans-serif",
-  rubik: "Rubik, Arial, sans-serif",
-  noto: '"Noto Sans Hebrew", Arial, sans-serif',
-  alef: "Alef, Arial, sans-serif",
-  secular: '"Secular One", Arial, sans-serif',
-  frank: '"Frank Ruhl Libre", Georgia, serif',
-  varela: '"Varela Round", Arial, sans-serif',
-};
-
-function canvasFontString(fontId: string, fontSize: number, weight = 600) {
-  const fam = CANVAS_FONT_FAMILIES[fontId] ?? CANVAS_FONT_FAMILIES.heebo;
-  return `${weight} ${fontSize}px ${fam}`;
-}
-
-function measureLineWidthPx(line: string, fontSize: number, fontId: string): number {
-  if (typeof document === "undefined") return 0;
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return 99999;
-  ctx.font = canvasFontString(fontId, fontSize);
-  return ctx.measureText(line || " ").width;
-}
-
-function widestLinePx(text: string, fontSize: number, fontId: string): number {
-  const lines = String(text ?? "").split("\n");
-  let w = 0;
-  for (const line of lines) w = Math.max(w, measureLineWidthPx(line, fontSize, fontId));
-  return w;
-}
-
-function lineBlockHeightPx(text: string, fontSize: number): number {
-  const n = Math.max(1, String(text ?? "").split("\n").length);
-  return n * fontSize * 1.22;
-}
-
-function fitsTextInBox(text: string, fontId: string, fontSize: number, maxWidthPx: number, maxHeightPx: number): boolean {
-  return widestLinePx(text || " ", fontSize, fontId) <= maxWidthPx && lineBlockHeightPx(text || " ", fontSize) <= maxHeightPx;
-}
-
-function maxCharsThatFitAtSize(text: string, fontId: string, fontSize: number, maxWidthPx: number, maxHeightPx: number): number {
-  const source = String(text ?? "");
-  let lo = 0;
-  let hi = source.length;
-  let best = 0;
-  while (lo <= hi) {
-    const mid = Math.floor((lo + hi) / 2);
-    const candidate = source.slice(0, mid);
-    if (fitsTextInBox(candidate, fontId, fontSize, maxWidthPx, maxHeightPx)) {
-      best = mid;
-      lo = mid + 1;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  return Math.max(0, best);
-}
-
-/** Largest font size in [minPx, maxPx] that fits width+height; returns minPx-1 if none fit. */
-function fitFontSizeToBox(text: string, fontId: string, maxWidthPx: number, maxHeightPx: number, startHigh: number): number {
-  const hi = Math.min(ENGRAVE_MAX_PX, Math.max(ENGRAVE_MIN_PX, Math.round(startHigh)));
-  for (let s = hi; s >= ENGRAVE_MIN_PX; s -= 1) {
-    if (widestLinePx(text, s, fontId) <= maxWidthPx && lineBlockHeightPx(text, s) <= maxHeightPx) return s;
-  }
-  return ENGRAVE_MIN_PX - 1;
-}
 
 const DEFAULT_STUDIO_CATEGORY_ORDER: string[] = studioCategories.map((c) => c.id);
 
@@ -281,7 +228,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [selectedColorByProduct, setSelectedColorByProduct] = useState<Record<string, number>>({});
 
   const [engravings, setEngravings] = useState<EngravingItem[]>([
-    { id: "engraving-1", text: "לנצח שלך", font: "heebo", size: 28, x: 0, y: 0 },
+    { id: "engraving-1", text: "לנצח שלך", font: "heebo", size: 28, x: 0, y: 0, angle: 0 },
   ]);
   const engravingsRef = useRef(engravings);
   engravingsRef.current = engravings;
@@ -295,8 +242,10 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [qty, setQty] = useState(1);
   const [notes, setNotes] = useState("");
   const [giftWrap, setGiftWrap] = useState(false);
-  const [greetingCard, setGreetingCard] = useState(false);
+  const [greetingCard] = useState(false);
   const [giftGreetingText, setGiftGreetingText] = useState("");
+  const [engraveInkColor, setEngraveInkColor] = useState<string>(""); // empty = auto
+  const [showInkPicker, setShowInkPicker] = useState(false);
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<null | { code: string; discountAmount: number; freeShipping: boolean }>(null);
   const [couponMsg, setCouponMsg] = useState<string | null>(null);
@@ -314,6 +263,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   const objectRef = useRef<HTMLDivElement | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [rotatingMeta, setRotatingMeta] = useState<{ id: string; startPointerAngle: number; startItemAngle: number } | null>(null);
   const [emojiPickerForId, setEmojiPickerForId] = useState<string | null>(null);
   const apiBase = useMemo(() => getApiBaseUrl(), []);
 
@@ -326,16 +276,22 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     [engravings]
   );
 
+  const inkSwatches = useMemo(
+    () => ["", "#111827", "#ffffff", "#d4af37", "#c0c0c0", "#d4a5a0", "#2a2a2a", "#1d4ed8", "#16a34a", "#b91c1c"],
+    []
+  );
+
   function updateEngraving(id: string, patch: Partial<EngravingItem>) {
     setEngravings((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   }
 
   function addEngraving() {
+    if (engravingsRef.current.length >= 3) return;
     const id = `engraving-${Date.now()}`;
     setEngravings((prev) => {
       const idx = prev.length;
       const y = clampPercent(-18 + idx * 12);
-      const next = [...prev, { id, text: "", font: activeEngraving?.font ?? "heebo", size: activeEngraving?.size ?? 26, x: 0, y }];
+      const next = [...prev, { id, text: "", font: activeEngraving?.font ?? "heebo", size: activeEngraving?.size ?? 26, x: 0, y, angle: 0 }];
       queueMicrotask(() => setActiveEngravingId(id));
       return next;
     });
@@ -349,6 +305,19 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     setEmojiPickerForId(null);
   }
 
+  function removeEngraving(id: string) {
+    setEngravings((prev) => {
+      if (prev.length <= 1) return prev;
+      const idx = prev.findIndex((x) => x.id === id);
+      if (idx <= 0) return prev; // never remove the first/default row
+      const next = prev.filter((x) => x.id !== id);
+      const fallback = next[Math.min(idx - 1, next.length - 1)]?.id ?? next[0]?.id ?? "engraving-1";
+      queueMicrotask(() => setActiveEngravingId(fallback));
+      return next;
+    });
+    setEmojiPickerForId((prev) => (prev === id ? null : prev));
+  }
+
   function onEmojiPicked(id: string, emojiData: EmojiClickData) {
     appendEmojiToEngraving(id, emojiData.emoji);
   }
@@ -357,41 +326,30 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     return Math.max(-45, Math.min(45, value));
   }
 
-  function autoFitEngravingSizes() {
-    setEngraveFitError(null);
-    const el = objectRef.current;
-    if (!el || typeof document === "undefined") {
-      setEngraveFitError("לא ניתן לחשב התאמה כרגע — נסה שוב בעוד רגע.");
-      return;
-    }
-    const rect = el.getBoundingClientRect();
-    if (!rect.width || !rect.height) {
-      setEngraveFitError("לא ניתן לחשב התאמה כרגע.");
-      return;
-    }
-    const maxW = rect.width * 0.8;
-    const items = engravingsRef.current;
-    const n = Math.max(1, items.length);
-    const maxHPer = (rect.height * 0.48) / n;
-
-    const updates = new Map<string, number>();
-    for (const item of items) {
-      const fitted = fitFontSizeToBox(item.text || " ", item.font, maxW, maxHPer, item.size);
-      if (fitted < ENGRAVE_MIN_PX) {
-        const maxChars = maxCharsThatFitAtSize(item.text || " ", item.font, ENGRAVE_MIN_PX, maxW, maxHPer);
-        setEngraveFitError(
-          `הטקסט ארוך מדי גם בגודל המינימלי על התכשיט: עד כ-${maxChars} תווים. יש לקצר, לרדת שורה (Enter), או לפצל למספר שדות.`
-        );
-        return;
-      }
-      updates.set(item.id, fitted);
-    }
-    setEngravings((prev) => prev.map((it) => (updates.has(it.id) ? { ...it, size: updates.get(it.id)! } : it)));
-  }
-
   function startDragEngraving(id: string) {
     setActiveEngravingId(id);
     setDraggingId(id);
+  }
+
+  function pointerAngleForEngraving(item: EngravingItem, event: PointerEvent | React.PointerEvent<HTMLElement>) {
+    const target = objectRef.current;
+    if (!target) return 0;
+    const rect = target.getBoundingClientRect();
+    const cx = rect.left + rect.width * (0.5 + item.x / 100);
+    const cy = rect.top + rect.height * (0.5 + item.y / 100);
+    return (Math.atan2(event.clientY - cy, event.clientX - cx) * 180) / Math.PI;
+  }
+
+  function startRotateEngraving(event: React.PointerEvent<HTMLElement>, id: string) {
+    event.stopPropagation();
+    const item = engravingsRef.current.find((x) => x.id === id);
+    if (!item) return;
+    setActiveEngravingId(id);
+    setRotatingMeta({
+      id,
+      startPointerAngle: pointerAngleForEngraving(item, event),
+      startItemAngle: Number(item.angle) || 0,
+    });
   }
 
   useEffect(() => {
@@ -423,6 +381,25 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
       if (rafId != null) cancelAnimationFrame(rafId);
     };
   }, [draggingId]);
+
+  useEffect(() => {
+    if (!rotatingMeta) return;
+    const onMove = (event: PointerEvent) => {
+      const item = engravingsRef.current.find((x) => x.id === rotatingMeta.id);
+      if (!item) return;
+      const currentPointerAngle = pointerAngleForEngraving(item, event);
+      const delta = currentPointerAngle - rotatingMeta.startPointerAngle;
+      const nextAngle = rotatingMeta.startItemAngle + delta;
+      updateEngraving(rotatingMeta.id, { angle: nextAngle });
+    };
+    const onUp = () => setRotatingMeta(null);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [rotatingMeta]);
 
   useEffect(() => {
     if (!galleryModalUrl) return;
@@ -521,7 +498,10 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     ? activeProduct.colors[selectedColorByProduct[activeProduct.id] ?? 0] ?? activeProduct.colors[0]
     : null;
 
-  const pendantExtraClass = useMemo(() => pendantShapeClassName(activeColor?.pendantType), [activeColor?.pendantType]);
+  const pendantExtraClass = useMemo(
+    () => mockupShapeClassName(activeProduct?.category, activeColor?.pendantType, activeProduct?.title),
+    [activeColor?.pendantType, activeProduct?.category, activeProduct?.title]
+  );
 
   const galleryUrls = activeProduct?.images?.length ? activeProduct.images : activeProduct?.image ? [activeProduct.image] : [];
   /** תמונת הרקע בתוך מודל החריטה — תמיד התמונה הראשית; שאר התמונות נצפות בגלריה למטה ובפופאפ בלבד. */
@@ -596,20 +576,26 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     if (!code) return;
     setCouponMsg(null);
     try {
+      const cartSubtotalAgorot = Math.round(subtotal * 100);
       const res = await fetch(`${apiBase}/api/coupons/validate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
           code,
-          cartSubtotal: subtotal,
+          cartSubtotal: cartSubtotalAgorot,
           itemsQuantity: qty,
           customerEmail: null
         })
       });
       const data = await res.json();
       if (data.ok) {
-        setAppliedCoupon({ code: data.code, discountAmount: data.discountAmount, freeShipping: data.freeShipping });
+        setAppliedCoupon({
+          code: data.code,
+          // API returns agorot; UI totals are in shekels.
+          discountAmount: Number(data.discountAmount ?? 0) / 100,
+          freeShipping: Boolean(data.freeShipping),
+        });
         setCouponMsg("הקופון הוחל בהצלחה");
       } else {
         setAppliedCoupon(null);
@@ -910,25 +896,29 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 <div className="studio-engraving-title-row">
                   <div className="studio-field-hint">טקסט לחריטה</div>
                   <div className="studio-engraving-title-actions">
+                    <span className="studio-engraving-counter" aria-live="polite">
+                      {engravings.length}/3
+                    </span>
                     <button
                       type="button"
                       className="studio-icon-btn studio-icon-btn--add"
                       aria-label="הוסף שדה טקסט"
                       title="הוסף שדה טקסט"
                       onClick={addEngraving}
+                      disabled={engravings.length >= 3}
                     >
                       <Plus size={14} />
                     </button>
                   </div>
                 </div>
                 <div className="studio-engraving-input-list">
-                  {engravings.map((item) => (
+                  {engravings.map((item, idx) => (
                     <div key={item.id} className={`studio-engraving-input-wrap ${activeEngravingId === item.id ? "active" : ""}`}>
                       <textarea
                         className="studio-engraving-input studio-engraving-input--multiline"
                         value={item.text}
                         rows={2}
-                        placeholder="הכנס טקסט לחריטה (אפשר לרדת שורה)"
+                        placeholder="הכנס טקסט לחריטה"
                         onFocus={() => setActiveEngravingId(item.id)}
                         onChange={(e) => {
                           setEngraveFitError(null);
@@ -944,6 +934,17 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                       >
                         <Smile size={14} />
                       </button>
+                      {idx > 0 ? (
+                        <button
+                          type="button"
+                          className="studio-icon-btn studio-icon-btn--trash-corner"
+                          aria-label="מחק שדה טקסט"
+                          title="מחק שדה טקסט"
+                          onClick={() => removeEngraving(item.id)}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      ) : null}
                       {emojiPickerForId === item.id ? (
                         <div className="studio-emoji-popover studio-emoji-popover--full">
                           <EmojiPicker
@@ -967,33 +968,11 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   </p>
                 ) : null}
               </div>
-              <div className="studio-font-tools-row">
-                <button
-                  type="button"
-                  className="studio-chip light studio-fit-inline-btn"
-                  onClick={autoFitEngravingSizes}
-                  title="מקטין או מגדיל כך שכל הטקסט ייכנס לתכשיט"
-                >
-                  התאמת טקסט
-                </button>
-              </div>
-              <label>
-                גודל טקסט (חריטה)
-                <input
-                  type="range"
-                  min={ENGRAVE_MIN_PX}
-                  max={ENGRAVE_MAX_PX}
-                  value={activeEngraving?.size ?? 28}
-                  onChange={(e) => {
-                    setEngraveFitError(null);
-                    activeEngraving && updateEngraving(activeEngraving.id, { size: Number(e.target.value) });
-                  }}
-                />
-              </label>
-              <div className="studio-option-tiles-row">
-                <label className="studio-option-tile studio-option-tile--font">
-                  <span>פונט</span>
+              <div className="studio-personalization-row" aria-label="התאמה אישית">
+                <div className={`studio-personalization-tile studio-personalization-tile--font ${activeEngraving ? "is-active" : ""}`}>
+                  <div className="studio-personalization-label">פונט</div>
                   <select
+                    className="studio-personalization-select"
                     value={activeEngraving?.font ?? "heebo"}
                     onChange={(e) => {
                       setEngraveFitError(null);
@@ -1006,26 +985,73 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                       </option>
                     ))}
                   </select>
-                </label>
-                <label className="studio-option-tile">
-                  <input type="checkbox" checked={greetingCard} onChange={(e) => setGreetingCard(e.target.checked)} />
-                  <span>כרטיס ברכה</span>
-                </label>
-                <label className="studio-option-tile studio-option-tile--gift">
-                  <input type="checkbox" checked={giftWrap} onChange={(e) => setGiftWrap(e.target.checked)} />
-                  <span>אריזת מתנה</span>
-                  {giftWrap ? (
-                    <textarea
-                      className="studio-gift-note-input"
-                      value={giftGreetingText}
-                      maxLength={140}
-                      rows={2}
-                      placeholder="ברכה קצרה למתנה..."
-                      onChange={(e) => setGiftGreetingText(e.target.value)}
+                </div>
+
+                <div className={`studio-personalization-tile ${showInkPicker ? "is-active" : ""}`} style={{ position: "relative" }}>
+                  <button
+                    type="button"
+                    className="studio-personalization-btn"
+                    onClick={() => setShowInkPicker((v) => !v)}
+                    aria-label="בחירת צבע טקסט"
+                    title="בחירת צבע טקסט"
+                  >
+                    <Palette size={16} />
+                    <span className="studio-personalization-label">צבע</span>
+                    <span
+                      className="studio-personalization-dot"
+                      style={{ background: engraveInkColor ? engraveInkColor : "linear-gradient(135deg,#111827,#d4af37)" }}
+                      aria-hidden
                     />
+                  </button>
+                  {showInkPicker ? (
+                    <div className="studio-color-popover" role="dialog" aria-label="בחירת צבע טקסט">
+                      <div className="studio-color-swatches">
+                        {inkSwatches.map((c) => (
+                          <button
+                            key={c || "auto"}
+                            type="button"
+                            className={`studio-color-swatch ${engraveInkColor === c ? "active" : ""}`}
+                            onClick={() => setEngraveInkColor(c)}
+                            aria-label={c ? `בחר צבע ${c}` : "צבע אוטומטי"}
+                            title={c ? c : "אוטומטי"}
+                            style={{ background: c ? c : "linear-gradient(135deg,#111827,#d4af37)" }}
+                          />
+                        ))}
+                      </div>
+                      <div className="studio-color-row">
+                        <input
+                          type="color"
+                          value={engraveInkColor || "#111827"}
+                          onChange={(e) => setEngraveInkColor(e.target.value)}
+                          aria-label="בחירת צבע מותאם"
+                        />
+                        <button type="button" className="studio-color-auto" onClick={() => setEngraveInkColor("")}>
+                          אוטומטי
+                        </button>
+                      </div>
+                    </div>
                   ) : null}
+                </div>
+
+                <label className={`studio-personalization-tile studio-personalization-tile--gift ${giftWrap ? "is-active" : ""}`}>
+                  <input type="checkbox" checked={giftWrap} onChange={(e) => setGiftWrap(e.target.checked)} />
+                  <div className="studio-personalization-label">אריזת מתנה</div>
                 </label>
               </div>
+
+              <div className={`studio-gift-reveal ${giftWrap ? "open" : ""}`} aria-hidden={!giftWrap}>
+                {giftWrap ? (
+                  <textarea
+                    className="studio-gift-note-input"
+                    value={giftGreetingText}
+                    maxLength={140}
+                    rows={2}
+                    placeholder="כתוב הקדשה קצרה למתנה..."
+                    onChange={(e) => setGiftGreetingText(e.target.value)}
+                  />
+                ) : null}
+              </div>
+
               {activeProduct ? (
                 <div className="studio-chip-row studio-color-pick-row" aria-label="צבע מוצר">
                   {activeProduct.colors.map((c, i) => (
@@ -1125,6 +1151,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     {engravings.map((item) => {
                       const inkDark = activeColor?.colorKey !== "black";
                       const px = Math.min(ENGRAVE_MAX_PX, Math.max(ENGRAVE_MIN_PX, Math.round(item.size)));
+                      const forcedInk = engraveInkColor ? { color: engraveInkColor, textShadow: "none" } : null;
                       return (
                         <span
                           key={item.id}
@@ -1136,11 +1163,22 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                               left: `calc(50% + ${item.x}%)`,
                               top: `calc(50% + ${item.y}%)`,
                               fontSize: `${px}px`,
+                              transform: `translate(-50%, -50%) rotate(${Number(item.angle) || 0}deg)`,
+                              ...(forcedInk ?? {}),
                             } as CSSProperties
                           }
                           onPointerDown={() => startDragEngraving(item.id)}
                         >
                           {item.text !== "" ? item.text : "•"}
+                          {activeEngravingId === item.id ? (
+                            <button
+                              type="button"
+                              className="studio-engrave-rotate-handle"
+                              onPointerDown={(e) => startRotateEngraving(e, item.id)}
+                              aria-label="סיבוב טקסט"
+                              title="סיבוב טקסט"
+                            />
+                          ) : null}
                         </span>
                       );
                     })}

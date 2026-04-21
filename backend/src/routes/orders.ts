@@ -690,6 +690,10 @@ const StatusUpdateSchema = z.object({
   note: z.string().max(400).optional().nullable(),
 });
 
+const OrderNoteUpdateSchema = z.object({
+  note: z.string().max(4000).optional().nullable(),
+});
+
 ordersRouter.patch("/:id/status", requireAdmin, async (req, res) => {
   const parsed = StatusUpdateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "VALIDATION", details: parsed.error.flatten() });
@@ -737,6 +741,42 @@ ordersRouter.patch("/:id/status", requireAdmin, async (req, res) => {
     if (!updated.ok) return res.status(updated.code).json({ error: updated.reason });
     return res.json({ ok: true, order: updated.order });
   } catch {
+    return res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+ordersRouter.patch("/:id/note", requireAdmin, async (req, res) => {
+  const parsed = OrderNoteUpdateSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "VALIDATION", details: parsed.error.flatten() });
+  const nextNote = String(parsed.data.note ?? "").trim();
+  try {
+    const order = await prisma.order.findUnique({ where: { id: req.params.id } });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    const rawDetails: any = (order as any).deliveryDetails;
+    const detailsObj =
+      rawDetails && typeof rawDetails === "object"
+        ? { ...rawDetails }
+        : rawDetails && typeof rawDetails === "string"
+          ? (() => {
+              try {
+                const parsedRaw = JSON.parse(rawDetails);
+                return parsedRaw && typeof parsedRaw === "object" ? { ...parsedRaw } : {};
+              } catch {
+                return {};
+              }
+            })()
+          : {};
+    const updatedDetails = {
+      ...detailsObj,
+      orderNotes: nextNote || null,
+    };
+    await prisma.order.update({
+      where: { id: req.params.id },
+      data: { deliveryDetails: updatedDetails as any },
+    });
+    return res.json({ ok: true, note: nextNote });
+  } catch (e) {
+    if (isDatabaseConnectionError(e)) return respondDatabaseUnavailable(res, e);
     return res.status(500).json({ error: "SERVER_ERROR" });
   }
 });

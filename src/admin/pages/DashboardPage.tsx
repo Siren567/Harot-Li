@@ -112,6 +112,15 @@ export function DashboardPage() {
   }, [loadDashboard]);
 
   useEffect(() => {
+    const intervalMs = 15_000;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void loadDashboard(true);
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [loadDashboard]);
+
+  useEffect(() => {
     setHoveredChartIndex(null);
   }, [activeChart, snapshot]);
 

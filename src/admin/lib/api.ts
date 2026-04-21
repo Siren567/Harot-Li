@@ -27,6 +27,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       const token = getAdminToken();
       res = await fetch(url, {
         ...init,
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),

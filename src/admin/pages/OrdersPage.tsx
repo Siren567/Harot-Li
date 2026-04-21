@@ -8,9 +8,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  Eye,
   Filter,
-  Pencil,
+  MessageSquarePlus,
   RefreshCw,
   Search,
   X,
@@ -115,6 +114,58 @@ function paymentLabel(status: PaymentStatus) {
   if (status === "paid") return "שולם";
   if (status === "failed") return "נכשל";
   return "ממתין לתשלום";
+}
+
+function extractOrderNote(rawOrder: any) {
+  const details = rawOrder?.deliveryDetails;
+  if (!details) return "";
+  const obj =
+    typeof details === "object"
+      ? details
+      : typeof details === "string"
+        ? (() => {
+            try {
+              return JSON.parse(details);
+            } catch {
+              return null;
+            }
+          })()
+        : null;
+  if (!obj || typeof obj !== "object") return "";
+  return String((obj as any).orderNotes ?? "").trim();
+}
+
+function extractCustomizationFromLineItems(lineItems: any[]) {
+  const engravingLines = lineItems
+    .map((it) => String(it?.engravingText ?? "").trim())
+    .filter((v) => v.length > 0);
+  const colors = Array.from(
+    new Set(
+      lineItems
+        .map((it) => String(it?.color ?? "").trim())
+        .filter((v) => v.length > 0),
+    ),
+  );
+  const materials = Array.from(
+    new Set(
+      lineItems
+        .map((it) => String(it?.material ?? "").trim())
+        .filter((v) => v.length > 0),
+    ),
+  );
+  const shapes = Array.from(
+    new Set(
+      lineItems
+        .map((it) => String(it?.pendantShape ?? "").trim())
+        .filter((v) => v.length > 0),
+    ),
+  );
+  return {
+    engravingText: engravingLines.length ? engravingLines.join(" | ") : "—",
+    color: colors.length ? colors.join(", ") : "—",
+    material: materials.length ? materials.join(", ") : "—",
+    pendantShape: shapes.length ? shapes.join(", ") : "—",
+  };
 }
 
 function SummaryCard({
@@ -427,6 +478,28 @@ export function OrdersPage() {
       const rows = Array.isArray(out?.orders) ? out.orders : [];
       const mapped: Order[] = rows.map((o: any) => {
         const lineItems = getOrderLineItems(o);
+        const customization = extractCustomizationFromLineItems(lineItems);
+        const lineItemsTotalAgorot = lineItems.reduce((sum: number, it: any) => {
+          const unit = Number(it?.unitPrice ?? 0);
+          const qty = Number(it?.qty ?? 1);
+          if (!Number.isFinite(unit) || !Number.isFinite(qty)) return sum;
+          return sum + unit * qty;
+        }, 0);
+        const subtotalAgorot = Number(o.subtotal);
+        const shippingAgorot = Number(o.shippingFee ?? 0);
+        const discountAgorot = Number(o.discountAmount ?? 0);
+        const totalFromSummary =
+          Number.isFinite(subtotalAgorot) && subtotalAgorot > 0
+            ? subtotalAgorot + (Number.isFinite(shippingAgorot) ? shippingAgorot : 0) - (Number.isFinite(discountAgorot) ? discountAgorot : 0)
+            : null;
+        const rawTotalAgorot = Number(o.total ?? 0);
+        const totalAgorot = Number.isFinite(totalFromSummary ?? NaN)
+          ? Math.max(0, Number(totalFromSummary))
+          : lineItemsTotalAgorot > 0
+            ? lineItemsTotalAgorot
+            : Number.isFinite(rawTotalAgorot)
+              ? Math.max(0, rawTotalAgorot)
+              : 0;
         const raw: BackendOrderStatus = (o.status as BackendOrderStatus) ?? "NEW";
         const uiStatus: OrderStatus =
           raw === "COMPLETED" || raw === "PAID"
@@ -445,7 +518,7 @@ export function OrdersPage() {
           customerPhone: String(o.customer?.phone ?? "—"),
           customerEmail: String(o.customer?.email ?? "—"),
           createdAt: String(o.createdAt ?? new Date().toISOString()),
-          total: Number(o.total ?? 0) / 100,
+          total: totalAgorot / 100,
           paymentStatus: (() => {
             // Prefer the real payment field written by the PayPlus webhook; fall back to the
             // legacy status-derived value for orders created before payment fields existed.
@@ -463,11 +536,11 @@ export function OrdersPage() {
             qty: Number(it?.qty ?? 1),
             price: Number(it?.unitPrice ?? 0) / 100,
           })),
-          engravingText: "",
-          pendantShape: "",
-          material: "",
-          color: "",
-          notes: "",
+          engravingText: customization.engravingText,
+          pendantShape: customization.pendantShape,
+          material: customization.material,
+          color: customization.color,
+          notes: extractOrderNote(o),
         };
       });
       setOrders(mapped);
@@ -503,6 +576,7 @@ export function OrdersPage() {
   const [payment, setPayment] = useState<PaymentStatus | "all">("all");
   const [datePreset, setDatePreset] = useState<"all" | "today" | "7d" | "30d">("30d");
   const [selected, setSelected] = useState<Order | null>(null);
+  const [notePopoverOrderId, setNotePopoverOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!initialUrlState.orderId || orders.length === 0) return;
@@ -565,6 +639,24 @@ export function OrdersPage() {
     setPayment("all");
     setDatePreset("30d");
     setPage(1);
+  }
+
+  async function handleAddNote(order: Order) {
+    const current = String(order.notes ?? "").trim();
+    const next = window.prompt("הוסף/ערוך הערה להזמנה", current);
+    if (next === null) return;
+    try {
+      const out = await apiFetch<{ ok?: boolean; note?: string }>(`/api/orders/${order.id}/note`, {
+        method: "PATCH",
+        body: JSON.stringify({ note: next }),
+      });
+      const saved = String(out?.note ?? next).trim();
+      setOrders((prev) => prev.map((x) => (x.id === order.id ? { ...x, notes: saved } : x)));
+      setSelected((cur) => (cur && cur.id === order.id ? { ...cur, notes: saved } : cur));
+      if (!saved) setNotePopoverOrderId((cur) => (cur === order.id ? null : cur));
+    } catch {
+      window.alert("לא ניתן לשמור הערה כרגע");
+    }
   }
 
   return (
@@ -869,7 +961,7 @@ export function OrdersPage() {
                     "מספר הזמנה",
                     "לקוח",
                     "תאריך",
-                    "סכום",
+                    "סהכ הוצאה",
                     "סטטוס תשלום",
                     "סטטוס הזמנה",
                     "מספר עיצוב",
@@ -914,9 +1006,60 @@ export function OrdersPage() {
                       {o.orderNumber}
                     </td>
                     <td style={{ padding: "13px 14px", fontSize: "13px", color: "var(--foreground-secondary)", whiteSpace: "nowrap" }}>
-                      <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                        <span style={{ color: "var(--foreground)", fontWeight: 700 }}>{o.customerName}</span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "2px", position: "relative" }}>
+                        <span style={{ color: "var(--foreground)", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                          {o.customerName}
+                          {o.notes?.trim() ? (
+                            <button
+                              type="button"
+                              aria-label="צפה בהערה"
+                              title="צפה בהערה"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setNotePopoverOrderId((cur) => (cur === o.id ? null : o.id));
+                              }}
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 999,
+                                border: "1px solid rgba(245,158,11,0.45)",
+                                background: "rgba(245,158,11,0.16)",
+                                color: "var(--warning)",
+                                fontSize: 12,
+                                fontWeight: 900,
+                                lineHeight: 1,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                cursor: "pointer",
+                                padding: 0,
+                              }}
+                            >
+                              !
+                            </button>
+                          ) : null}
+                        </span>
                         <span style={{ color: "var(--muted-foreground)", fontSize: "11px" }}>{o.customerPhone}</span>
+                        {notePopoverOrderId === o.id && o.notes?.trim() ? (
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              position: "absolute",
+                              top: "calc(100% + 6px)",
+                              right: 0,
+                              width: "min(320px, 55vw)",
+                              borderRadius: "10px",
+                              border: "1px solid var(--border)",
+                              background: "var(--card)",
+                              boxShadow: "0 10px 24px rgba(0,0,0,0.35)",
+                              padding: "10px 12px",
+                              zIndex: 20,
+                            }}
+                          >
+                            <div style={{ fontSize: "11px", color: "var(--muted-foreground)", marginBottom: "4px" }}>הערה להזמנה</div>
+                            <div style={{ fontSize: "12px", color: "var(--foreground-secondary)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{o.notes}</div>
+                          </div>
+                        ) : null}
                       </div>
                     </td>
                     <td style={{ padding: "13px 14px", fontSize: "12px", color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>{fmtDate(o.createdAt)}</td>
@@ -940,46 +1083,7 @@ export function OrdersPage() {
                     <td style={{ padding: "13px 14px" }} onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: "flex", gap: "8px", justifyContent: "flex-start" }}>
                         <button
-                          onClick={() => setSelected(o)}
-                          style={{
-                            background: "var(--input)",
-                            border: "1px solid var(--border)",
-                            color: "var(--foreground-secondary)",
-                            borderRadius: "10px",
-                            padding: "8px 10px",
-                            fontSize: "12px",
-                            fontWeight: 800,
-                            cursor: "pointer",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          <Eye size={16} />
-                          צפייה
-                        </button>
-                        <button
-                          style={{
-                            background: "transparent",
-                            border: "1px solid var(--border)",
-                            color: "var(--foreground-secondary)",
-                            borderRadius: "10px",
-                            padding: "8px 10px",
-                            fontSize: "12px",
-                            fontWeight: 800,
-                            cursor: "pointer",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          <Pencil size={16} />
-                          עריכה
-                        </button>
-                        <button
-                          onClick={() => setSelected(o)}
+                          onClick={() => handleAddNote(o)}
                           style={{
                             background: "var(--primary)",
                             border: "1px solid rgba(201,169,110,0.35)",
@@ -995,8 +1099,8 @@ export function OrdersPage() {
                             whiteSpace: "nowrap",
                           }}
                         >
-                          <ArrowUpRight size={16} />
-                          עדכון סטטוס
+                          <MessageSquarePlus size={16} />
+                          הוספת הערה
                         </button>
                       </div>
                     </td>

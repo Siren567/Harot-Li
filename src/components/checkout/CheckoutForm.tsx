@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, type FormEvent } from "react";
+import { memo, useState, type FormEvent } from "react";
 
 export type PaymentMethod = "payplus";
 
@@ -36,42 +36,6 @@ function CheckoutForm({ onSubmit, paymentMethod, id, className, disabled }: Chec
   const [zipCode, setZipCode] = useState("");
   const [notes, setNotes] = useState("");
   const [invalid, setInvalid] = useState<Record<string, boolean>>({});
-  const [zipLoading, setZipLoading] = useState(false);
-
-  const parsedStreetAndHouse = useMemo(() => {
-    const raw = address.trim();
-    const m = raw.match(/^(.*?)(?:\s+(\d+[א-תA-Za-z]?))?$/u);
-    return {
-      street: (m?.[1] ?? raw).trim(),
-      house: (m?.[2] ?? "").trim(),
-    };
-  }, [address]);
-
-  async function tryAutoFillZip() {
-    if (zipLoading) return;
-    const cityVal = city.trim();
-    const streetVal = parsedStreetAndHouse.street;
-    if (!cityVal || !streetVal) return;
-    setZipLoading(true);
-    try {
-      const query = new URLSearchParams({
-        city: cityVal,
-        street: streetVal,
-        ...(parsedStreetAndHouse.house ? { house: parsedStreetAndHouse.house } : {}),
-      });
-      const res = await fetch(`/api/public/zip-lookup?${query.toString()}`);
-      const out = await res.json().catch(() => ({}));
-      if (res.ok && out?.zip) {
-        setZipCode(String(out.zip));
-      } else {
-        setZipCode("");
-      }
-    } catch {
-      setZipCode("");
-    } finally {
-      setZipLoading(false);
-    }
-  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -164,7 +128,6 @@ function CheckoutForm({ onSubmit, paymentMethod, id, className, disabled }: Chec
             setCity(ev.target.value);
             setInvalid((prev) => ({ ...prev, city: false }));
           }}
-          onBlur={tryAutoFillZip}
           style={invalid.city ? { borderColor: "#c9372c", boxShadow: "0 0 0 1px rgba(201,55,44,0.18)" } : undefined}
         />
       </label>
@@ -179,7 +142,6 @@ function CheckoutForm({ onSubmit, paymentMethod, id, className, disabled }: Chec
             setAddress(ev.target.value);
             setInvalid((prev) => ({ ...prev, address: false }));
           }}
-          onBlur={tryAutoFillZip}
           style={invalid.address ? { borderColor: "#c9372c", boxShadow: "0 0 0 1px rgba(201,55,44,0.18)" } : undefined}
         />
       </label>
@@ -193,29 +155,9 @@ function CheckoutForm({ onSubmit, paymentMethod, id, className, disabled }: Chec
           <input name="apartment" autoComplete="off" placeholder="12" value={apartment} onChange={(ev) => setApartment(ev.target.value)} />
         </label>
         <label>
-          מיקוד
+          מיקוד <small style={{ color: "var(--foreground-secondary)", fontWeight: 500 }}>* אופציונלי</small>
           <input name="zipCode" autoComplete="postal-code" placeholder="6100001" value={zipCode} onChange={(ev) => setZipCode(ev.target.value)} />
         </label>
-      </div>
-      <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: 8 }}>
-        <button
-          type="button"
-          onClick={tryAutoFillZip}
-          disabled={zipLoading || !city.trim() || !parsedStreetAndHouse.street}
-          style={{
-            border: "1px solid var(--border)",
-            background: "var(--input)",
-            color: "var(--foreground-secondary)",
-            borderRadius: 10,
-            padding: "7px 10px",
-            fontSize: 12,
-            fontWeight: 700,
-            cursor: zipLoading ? "not-allowed" : "pointer",
-            opacity: zipLoading ? 0.7 : 1,
-          }}
-        >
-          {zipLoading ? "מאתר מיקוד..." : "איתור מיקוד אוטומטי"}
-        </button>
       </div>
       <label className="studio-checkout-form-notes">
         הערות
