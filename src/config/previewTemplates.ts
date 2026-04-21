@@ -1,0 +1,152 @@
+/**
+ * Centralized preview template configuration.
+ * One source of truth for: shape, dimensions, text safe area, font bounds,
+ * bail (chain loop) presence, default rotation. Keeps Pendant3DPreview
+ * purely a renderer — all product-specific rules live here.
+ */
+
+export type TemplateShape = "disc" | "tag" | "bar" | "heart";
+
+export type PreviewTemplate = {
+  id: string;
+  shape: TemplateShape;
+  /** Scene units (roughly pendant diameter for disc, width for others). */
+  width: number;
+  height: number;
+  thickness: number;
+  /** Used by rounded rectangles. */
+  cornerRadius: number;
+  /** Small loop at top for the chain/keyring. */
+  hasBail: boolean;
+  /**
+   * Fraction (0-1) of the bounding box that text is allowed to occupy.
+   * Keeps the engraving inside the visible surface.
+   */
+  safeArea: { x: number; y: number };
+  /** Slider-px clamps. The slider value is the real source of truth; auto-fit only shrinks if text overflows. */
+  minFontSize: number;
+  maxFontSize: number;
+  /** Default font-size if no engraving exists yet. */
+  defaultFontSize: number;
+  /** Default text rotation in radians applied to the engraving canvas. */
+  textRotation: number;
+  /** Text alignment inside the safe area. */
+  textAlign: "center" | "start" | "end";
+};
+
+export const PREVIEW_TEMPLATES: Record<string, PreviewTemplate> = {
+  disc: {
+    id: "disc",
+    shape: "disc",
+    width: 2.1,
+    height: 2.1,
+    thickness: 0.16,
+    cornerRadius: 0,
+    hasBail: true,
+    safeArea: { x: 0.72, y: 0.48 },
+    minFontSize: 8,
+    maxFontSize: 44,
+    defaultFontSize: 26,
+    textRotation: 0,
+    textAlign: "center",
+  },
+  tag: {
+    id: "tag",
+    shape: "tag",
+    width: 1.55,
+    height: 2.25,
+    thickness: 0.14,
+    cornerRadius: 0.28,
+    hasBail: true,
+    safeArea: { x: 0.78, y: 0.62 },
+    minFontSize: 8,
+    maxFontSize: 44,
+    defaultFontSize: 26,
+    textRotation: 0,
+    textAlign: "center",
+  },
+  bar: {
+    id: "bar",
+    shape: "bar",
+    width: 2.9,
+    height: 0.78,
+    thickness: 0.12,
+    cornerRadius: 0.18,
+    hasBail: false,
+    safeArea: { x: 0.86, y: 0.66 },
+    minFontSize: 8,
+    maxFontSize: 44,
+    defaultFontSize: 22,
+    textRotation: 0,
+    textAlign: "center",
+  },
+  heart: {
+    id: "heart",
+    shape: "heart",
+    width: 2.0,
+    height: 1.9,
+    thickness: 0.16,
+    cornerRadius: 0,
+    hasBail: true,
+    safeArea: { x: 0.62, y: 0.44 },
+    minFontSize: 8,
+    maxFontSize: 40,
+    defaultFontSize: 24,
+    textRotation: 0,
+    textAlign: "center",
+  },
+};
+
+function normalize(raw: string | null | undefined): string {
+  return String(raw ?? "").toLowerCase().trim();
+}
+
+type ProductLike = {
+  category?: string | null;
+  mainCategoryId?: string | null;
+  title?: string | null;
+  subcategoryLabel?: string | null;
+};
+
+/**
+ * Map a product to its preview template. Uses category + subcategory hints.
+ * Falls back to "disc" — the safest generic pendant shape.
+ */
+export function getTemplateForProduct(product: ProductLike | null | undefined): PreviewTemplate {
+  if (!product) return PREVIEW_TEMPLATES.disc;
+  const category = normalize(product.category) || normalize(product.mainCategoryId);
+  const label = `${normalize(product.title)} ${normalize(product.subcategoryLabel)}`;
+
+  if (label.includes("לב") || label.includes("heart")) return PREVIEW_TEMPLATES.heart;
+
+  if (category.includes("bracelet") || category.includes("צמיד")) {
+    return PREVIEW_TEMPLATES.bar;
+  }
+  if (category.includes("keychain") || category.includes("מפתח")) {
+    return PREVIEW_TEMPLATES.tag;
+  }
+  if (category.includes("necklace") || category.includes("שרשר")) {
+    if (label.includes("דוג") || label.includes("tag") || label.includes("פלטה")) {
+      return PREVIEW_TEMPLATES.tag;
+    }
+    return PREVIEW_TEMPLATES.disc;
+  }
+  return PREVIEW_TEMPLATES.disc;
+}
+
+export const FONT_FAMILY_BY_ID: Record<string, string> = {
+  assistant: '"Assistant", sans-serif',
+  heebo: '"Heebo", sans-serif',
+  david: '"David Libre", serif',
+  rubik: '"Rubik", sans-serif',
+  noto: '"Noto Sans Hebrew", sans-serif',
+  alef: '"Alef", sans-serif',
+  secular: '"Secular One", sans-serif',
+  frank: '"Frank Ruhl Libre", serif',
+  varela: '"Varela Round", sans-serif',
+};
+
+export function resolveFontFamily(fontId: string | null | undefined): string {
+  if (!fontId) return FONT_FAMILY_BY_ID.heebo;
+  return FONT_FAMILY_BY_ID[fontId] ?? FONT_FAMILY_BY_ID.heebo;
+}

@@ -6,7 +6,8 @@ import { getApiBaseUrl } from "../lib/apiBase";
 import { loadBootstrapOnce, loadPublicProductsOnce } from "../lib/studioDataLoader";
 import { studioCategories, studioFonts, studioShippingMethods } from "../constants/studioData";
 import CheckoutForm, { type CheckoutFormData } from "./checkout/CheckoutForm";
-import Pendant3DPreview from "./Pendant3DPreview";
+import Pendant3DPreview, { type EngravingLine } from "./Pendant3DPreview";
+import { getTemplateForProduct } from "../config/previewTemplates";
 
 type StudioPageProps = {
   onBackToLanding: () => void;
@@ -183,6 +184,28 @@ const COLOR_META: Record<ColorKey, { name: string; swatch: string }> = {
   rose: { name: "רוז גולד", swatch: "#d4a5a0" },
   black: { name: "שחור", swatch: "#2a2a2a" }
 };
+
+/** Neutral preview swatch used only when no product/color has been resolved yet.
+ *  Must NOT be gold, silver, rose, or black — otherwise it masquerades as a real selection. */
+const PREVIEW_PLACEHOLDER_SWATCH = "#a9a59f";
+
+/**
+ * Source-of-truth color resolution for the 3D preview.
+ * Always prefers COLOR_META[colorKey] so a row with a known colorKey can never
+ * disagree with its swatch. Returns a neutral placeholder when data isn't ready
+ * yet, so the preview never displays a misleading gold/silver/rose/black.
+ */
+function resolvePreviewMetalSwatch(
+  product: StudioRuntimeProduct | null | undefined,
+  color: StudioColorRow | null | undefined
+): string {
+  if (!product || !color) return PREVIEW_PLACEHOLDER_SWATCH;
+  if (color.colorKey) return COLOR_META[color.colorKey].swatch;
+  // Unknown/unmapped variant: trust the row's own swatch only if it's a real
+  // hex (buildStudioColors may have assigned a grey fallback — that's fine,
+  // because there's no authoritative colorKey to contradict it).
+  return color.swatch || PREVIEW_PLACEHOLDER_SWATCH;
+}
 
 function tokenToColorKey(token: string): ColorKey | null {
   const x = String(token).trim().toLowerCase();
@@ -509,21 +532,54 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     if (runtimeProducts.length === 0) return null;
     return runtimeProducts.find((p) => p.id === productId) ?? runtimeProducts[0];
   }, [productId, runtimeProducts]);
-  const activeColor = activeProduct
-    ? activeProduct.colors[selectedColorByProduct[activeProduct.id] ?? 0] ?? activeProduct.colors[0]
-    : null;
+  const activeColor = useMemo(() => {
+    if (!activeProduct || !activeProduct.colors?.length) return null;
+    const raw = selectedColorByProduct[activeProduct.id];
+    const idx = Number.isInteger(raw) && raw! >= 0 && raw! < activeProduct.colors.length ? (raw as number) : 0;
+    return activeProduct.colors[idx] ?? null;
+  }, [activeProduct, selectedColorByProduct]);
 
   const galleryUrls = activeProduct?.images?.length ? activeProduct.images : activeProduct?.image ? [activeProduct.image] : [];
   /** תמונת הרקע בתוך מודל החריטה — תמיד התמונה הראשית; שאר התמונות נצפות בגלריה למטה ובפופאפ בלבד. */
   const engraveStageImageUrl = galleryUrls[selectedGalleryIndex] ?? galleryUrls[0] ?? activeProduct?.image ?? null;
-  const engravingPreviewText = useMemo(
-    () => engravings.map((item) => item.text.trim()).filter(Boolean).slice(0, 3).join("\n"),
-    [engravings]
+  const previewTemplate = useMemo(() => getTemplateForProduct(activeProduct), [activeProduct]);
+  const previewLines = useMemo<EngravingLine[]>(
+    () =>
+      engravings
+        .map((item) => ({
+          text: item.text.trim(),
+          fontId: item.font || "heebo",
+          size: Math.max(previewTemplate.minFontSize, Math.min(previewTemplate.maxFontSize, item.size || previewTemplate.defaultFontSize)),
+        }))
+        .filter((l) => l.text)
+        .slice(0, 3),
+    [engravings, previewTemplate]
   );
 
   useEffect(() => {
     setSelectedGalleryIndex(0);
+    setShowProductColorPicker(false);
   }, [activeProduct?.id]);
+
+  // Clamp stale indices: if a product's color list shrinks (or the stored
+  // index is out of range), reset it to 0 so the preview never reads a
+  // non-existent row and `activeColor` stays deterministic.
+  useEffect(() => {
+    if (!activeProduct) return;
+    const len = activeProduct.colors?.length ?? 0;
+    const raw = selectedColorByProduct[activeProduct.id];
+    const needsReset = len === 0
+      ? raw !== undefined
+      : !Number.isInteger(raw) || raw! < 0 || raw! >= len;
+    if (needsReset) {
+      setSelectedColorByProduct((prev) => {
+        const next = { ...prev };
+        if (len === 0) delete next[activeProduct.id];
+        else next[activeProduct.id] = 0;
+        return next;
+      });
+    }
+  }, [activeProduct, selectedColorByProduct]);
 
   useEffect(() => {
     if (!activeProduct || !activeColor) return;
@@ -1056,7 +1112,11 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   <button
                     type="button"
                     className="studio-personalization-btn"
-                    onClick={() => setShowProductColorPicker((v) => !v)}
+                    onClick={() => {
+                      if (!activeProduct || !activeProduct.colors?.length) return;
+                      setShowProductColorPicker((v) => !v);
+                    }}
+                    disabled={!activeProduct || !activeProduct.colors?.length}
                     aria-label="בחירת צבע מוצר"
                     title="בחירת צבע מוצר"
                   >
@@ -1276,10 +1336,10 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 ) : null}
                 <div className="studio-preview-stage">
                   <Pendant3DPreview
-                    metalColor={activeColor?.swatch ?? "#d4af37"}
-                    engravingText={engravingPreviewText}
+                    template={previewTemplate}
+                    metalColor={resolvePreviewMetalSwatch(activeProduct, activeColor)}
+                    lines={previewLines}
                     fallbackImageUrl={engraveStageImageUrl}
-                    modelUrl="/models/pendant.glb"
                     autoRotate
                   />
                 </div>
