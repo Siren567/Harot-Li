@@ -229,7 +229,7 @@ publicRouter.get("/products", async (_req, res) => {
   } catch (err: any) {
     // Log the full error (name + code + meta + message + stack) on separate lines
     // so Vercel keeps each field intact and we can see the schema-drift cause.
-    console.error("PUBLIC PRODUCTS ERROR:", err);
+    console.error("PUBLIC PRODUCTS ROOT CAUSE:", err);
     console.error("[GET /api/public/products] FAILED name=", err?.name);
     console.error("[GET /api/public/products] FAILED code=", err?.code);
     console.error("[GET /api/public/products] FAILED clientVersion=", err?.clientVersion);
