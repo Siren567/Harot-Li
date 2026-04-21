@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
@@ -84,7 +84,7 @@ function buildHalfHeartShape(side: -1 | 1, w: number, h: number): THREE.Shape {
   return shape;
 }
 
-/** One classic jigsaw piece: flat body + semicircular tab on top (fits template height). */
+/** One classic jigsaw piece: flat body + tab on top + side “holes” (inward notches) like a real puzzle. */
 function buildPuzzlePieceShape(w: number, h: number): THREE.Shape {
   const hw = w / 2;
   const hh = h / 2;
@@ -93,17 +93,29 @@ function buildPuzzlePieceShape(w: number, h: number): THREE.Shape {
   tr = Math.min(tr, Math.max(0.12, hw - c - 0.04));
   const bodyTop = hh - tr;
   const bodyBottom = -hh;
+  const yMid = (bodyTop + bodyBottom) * 0.5;
+  const bodyH = bodyTop - bodyBottom;
+  /** Half-height of each side notch opening on the vertical edge. */
+  let nHalf = Math.min(h * 0.1, bodyH * 0.16);
+  /** How deep the notch bites into the plate (toward ±x). */
+  const nDep = Math.min(w, h) * 0.13;
+  const margin = c + 0.04;
+  nHalf = Math.min(nHalf, (yMid - (bodyBottom + margin)) * 0.92, (bodyTop - margin - yMid) * 0.92);
 
   const shape = new THREE.Shape();
   shape.moveTo(-hw + c, bodyBottom);
   shape.lineTo(hw - c, bodyBottom);
   shape.quadraticCurveTo(hw, bodyBottom, hw, bodyBottom + c);
+  shape.lineTo(hw, yMid - nHalf);
+  shape.quadraticCurveTo(hw - nDep, yMid, hw, yMid + nHalf);
   shape.lineTo(hw, bodyTop - c);
   shape.quadraticCurveTo(hw, bodyTop, hw - c, bodyTop);
   if (hw - c > tr + 1e-4) shape.lineTo(tr, bodyTop);
   shape.absarc(0, bodyTop, tr, 0, Math.PI, false);
   if (-hw + c < -tr - 1e-4) shape.lineTo(-hw + c, bodyTop);
   shape.quadraticCurveTo(-hw, bodyTop, -hw, bodyTop - c);
+  shape.lineTo(-hw, yMid + nHalf);
+  shape.quadraticCurveTo(-hw + nDep, yMid, -hw, yMid - nHalf);
   shape.lineTo(-hw, bodyBottom + c);
   shape.quadraticCurveTo(-hw, bodyBottom, -hw + c, bodyBottom);
   return shape;
@@ -413,7 +425,7 @@ export default function Pendant3DPreview({
     [lines]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const mountEl = mountRef.current;
     if (!mountEl) return;
 
@@ -502,7 +514,8 @@ export default function Pendant3DPreview({
     const overlayMatCommon = {
       transparent: true,
       depthWrite: false,
-      depthTest: true,
+      // Curved pendants (e.g. half-hearts) fight the depth buffer with a flat plane — draw engraving on top.
+      depthTest: false,
       toneMapped: false,
       polygonOffset: true,
       polygonOffsetFactor: -2,
@@ -561,14 +574,15 @@ export default function Pendant3DPreview({
       leftOverlayGeo = new THREE.PlaneGeometry(halfPlateW, halfPlateH);
       leftOverlayMat = new THREE.MeshBasicMaterial({ map: leftEngravingTex, ...overlayMatCommon });
       const leftOverlay = new THREE.Mesh(leftOverlayGeo, leftOverlayMat);
-      leftOverlay.position.set(-sx / 2, 0, template.thickness / 2 + 0.02);
-      leftOverlay.renderOrder = 1;
+      const engrZ = template.thickness / 2 + 0.055;
+      leftOverlay.position.set(-sx / 2, 0, engrZ);
+      leftOverlay.renderOrder = 2;
 
       rightOverlayGeo = new THREE.PlaneGeometry(halfPlateW, halfPlateH);
       rightOverlayMat = new THREE.MeshBasicMaterial({ map: rightEngravingTex, ...overlayMatCommon });
       const rightOverlay = new THREE.Mesh(rightOverlayGeo, rightOverlayMat);
-      rightOverlay.position.set(sx / 2, 0, template.thickness / 2 + 0.02);
-      rightOverlay.renderOrder = 1;
+      rightOverlay.position.set(sx / 2, 0, engrZ);
+      rightOverlay.renderOrder = 2;
 
       const leftRoot = new THREE.Group();
       leftRoot.add(leftMesh, leftOverlay);
@@ -616,8 +630,8 @@ export default function Pendant3DPreview({
         ...overlayMatCommon,
       });
       const overlay = new THREE.Mesh(overlayGeo, overlayMat);
-      overlay.position.z = template.thickness / 2 + 0.02;
-      overlay.renderOrder = 1;
+      overlay.position.z = template.thickness / 2 + 0.055;
+      overlay.renderOrder = 2;
 
       pendant.add(body, overlay);
 
@@ -711,7 +725,8 @@ export default function Pendant3DPreview({
       backMatRef.current = null;
       rimMatRef.current = null;
     };
-    // Rebuild when the template changes (shape swap).
+    // Rebuild when the template changes (shape swap). useLayoutEffect so engraving canvases exist
+    // before the follow-up useEffect that paints them (avoids missing first-frame text).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateKey, autoRotate]);
 
@@ -731,13 +746,7 @@ export default function Pendant3DPreview({
     let cancelled = false;
     const split = template.shape === "splitHeart";
     if (split) {
-      const cL = engravingCanvasLeftRef.current;
-      const cR = engravingCanvasRightRef.current;
-      const tL = engravingTexLeftRef.current;
-      const tR = engravingTexRightRef.current;
-      if (!cL || !cR || !tL || !tR) return;
-
-      (async () => {
+      const paintSplit = async () => {
         await ensureFontsLoaded(lines);
         if (cancelled) return;
         const leftCanvas = engravingCanvasLeftRef.current;
@@ -751,7 +760,21 @@ export default function Pendant3DPreview({
         drawEngravingSingleOnHalf({ canvas: rightCanvas, template, line: line1, metalColor });
         leftTex.needsUpdate = true;
         rightTex.needsUpdate = true;
-      })();
+      };
+
+      const tryPaint = (attempt: number) => {
+        if (cancelled) return;
+        const cL = engravingCanvasLeftRef.current;
+        const cR = engravingCanvasRightRef.current;
+        const tL = engravingTexLeftRef.current;
+        const tR = engravingTexRightRef.current;
+        if (!cL || !cR || !tL || !tR) {
+          if (attempt < 24) requestAnimationFrame(() => tryPaint(attempt + 1));
+          return;
+        }
+        void paintSplit();
+      };
+      tryPaint(0);
 
       return () => {
         cancelled = true;

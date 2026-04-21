@@ -224,17 +224,41 @@ function isKeychainCategory(product: ProductLike | null | undefined): boolean {
   return category.includes("keychain") || category.includes("מפתח");
 }
 
+/**
+ * Couple / split-heart necklace sets are often stored in admin as pendantType "לב" only.
+ * Use product title + category so the studio still shows two half-hearts in the 3D preview.
+ */
+function splitHeartFromProductLabel(product: ProductLike | null | undefined): boolean {
+  if (!product) return false;
+  const category = normalize(product.category) || normalize(product.mainCategoryId);
+  const label = `${normalize(product.title)} ${normalize(product.subcategoryLabel)}`;
+  const hint =
+    label.includes("חצאי לב") ||
+    label.includes("לב זוגי") ||
+    label.includes("לב שבור") ||
+    (label.includes("זוגי") && label.includes("לב")) ||
+    ((label.includes("פאזל") || label.includes("puzzle")) && label.includes("לב")) ||
+    (label.includes("סט") && label.includes("לב") && (label.includes("שרשר") || label.includes("שרשרת")));
+  if (!hint) return false;
+  return (
+    category.includes("necklace") ||
+    category.includes("שרשר") ||
+    category.includes("couple") ||
+    category.includes("זוג")
+  );
+}
+
 /** Map a pendant-type id to its rendering template. Single place to change geometry-per-type. */
 export function getTemplateForPendantType(type: PendantTypeId, product?: ProductLike | null): PreviewTemplate {
   switch (type) {
     case "heart":
-      return PREVIEW_TEMPLATES.heart;
+      return splitHeartFromProductLabel(product) ? PREVIEW_TEMPLATES.splitHeart : PREVIEW_TEMPLATES.heart;
     case "circle":
       return PREVIEW_TEMPLATES.disc;
     case "square":
       return PREVIEW_TEMPLATES.square;
     case "puzzle":
-      return PREVIEW_TEMPLATES.puzzle;
+      return splitHeartFromProductLabel(product) ? PREVIEW_TEMPLATES.splitHeart : PREVIEW_TEMPLATES.puzzle;
     case "splitHeart":
       return PREVIEW_TEMPLATES.splitHeart;
     case "rectangle":
@@ -255,21 +279,7 @@ export function getTemplateForProduct(product: ProductLike | null | undefined): 
   const category = normalize(product.category) || normalize(product.mainCategoryId);
   const label = `${normalize(product.title)} ${normalize(product.subcategoryLabel)}`;
 
-  const splitHeartTitle =
-    label.includes("חצאי לב") ||
-    label.includes("לב זוגי") ||
-    label.includes("לב שבור") ||
-    (label.includes("זוגי") && label.includes("לב")) ||
-    ((label.includes("פאזל") || label.includes("puzzle")) && label.includes("לב")) ||
-    (label.includes("סט") && label.includes("לב") && (label.includes("שרשר") || label.includes("שרשרת")));
-
-  if (
-    splitHeartTitle &&
-    (category.includes("necklace") ||
-      category.includes("שרשר") ||
-      category.includes("couple") ||
-      category.includes("זוג"))
-  ) {
+  if (splitHeartFromProductLabel(product)) {
     return PREVIEW_TEMPLATES.splitHeart;
   }
 
