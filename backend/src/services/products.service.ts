@@ -17,6 +17,7 @@ export type ProductRow = {
   allow_customer_image_upload?: boolean;
   gallery_images?: string[];
   main_category_id?: string | null;
+  main_category_name?: string | null;
   subcategory_ids?: string[];
   stock?: number;
   low_threshold?: number;
@@ -116,6 +117,7 @@ function toProductRow(p: any): ProductRow {
     allow_customer_image_upload: Boolean(p.allowCustomerImageUpload),
     gallery_images: Array.isArray(p.galleryImages) ? p.galleryImages : [],
     main_category_id: p.mainCategoryId ?? null,
+    main_category_name: p.mainCategory?.name ?? null,
     subcategory_ids: subcategoryIds,
     stock: totalStock,
     low_threshold: lowThreshold,
@@ -138,7 +140,7 @@ export async function listProducts(params?: { q?: string; active?: boolean }): P
   const products = await prisma.product.findMany({
     where,
     orderBy: { updatedAt: "desc" },
-    include: { variants: true, categories: true },
+    include: { variants: true, categories: true, mainCategory: { select: { name: true } } },
   });
   return products.map(toProductRow);
 }

@@ -37,7 +37,6 @@ function CheckoutForm({ onSubmit, paymentMethod, id, className, disabled }: Chec
   const [notes, setNotes] = useState("");
   const [invalid, setInvalid] = useState<Record<string, boolean>>({});
   const [zipLoading, setZipLoading] = useState(false);
-  const [zipHint, setZipHint] = useState<string | null>(null);
 
   const parsedStreetAndHouse = useMemo(() => {
     const raw = address.trim();
@@ -54,7 +53,6 @@ function CheckoutForm({ onSubmit, paymentMethod, id, className, disabled }: Chec
     const streetVal = parsedStreetAndHouse.street;
     if (!cityVal || !streetVal) return;
     setZipLoading(true);
-    setZipHint(null);
     try {
       const query = new URLSearchParams({
         city: cityVal,
@@ -65,12 +63,11 @@ function CheckoutForm({ onSubmit, paymentMethod, id, className, disabled }: Chec
       const out = await res.json().catch(() => ({}));
       if (res.ok && out?.zip) {
         setZipCode(String(out.zip));
-        setZipHint("המיקוד מולא אוטומטית");
       } else {
-        setZipHint("לא נמצא מיקוד אוטומטי לכתובת הזו");
+        setZipCode("");
       }
     } catch {
-      setZipHint("שירות המיקוד לא זמין כרגע");
+      setZipCode("");
     } finally {
       setZipLoading(false);
     }
@@ -219,7 +216,6 @@ function CheckoutForm({ onSubmit, paymentMethod, id, className, disabled }: Chec
         >
           {zipLoading ? "מאתר מיקוד..." : "איתור מיקוד אוטומטי"}
         </button>
-        {zipHint ? <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>{zipHint}</span> : null}
       </div>
       <label className="studio-checkout-form-notes">
         הערות

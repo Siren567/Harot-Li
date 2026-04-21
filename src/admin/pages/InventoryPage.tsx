@@ -39,6 +39,7 @@ type ProductApiRow = {
   price: number;
   allow_customer_image_upload?: boolean;
   main_category_id?: string | null;
+  main_category_name?: string | null;
   stock?: number;
   low_threshold?: number;
 };
@@ -602,7 +603,7 @@ export function InventoryPage() {
           name: p.title || "מוצר",
           imageUrl: p.image_url || "",
           sku: p.slug || p.id,
-          category: p.main_category_id || "ללא קטגוריה",
+          category: p.main_category_name?.trim() || p.main_category_id || "ללא קטגוריה",
           customizable: Boolean(p.allow_customer_image_upload),
           stock: (byProduct[p.id] ?? []).reduce((sum, v) => sum + (Number(v.stock) || 0), 0),
           lowThreshold: Number.isFinite(Number(p.low_threshold)) ? Math.max(0, Number(p.low_threshold)) : 5,

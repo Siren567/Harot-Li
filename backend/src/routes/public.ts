@@ -34,10 +34,14 @@ async function getIsraelPostAccessToken() {
   return israelPostAccessToken;
 }
 
-function sanitizeImageRef(raw?: unknown): string | null {
+function sanitizeImageRef(raw?: unknown, options?: { allowBase64?: boolean; maxBase64Chars?: number }): string | null {
   const value = String(raw ?? "").trim();
   if (!value) return null;
-  if (value.startsWith("data:image/")) return null;
+  if (value.startsWith("data:image/")) {
+    if (!options?.allowBase64) return null;
+    const maxChars = Number(options?.maxBase64Chars ?? 350_000);
+    if (value.length > maxChars) return null;
+  }
   return value;
 }
 
@@ -181,9 +185,15 @@ publicRouter.get("/products", async (_req, res) => {
       const subRawFirst = subRows[0] ?? null;
       const effectiveMain = mainRaw?.parentId ? allCategoryRows.find((c: any) => c?.id === mainRaw.parentId) ?? mainRaw : mainRaw;
 
-      const image = sanitizeImageRef(p.imageUrl);
-      const gallery = Array.isArray(p.galleryImages) ? (p.galleryImages as any[]).map(sanitizeImageRef).filter(Boolean) : [];
-      const images = Array.from(new Set([image, ...gallery].filter(Boolean))).slice(0, 4) as string[];
+      const imageUrlPreferred = sanitizeImageRef(p.imageUrl);
+      const galleryPreferred = Array.isArray(p.galleryImages) ? (p.galleryImages as any[]).map((v) => sanitizeImageRef(v)).filter(Boolean) : [];
+      const base64FallbackImage =
+        sanitizeImageRef(p.imageUrl, { allowBase64: true }) ??
+        (Array.isArray(p.galleryImages)
+          ? ((p.galleryImages as any[]).map((v) => sanitizeImageRef(v, { allowBase64: true })).find(Boolean) ?? null)
+          : null);
+      const image = imageUrlPreferred ?? base64FallbackImage;
+      const images = Array.from(new Set([image, ...galleryPreferred].filter(Boolean))) as string[];
       const basePrice = Number(p.basePrice ?? 0) || 0;
       const salePrice = Number(p.salePrice ?? 0) || 0;
       const effectivePriceAgorot = salePrice > 0 && salePrice < basePrice ? salePrice : basePrice;

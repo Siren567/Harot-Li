@@ -445,7 +445,7 @@ export function OrdersPage() {
           customerPhone: String(o.customer?.phone ?? "—"),
           customerEmail: String(o.customer?.email ?? "—"),
           createdAt: String(o.createdAt ?? new Date().toISOString()),
-          total: Number(o.total ?? 0),
+          total: Number(o.total ?? 0) / 100,
           paymentStatus: (() => {
             // Prefer the real payment field written by the PayPlus webhook; fall back to the
             // legacy status-derived value for orders created before payment fields existed.
@@ -461,7 +461,7 @@ export function OrdersPage() {
             id: String(it?.id ?? `${o.id}-${idx}`),
             name: String(it?.title ?? it?.nameSnapshot ?? it?.name ?? "מוצר"),
             qty: Number(it?.qty ?? 1),
-            price: Number(it?.unitPrice ?? 0),
+            price: Number(it?.unitPrice ?? 0) / 100,
           })),
           engravingText: "",
           pendantShape: "",

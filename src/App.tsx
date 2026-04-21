@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import Icon from "./components/Icon";
-import { benefits, examples, featuredProducts, steps } from "./constants/mockData";
+import { benefits, examples, steps } from "./constants/mockData";
 import { getApiBaseUrl } from "./lib/apiBase";
 import { BrandWordmark } from "./lib/brand";
 import { loadBootstrapOnce } from "./lib/studioDataLoader";
@@ -42,6 +42,7 @@ const App = () => {
   } | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
   const [bootstrap, setBootstrap] = useState<any>(null);
+  const [bootstrapReady, setBootstrapReady] = useState(false);
 
   useEffect(() => {
     const apiBase = getApiBaseUrl();
@@ -96,6 +97,9 @@ const App = () => {
       })
       .catch(() => {
         if (mounted) setBootstrap(null);
+      })
+      .finally(() => {
+        if (mounted) setBootstrapReady(true);
       });
     return () => {
       mounted = false;
@@ -246,22 +250,24 @@ const App = () => {
         .map((x: any, idx: number) => ({
           id: String(x.id ?? `manual-${idx}`),
           name: String(x.name ?? "").trim() || "מוצר",
-          imageUrl: String(x.imageUrl ?? "").trim() || featuredProducts[0].imageUrl,
+          imageUrl: String(x.imageUrl ?? "").trim() || "",
           priceFrom: String(x.priceFrom ?? "").trim() || "₪0",
         }))
     : [];
-  const topSellersData = (topSellersRaw.length > 0
+  const topSellersData = (!bootstrapReady
+    ? []
+    : topSellersRaw.length > 0
     ? topSellersRaw
         .filter((x: any) => x?.products)
         .map((x: any) => ({
           id: x.product_id,
           name: x.products?.title ?? "מוצר",
-          imageUrl: x.products?.image_url ?? featuredProducts[0].imageUrl,
+          imageUrl: x.products?.image_url ?? "",
           priceFrom: `₪${((x.products?.price ?? 0) / 100).toLocaleString("he-IL")}`,
         }))
     : manualTopSellers.length > 0
       ? manualTopSellers
-      : featuredProducts
+      : []
   ).slice(0, Number(topSellerSection.limit ?? 3));
 
   const legalDefaults: Record<"terms" | "privacy" | "usage", { title: string; html: string }> = {

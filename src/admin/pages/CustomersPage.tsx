@@ -1020,8 +1020,7 @@ export function CustomersPage() {
                   {pageItems.map((c) => (
                     <tr
                       key={c.id}
-                      onClick={() => setSelected(c)}
-                      style={{ cursor: "pointer", background: "transparent" }}
+                      style={{ cursor: "default", background: "transparent" }}
                       onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)")}
                       onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = "transparent")}
                     >
@@ -1081,7 +1080,7 @@ export function CustomersPage() {
                         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                           <button
                             type="button"
-                            onClick={() => setSelected(c)}
+                            onClick={() => toast("תצוגת פרטי לקוח מורחבת בוטלה", "info")}
                             style={{
                               background: "var(--input)",
                               border: "1px solid var(--border)",
@@ -1254,17 +1253,15 @@ export function CustomersPage() {
                 <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
                   {insights.recentRepeat.length ? (
                     insights.recentRepeat.map((c) => (
-                      <button
+                      <div
                         key={c.id}
-                        type="button"
-                        onClick={() => setSelected(c)}
                         style={{
                           background: "transparent",
                           border: "1px solid var(--border)",
                           borderRadius: 12,
                           padding: "10px 10px",
                           textAlign: "right",
-                          cursor: "pointer",
+                          cursor: "default",
                           color: "var(--foreground-secondary)",
                           display: "flex",
                           alignItems: "center",
@@ -1276,7 +1273,7 @@ export function CustomersPage() {
                           {c.fullName}
                         </span>
                         <span style={{ fontSize: 11, color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>{fmtMoney(c.totalSpend)}</span>
-                      </button>
+                      </div>
                     ))
                   ) : (
                     <div style={{ fontSize: 12, color: "var(--muted-foreground)" }}>אין פריטים להצגה.</div>

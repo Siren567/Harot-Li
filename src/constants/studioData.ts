@@ -152,7 +152,7 @@ export const studioMaterials = [
 
 export const studioShippingMethods = [
   { id: "pickup", label: "איסוף עצמי", fee: 0, eta: "1-3 ימי עסקים", detail: "בתיאום מול הסטודיו" },
-  { id: "home", label: "שליח עד הבית", fee: 35, eta: "2-5 ימי עסקים" }
+  { id: "home", label: "שליח עד הבית", fee: 0, eta: "2-5 ימי עסקים" }
 ] as const;
 
 export const studioPayments = [

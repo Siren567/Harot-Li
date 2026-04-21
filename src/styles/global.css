@@ -601,7 +601,7 @@ textarea:focus-visible {
   align-items: stretch;
   width: 100%;
   max-width: 920px;
-  margin-inline: auto;
+  margin-inline: 0 auto;
 }
 
 .studio-products-grid.studio-products-grid--uniform .studio-product-card {
@@ -838,8 +838,7 @@ textarea:focus-visible {
 }
 
 .studio-control-panel label,
-.studio-checkout-form label,
-.studio-slider-row label {
+.studio-checkout-form label {
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -870,6 +869,7 @@ textarea:focus-visible {
 
 /** מוקאפ + גלריה כיחידה ויזואלית; לחיצה על ממוזאירה פותחת lightbox (לא מחליפה את תמונת ה־3D). */
 .studio-preview-mockup-block {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -986,37 +986,18 @@ textarea:focus-visible {
 
 .studio-subgallery {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 12px;
-  justify-content: center;
-  overflow-x: auto;
+  justify-content: flex-start;
+  overflow: visible;
   max-width: 100%;
 }
 
-.studio-gallery-carousel {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 8px;
+.studio-gallery-grid-wrap {
+  display: block;
   width: 100%;
   margin-top: 6px;
-}
-
-.studio-gallery-nav {
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  border: 1px solid #d8c6b6;
-  background: #fff;
-  color: #6f5644;
-  font-size: 1.15rem;
-  line-height: 1;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
 }
 
 .studio-subgallery-thumb {
@@ -1159,7 +1140,7 @@ textarea:focus-visible {
 
 .studio-option-tiles-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1175,10 +1156,32 @@ textarea:focus-visible {
   font-size: .8rem;
   color: #6f5644;
   cursor: pointer;
+  flex-wrap: wrap;
 }
 
 .studio-option-tile input {
   accent-color: #9b6a45;
+}
+
+.studio-option-tile--font select {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.studio-option-tile--gift {
+  align-items: flex-start;
+}
+
+.studio-gift-note-input {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid #e4d4c5;
+  border-radius: 8px;
+  background: #fff;
+  color: #3d2a1b;
+  padding: 8px 10px;
+  resize: vertical;
+  min-height: 58px;
 }
 
 .studio-engraving-input-list {
@@ -1192,7 +1195,7 @@ textarea:focus-visible {
   border: 1px solid #e9d9ca;
   border-radius: 10px;
   background: #fff;
-  padding: 8px 44px 8px 38px;
+  padding: 8px 12px 8px 42px;
   transition: border-color .16s ease, box-shadow .16s ease;
 }
 
@@ -1212,6 +1215,12 @@ textarea:focus-visible {
   outline: none;
   padding: 0;
   text-align: right;
+}
+
+.studio-engraving-input--multiline {
+  min-height: 56px;
+  resize: vertical;
+  line-height: 1.45;
 }
 
 .studio-engraving-title-row {
@@ -1287,6 +1296,11 @@ textarea:focus-visible {
   transform: translateY(-50%);
 }
 
+.studio-icon-btn--emoji-left {
+  right: auto;
+  left: 8px;
+}
+
 .studio-icon-btn:hover:not(:disabled) {
   opacity: 1;
 }
@@ -1311,6 +1325,15 @@ textarea:focus-visible {
   box-shadow: 0 8px 16px rgba(26, 18, 12, 0.12);
 }
 
+.studio-emoji-popover--full {
+  left: 8px;
+  right: auto;
+  width: min(320px, calc(100vw - 40px));
+  grid-template-columns: repeat(8, 1fr);
+  max-height: 220px;
+  overflow: auto;
+}
+
 .studio-emoji-choice {
   border: 0;
   background: transparent;
@@ -1318,6 +1341,21 @@ textarea:focus-visible {
   line-height: 1;
   padding: 2px;
   cursor: pointer;
+}
+
+.studio-help-btn--mockup-corner {
+  position: absolute;
+  top: 8px;
+  inset-inline-end: 8px;
+  z-index: 5;
+}
+
+.studio-engraving-help-pop--mockup {
+  position: absolute;
+  top: 36px;
+  inset-inline-end: 8px;
+  z-index: 5;
+  max-width: 260px;
 }
 
 .studio-engraving-list {
@@ -1335,13 +1373,6 @@ textarea:focus-visible {
 .studio-engrave-text.secular { font-family: "Secular One", sans-serif; }
 .studio-engrave-text.frank { font-family: "Frank Ruhl Libre", serif; }
 .studio-engrave-text.varela { font-family: "Varela Round", sans-serif; }
-
-.studio-slider-row {
-  margin-top: 10px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
 
 .studio-checkout-grid {
   display: grid;
