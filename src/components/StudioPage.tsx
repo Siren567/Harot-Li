@@ -835,16 +835,13 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         <strong className="studio-product-price">{shekel(product.price)}</strong>
         <div className="studio-swatch-row">
           {product.colors.map((color, index) => (
-            <button
+            <span
               key={`${product.id}-${color.name}-${index}`}
-              type="button"
-              className={`studio-color-swatch ${index === selectedIndex ? "active" : ""}`}
+              className={`studio-color-swatch ${index === selectedIndex ? "active" : ""} is-readonly`}
               style={{ ["--swatch" as string]: color.swatch, opacity: color.stock > 0 ? 1 : 0.35 }}
               aria-label={color.name}
-              onClick={(event) => {
-                event.stopPropagation();
-                setSelectedColorByProduct((prev) => ({ ...prev, [product.id]: index }));
-              }}
+              role="img"
+              aria-hidden={index !== selectedIndex}
             />
           ))}
         </div>

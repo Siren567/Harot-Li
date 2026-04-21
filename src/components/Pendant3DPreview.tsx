@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
 type Pendant3DPreviewProps = {
@@ -11,8 +10,6 @@ type Pendant3DPreviewProps = {
   engravingText: string;
   autoRotate?: boolean;
 };
-
-const DEFAULT_MODEL_URL = "/models/pendant.glb";
 
 function clampEngravingText(raw: string) {
   const trimmed = String(raw ?? "").trim();
@@ -25,66 +22,225 @@ function clampEngravingText(raw: string) {
     .join("\n");
 }
 
+function drawEngravingCanvas(
+  canvas: HTMLCanvasElement,
+  text: string,
+  invert = false
+) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const w = canvas.width;
+  const h = canvas.height;
+  // Base color: white for bump (high = no displacement), black text = displaced inward.
+  const base = invert ? "#000000" : "#ffffff";
+  const ink = invert ? "#ffffff" : "#1a1a1a";
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, w, h);
+
+  // Soft vignette to concentrate detail at center.
+  const safe = clampEngravingText(text);
+  if (!safe) return;
+
+  const lines = safe.split("\n");
+  const maxLen = Math.max(...lines.map((l) => l.length), 1);
+  const fontSize = Math.max(58, Math.min(150, Math.round(260 - maxLen * 10)));
+  const lineHeight = Math.round(fontSize * 1.22);
+  const blockH = lineHeight * lines.length;
+  const startY = Math.round(h * 0.5 - blockH / 2 + lineHeight * 0.55);
+
+  ctx.font = `600 ${fontSize}px "Heebo", "Cormorant Garamond", "Times New Roman", serif`;
+  ctx.fillStyle = ink;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  // subtle tracking for elegance
+  for (let i = 0; i < lines.length; i += 1) {
+    ctx.fillText(lines[i], w * 0.5, startY + i * lineHeight);
+  }
+}
+
 export default function Pendant3DPreview({
-  modelUrl = DEFAULT_MODEL_URL,
   fallbackImageUrl,
   metalColor,
   engravingText,
   autoRotate = true,
 }: Pendant3DPreviewProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
-  const materialRef = useRef<THREE.MeshStandardMaterial | null>(null);
-  const textureRef = useRef<THREE.CanvasTexture | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
+  const frontMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
+  const sideMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
+  const backMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
+  const bailMatRef = useRef<THREE.MeshStandardMaterial | null>(null);
+  const bumpCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const roughCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const bumpTexRef = useRef<THREE.CanvasTexture | null>(null);
+  const roughTexRef = useRef<THREE.CanvasTexture | null>(null);
+  const [webglFailed, setWebglFailed] = useState(false);
 
-  const normalizedText = useMemo(() => clampEngravingText(engravingText), [engravingText]);
+  const normalizedText = useMemo(
+    () => clampEngravingText(engravingText),
+    [engravingText]
+  );
 
   useEffect(() => {
     const mountEl = mountRef.current;
     if (!mountEl) return;
 
-    let rafId = 0;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: "high-performance",
+      });
+    } catch {
+      setWebglFailed(true);
+      return;
+    }
+
+    const isMobile =
+      typeof window !== "undefined" && window.innerWidth <= 640;
+
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2));
     renderer.setClearColor(0x000000, 0);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
     mountEl.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
-    camera.position.set(0, 0.05, 3.35);
+    const camera = new THREE.PerspectiveCamera(28, 1, 0.1, 50);
+    camera.position.set(0, 0, 5.2);
 
+    // Environment reflections (no external HDR needed).
     const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(renderer) as unknown as THREE.Scene, 0.04).texture;
+    scene.environment = pmrem.fromScene(
+      new RoomEnvironment() as unknown as THREE.Scene,
+      0.04
+    ).texture;
 
-    const key = new THREE.DirectionalLight(0xffffff, 1.25);
-    key.position.set(3, 3.6, 4.2);
-    key.castShadow = true;
-    key.shadow.mapSize.width = 1024;
-    key.shadow.mapSize.height = 1024;
-    key.shadow.bias = -0.00015;
+    // Lighting
+    const key = new THREE.DirectionalLight(0xffffff, 1.35);
+    key.position.set(2.4, 3.2, 3.8);
     scene.add(key);
 
-    const fill = new THREE.DirectionalLight(0xfff5ea, 0.6);
-    fill.position.set(-2.6, 1.7, 1.8);
+    const fill = new THREE.DirectionalLight(0xfff0dc, 0.55);
+    fill.position.set(-2.8, 1.2, 2.0);
     scene.add(fill);
 
-    const ambient = new THREE.HemisphereLight(0xffffff, 0xb9987d, 0.38);
-    scene.add(ambient);
+    const rim = new THREE.DirectionalLight(0xffe9c9, 0.5);
+    rim.position.set(0, -2.4, -2.6);
+    scene.add(rim);
 
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x9a8470, 0.28));
+
+    // Engraving textures (bump + roughness) from a shared canvas
+    const bumpCanvas = document.createElement("canvas");
+    bumpCanvas.width = 1024;
+    bumpCanvas.height = 1024;
+    bumpCanvasRef.current = bumpCanvas;
+
+    const roughCanvas = document.createElement("canvas");
+    roughCanvas.width = 1024;
+    roughCanvas.height = 1024;
+    roughCanvasRef.current = roughCanvas;
+
+    drawEngravingCanvas(bumpCanvas, normalizedText, false);
+    drawEngravingCanvas(roughCanvas, normalizedText, true);
+
+    const bumpTex = new THREE.CanvasTexture(bumpCanvas);
+    bumpTex.colorSpace = THREE.NoColorSpace;
+    bumpTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    bumpTex.needsUpdate = true;
+    bumpTexRef.current = bumpTex;
+
+    const roughTex = new THREE.CanvasTexture(roughCanvas);
+    roughTex.colorSpace = THREE.NoColorSpace;
+    roughTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    roughTex.needsUpdate = true;
+    roughTexRef.current = roughTex;
+
+    // Pendant: circular disc via CylinderGeometry so we get 3 material slots
+    // [0] side, [1] top cap (front), [2] bottom cap (back).
+    const radius = 1.05;
+    const thickness = 0.16;
+    const discGeo = new THREE.CylinderGeometry(radius, radius, thickness, 96, 1);
+    // Rotate so the flat faces point at camera.
+    discGeo.rotateX(Math.PI / 2);
+
+    const base = new THREE.Color(metalColor);
+
+    const frontMat = new THREE.MeshStandardMaterial({
+      color: base.clone(),
+      metalness: 1.0,
+      roughness: 0.28,
+      bumpMap: bumpTex,
+      bumpScale: 0.04,
+      roughnessMap: roughTex,
+      envMapIntensity: 1.15,
+    });
+    const backMat = new THREE.MeshStandardMaterial({
+      color: base.clone(),
+      metalness: 1.0,
+      roughness: 0.32,
+      envMapIntensity: 1.0,
+    });
+    const sideMat = new THREE.MeshStandardMaterial({
+      color: base.clone(),
+      metalness: 1.0,
+      roughness: 0.22,
+      envMapIntensity: 1.15,
+    });
+    frontMatRef.current = frontMat;
+    backMatRef.current = backMat;
+    sideMatRef.current = sideMat;
+
+    // Cylinder material order: [side, top, bottom]. After rotateX,
+    // "top" cap now faces +Z (toward camera) = front.
+    const disc = new THREE.Mesh(discGeo, [sideMat, frontMat, backMat]);
+
+    // Polished bevel ring around the edge for a premium rim.
+    const rimGeo = new THREE.TorusGeometry(radius - 0.002, 0.055, 24, 128);
+    const rimMat = new THREE.MeshStandardMaterial({
+      color: base.clone(),
+      metalness: 1.0,
+      roughness: 0.14,
+      envMapIntensity: 1.25,
+    });
+    bailMatRef.current = rimMat; // reuse ref for rim+bail shared tint
+    const frontRim = new THREE.Mesh(rimGeo, rimMat);
+    frontRim.position.z = thickness / 2 - 0.01;
+    const backRim = new THREE.Mesh(rimGeo, rimMat);
+    backRim.position.z = -thickness / 2 + 0.01;
+
+    // Bail (small ring at top to hold the chain)
+    const bailGeo = new THREE.TorusGeometry(0.14, 0.035, 20, 64);
+    const bail = new THREE.Mesh(bailGeo, rimMat);
+    bail.position.set(0, radius + 0.11, 0);
+
+    const pendant = new THREE.Group();
+    pendant.add(disc, frontRim, backRim, bail);
+    pendant.position.y = -0.05;
+    scene.add(pendant);
+
+    // Controls: limited drag rotation
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enablePan = false;
     controls.enableZoom = false;
     controls.enableDamping = true;
-    controls.dampingFactor = 0.07;
-    controls.rotateSpeed = 0.62;
-    controls.minPolarAngle = Math.PI / 2 - 0.33;
-    controls.maxPolarAngle = Math.PI / 2 + 0.28;
+    controls.dampingFactor = 0.09;
+    controls.rotateSpeed = 0.55;
+    controls.minPolarAngle = Math.PI / 2 - 0.35;
+    controls.maxPolarAngle = Math.PI / 2 + 0.35;
+    (controls as unknown as { minAzimuthAngle: number }).minAzimuthAngle = -0.7;
+    (controls as unknown as { maxAzimuthAngle: number }).maxAzimuthAngle = 0.7;
     controls.autoRotate = autoRotate;
-    controls.autoRotateSpeed = 0.45;
+    controls.autoRotateSpeed = 0.6;
     controls.target.set(0, 0, 0);
+
+    // When user drags, stop auto-rotate
+    const onStart = () => {
+      controls.autoRotate = false;
+    };
+    (controls as unknown as { addEventListener: (t: string, h: () => void) => void }).addEventListener("start", onStart);
 
     const resize = () => {
       const w = Math.max(120, mountEl.clientWidth || 1);
@@ -94,169 +250,88 @@ export default function Pendant3DPreview({
       camera.updateProjectionMatrix();
     };
     resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(mountEl);
 
-    const resizeObserver = new ResizeObserver(() => resize());
-    resizeObserver.observe(mountEl);
-
-    const engravingCanvas = document.createElement("canvas");
-    engravingCanvas.width = 1024;
-    engravingCanvas.height = 1024;
-    const engravingCtx = engravingCanvas.getContext("2d");
-
-    const engravingTexture = new THREE.CanvasTexture(engravingCanvas);
-    engravingTexture.flipY = false;
-    engravingTexture.colorSpace = THREE.SRGBColorSpace;
-    engravingTexture.wrapS = THREE.ClampToEdgeWrapping;
-    engravingTexture.wrapT = THREE.ClampToEdgeWrapping;
-    engravingTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-    textureRef.current = engravingTexture;
-
-    const pendantMaterial = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(metalColor),
-      metalness: 1,
-      roughness: 0.28,
-      map: engravingTexture,
-      bumpMap: engravingTexture,
-      bumpScale: 0.01,
-      envMapIntensity: 1,
-    });
-    materialRef.current = pendantMaterial;
-
-    const drawEngraving = (textValue: string) => {
-      if (!engravingCtx) return;
-      const ctx = engravingCtx;
-      const w = engravingCanvas.width;
-      const h = engravingCanvas.height;
-      ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, w, h);
-
-      const safeText = clampEngravingText(textValue);
-      if (safeText) {
-        const lines = safeText.split("\n");
-        const maxLen = Math.max(...lines.map((line) => line.length), 1);
-        const fontSize = Math.max(44, Math.min(96, Math.round(170 - maxLen * 5.5)));
-        const lineHeight = Math.round(fontSize * 1.18);
-        const blockHeight = lineHeight * lines.length;
-        const startY = Math.round(h * 0.48 - blockHeight / 2 + lineHeight * 0.8);
-        ctx.font = `700 ${fontSize}px Heebo, Arial, sans-serif`;
-        ctx.fillStyle = "#444444";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        for (let i = 0; i < lines.length; i += 1) {
-          ctx.fillText(lines[i], w * 0.5, startY + i * lineHeight);
-        }
-      }
-      engravingTexture.needsUpdate = true;
-    };
-
-    drawEngraving(normalizedText);
-
-    const loader = new GLTFLoader();
-    let mounted = true;
-    loader.load(
-      modelUrl,
-      (gltf: { scene: THREE.Group }) => {
-        if (!mounted) return;
-        const root = gltf.scene;
-        const box = new THREE.Box3().setFromObject(root);
-        const size = new THREE.Vector3();
-        const center = new THREE.Vector3();
-        box.getSize(size);
-        box.getCenter(center);
-        root.position.sub(center);
-        const maxAxis = Math.max(size.x, size.y, size.z) || 1;
-        const scale = 1.75 / maxAxis;
-        root.scale.setScalar(scale);
-        root.rotation.y = 0.08;
-
-        root.traverse((obj: THREE.Object3D) => {
-          if (obj instanceof THREE.Mesh) {
-            obj.castShadow = true;
-            obj.receiveShadow = true;
-            obj.material = pendantMaterial;
-          }
-        });
-
-        scene.add(root);
-        setLoadFailed(false);
-        setIsLoading(false);
-      },
-      undefined,
-      () => {
-        if (!mounted) return;
-        setLoadFailed(true);
-        setIsLoading(false);
-      }
-    );
-
-    const render = () => {
+    let rafId = 0;
+    const loop = () => {
       controls.update();
       renderer.render(scene, camera);
-      rafId = window.requestAnimationFrame(render);
+      rafId = window.requestAnimationFrame(loop);
     };
-    rafId = window.requestAnimationFrame(render);
+    rafId = window.requestAnimationFrame(loop);
 
     return () => {
-      mounted = false;
       window.cancelAnimationFrame(rafId);
-      resizeObserver.disconnect();
+      ro.disconnect();
+      (controls as unknown as { removeEventListener: (t: string, h: () => void) => void }).removeEventListener("start", onStart);
       controls.dispose();
       pmrem.dispose();
-      pendantMaterial.dispose();
-      engravingTexture.dispose();
+      discGeo.dispose();
+      rimGeo.dispose();
+      bailGeo.dispose();
+      frontMat.dispose();
+      backMat.dispose();
+      sideMat.dispose();
+      rimMat.dispose();
+      bumpTex.dispose();
+      roughTex.dispose();
       renderer.dispose();
-      mountEl.removeChild(renderer.domElement);
+      if (renderer.domElement.parentNode === mountEl) {
+        mountEl.removeChild(renderer.domElement);
+      }
     };
-  }, [autoRotate, modelUrl]);
+  }, [autoRotate]);
 
+  // React to metal color changes
   useEffect(() => {
-    if (!materialRef.current) return;
-    materialRef.current.color.set(metalColor);
-    materialRef.current.needsUpdate = true;
+    const c = new THREE.Color(metalColor);
+    [frontMatRef, backMatRef, sideMatRef, bailMatRef].forEach((ref) => {
+      if (ref.current) {
+        ref.current.color.copy(c);
+        ref.current.needsUpdate = true;
+      }
+    });
   }, [metalColor]);
 
+  // React to engraving text changes
   useEffect(() => {
-    const texture = textureRef.current;
-    const mat = materialRef.current;
-    if (!texture || !mat) return;
-    const canvas = texture.image as HTMLCanvasElement;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    const safeText = clampEngravingText(normalizedText);
-    if (safeText) {
-      const lines = safeText.split("\n");
-      const maxLen = Math.max(...lines.map((line) => line.length), 1);
-      const fontSize = Math.max(44, Math.min(96, Math.round(170 - maxLen * 5.5)));
-      const lineHeight = Math.round(fontSize * 1.18);
-      const blockHeight = lineHeight * lines.length;
-      const startY = Math.round(canvas.height * 0.48 - blockHeight / 2 + lineHeight * 0.8);
-      ctx.font = `700 ${fontSize}px Heebo, Arial, sans-serif`;
-      ctx.fillStyle = "#444444";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      for (let i = 0; i < lines.length; i += 1) {
-        ctx.fillText(lines[i], canvas.width * 0.5, startY + i * lineHeight);
-      }
-    }
-    texture.needsUpdate = true;
-    mat.needsUpdate = true;
+    const bc = bumpCanvasRef.current;
+    const rc = roughCanvasRef.current;
+    const bt = bumpTexRef.current;
+    const rt = roughTexRef.current;
+    if (!bc || !rc || !bt || !rt) return;
+    drawEngravingCanvas(bc, normalizedText, false);
+    drawEngravingCanvas(rc, normalizedText, true);
+    bt.needsUpdate = true;
+    rt.needsUpdate = true;
   }, [normalizedText]);
 
   return (
     <div className="studio-three-wrap">
       <div ref={mountRef} className="studio-three-canvas-host" />
-      {isLoading ? <div className="studio-three-overlay">טוען תצוגת תלת מימד...</div> : null}
-      {loadFailed ? (
+      {webglFailed ? (
         <div className="studio-three-fallback">
-          {fallbackImageUrl ? <img src={fallbackImageUrl} alt="" loading="lazy" decoding="async" /> : <span>תצוגת תלת מימד אינה זמינה כרגע</span>}
+          {fallbackImageUrl ? (
+            <img src={fallbackImageUrl} alt="" loading="lazy" decoding="async" />
+          ) : (
+            <div
+              className="studio-three-flat-pendant"
+              style={{ ["--metal" as string]: metalColor }}
+              aria-label="תצוגת תליון"
+            >
+              <div className="studio-three-flat-disc">
+                <span className="studio-three-flat-text">
+                  {normalizedText || ""}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
+      <div className="studio-three-hint" aria-hidden="true">
+        גררו לסיבוב קל
+      </div>
     </div>
   );
 }
