@@ -638,7 +638,15 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
             ]
           })
         });
-        let data: { ok?: boolean; order?: { orderNumber?: string; paymentUrl?: string | null; paymentMethod?: string }; message?: string; hint?: string } = {};
+        let data: {
+          ok?: boolean;
+          paymentMethod?: string;
+          paymentUrl?: string | null;
+          paymentStatus?: string;
+          order?: { orderNumber?: string; paymentUrl?: string | null; paymentMethod?: string };
+          message?: string;
+          hint?: string;
+        } = {};
         try {
           const text = await res.text();
           if (text) data = JSON.parse(text);
@@ -657,16 +665,21 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           );
           return;
         }
+        // PayPlus: redirect to the hosted payment page before showing the
+        // success screen. The order is persisted with paymentStatus=pending and
+        // the webhook finalizes it once PayPlus confirms.
+        if (customer.paymentMethod === "payplus") {
+          const paymentUrl = data.paymentUrl ?? data.order?.paymentUrl ?? null;
+          if (!paymentUrl) {
+            setCouponMsg("לא ניתן היה לאתחל את התשלום. נא לנסות שוב.");
+            return;
+          }
+          setCouponMsg("מעביר אותך לתשלום...");
+          window.location.href = paymentUrl;
+          return;
+        }
         setOrderNumber(data.order.orderNumber);
         setStep(3);
-        // PayPlus prep: when the real integration lands, the backend will return a
-        // paymentUrl for payplus orders and we redirect the user to the hosted page.
-        if (customer.paymentMethod === "payplus") {
-          setCouponMsg("מעביר אותך לתשלום...");
-          if (data.order.paymentUrl) {
-            window.location.href = data.order.paymentUrl;
-          }
-        }
       } catch {
         setCouponMsg(
           "לא ניתן להתחבר לשרת. ודאו שהבקאנד רץ (למשל npm run dev ב-backend) ושהאתר נטען דרך npm run dev כדי ש־/api יעבוד."

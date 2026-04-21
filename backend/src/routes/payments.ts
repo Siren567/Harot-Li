@@ -9,10 +9,9 @@ import {
   isGrowNotifyAuthorized,
 } from "../services/growPayments.service.js";
 import {
-  handlePaymentFailure,
-  handlePaymentSuccess,
   parseWebhookEvent,
-  verifyWebhookSignature,
+  verifyPayPlusWebhookSignature,
+  getPayPlusConfig,
 } from "../services/payplus.service.js";
 import type { Request, Response, NextFunction } from "express";
 
@@ -68,57 +67,91 @@ paymentsRouter.post("/grow/create-link", async (req, res) => {
 });
 
 /**
- * Middleware placeholder that will verify the PayPlus webhook signature before
- * the handler runs. Today it passes through (with logging) so the endpoint is
- * reachable during development — the real HMAC check is implemented once
- * PAYPLUS_WEBHOOK_SECRET is provisioned.
- *
- * The route intentionally does NOT require admin auth: PayPlus calls it
- * server-to-server.
+ * Webhook verification middleware. The route is public (no admin auth) because
+ * PayPlus calls it server-to-server. Signature verification runs against the
+ * captured raw body; enforcement is gated by PAYPLUS_VERIFY_WEBHOOK=1 so dev
+ * environments without a shared secret can still exercise the flow.
  */
-function verifyPaymentWebhook(req: Request, _res: Response, next: NextFunction) {
+function verifyPaymentWebhook(req: Request, res: Response, next: NextFunction) {
   const raw = (req as any).rawBody as string | undefined;
-  const ok = verifyWebhookSignature(req.headers, raw ?? JSON.stringify(req.body ?? {}));
-  (req as any).payplusSignatureVerified = ok;
-  console.log(`[payplus.webhook] received verified=${ok}`);
-  // TODO: once verifyWebhookSignature returns a real result, reject with 401 when !ok
-  // (except in a dev-bypass env flag).
-  next();
+  const result = verifyPayPlusWebhookSignature(req.headers, raw ?? JSON.stringify(req.body ?? {}));
+  (req as any).payplusSignatureVerified = result.verified;
+  console.log(`[payplus.webhook] signature verified=${result.verified} reason=${result.reason}`);
+
+  let enforce = false;
+  try {
+    enforce = getPayPlusConfig().verifyWebhook;
+  } catch {
+    enforce = false;
+  }
+  if (enforce && !result.verified) {
+    return res.status(401).json({ ok: false, error: "INVALID_SIGNATURE" });
+  }
+  return next();
 }
 
 paymentsRouter.post("/payplus/webhook", verifyPaymentWebhook, async (req, res) => {
   const event = parseWebhookEvent(req.body);
-  console.log(`[payplus.webhook] event=${event.type}`);
+  console.log(`[payplus.webhook] event outcome=${event.outcome} orderId=${event.orderId} paymentId=${event.paymentId ?? ""}`);
 
-  if (event.type === "unknown") {
+  if (!event.orderId || event.outcome === "unknown") {
+    // Acknowledge 200 so PayPlus doesn't retry storms; unknowns are logged for
+    // manual investigation.
     return res.status(200).json({ ok: true, ignored: true });
   }
 
   try {
-    // orderId comes from provider metadata — never trust the client.
+    // orderId comes from provider `more_info` — we never trust the browser.
     const order = await prisma.order.findUnique({ where: { id: event.orderId } });
     if (!order) {
       console.warn(`[payplus.webhook] order not found id=${event.orderId}`);
       return res.status(404).json({ ok: false, error: "ORDER_NOT_FOUND" });
     }
 
-    if (event.type === "payment.succeeded") {
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { paymentStatus: "paid", paymentId: event.paymentId || null } as any,
-      });
-      console.log(`[payplus.webhook] order ${order.orderNumber} -> paid`);
-      await handlePaymentSuccess(event);
-    } else if (event.type === "payment.failed") {
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { paymentStatus: "failed", paymentId: event.paymentId || null } as any,
-      });
-      console.log(`[payplus.webhook] order ${order.orderNumber} -> failed`);
-      await handlePaymentFailure(event);
+    const currentPaymentStatus = String((order as any).paymentStatus ?? "pending");
+
+    // Idempotency: if this order is already terminal, acknowledge without
+    // re-processing. PayPlus may deliver the same callback multiple times.
+    if (currentPaymentStatus === "paid" && event.outcome === "paid") {
+      console.log(`[payplus.webhook] duplicate paid callback for ${order.orderNumber}, ignoring`);
+      return res.status(200).json({ ok: true, duplicate: true });
+    }
+    if (currentPaymentStatus === "paid" && event.outcome !== "paid") {
+      console.warn(`[payplus.webhook] ignoring ${event.outcome} callback for already-paid order ${order.orderNumber}`);
+      return res.status(200).json({ ok: true, ignored: true });
     }
 
-    return res.json({ ok: true });
+    if (event.outcome === "paid") {
+      await prisma.$transaction(async (tx) => {
+        await tx.order.update({
+          where: { id: order.id },
+          data: { paymentStatus: "paid", paymentId: event.paymentId || null, status: "PAID" } as any,
+        });
+        if (order.couponId) {
+          const existing = await tx.couponRedemption.findFirst({ where: { orderId: order.id } });
+          if (!existing) {
+            await tx.couponRedemption.create({
+              data: {
+                couponId: order.couponId,
+                customerId: order.customerId,
+                orderId: order.id,
+                discountAmount: order.discountAmount,
+              },
+            });
+            await tx.coupon.update({ where: { id: order.couponId }, data: { usageCount: { increment: 1 } } });
+          }
+        }
+      });
+      console.log(`[payplus.webhook] order ${order.orderNumber} -> paid`);
+    } else if (event.outcome === "failed" || event.outcome === "cancelled") {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { paymentStatus: event.outcome, paymentId: event.paymentId || (order as any).paymentId || null } as any,
+      });
+      console.log(`[payplus.webhook] order ${order.orderNumber} -> ${event.outcome}`);
+    }
+
+    return res.status(200).json({ ok: true });
   } catch (err: any) {
     console.error("[payplus.webhook] FAILED", err?.message ?? err);
     return res.status(500).json({ ok: false, error: "WEBHOOK_PROCESSING_FAILED" });
