@@ -123,46 +123,23 @@ publicRouter.get("/products", async (_req, res) => {
     productsInFlight = (async () => {
       console.info("[GET /api/public/products] db-fingerprint=", JSON.stringify(getDatabaseFingerprint()));
       const rows = await prisma.product.findMany({
-      where: { isActive: true },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        basePrice: true,
-        salePrice: true,
-        imageUrl: true,
-        galleryImages: true,
-        allowCustomerImageUpload: true,
-        mainCategoryId: true,
-        mainCategory: { select: { id: true, name: true, slug: true, parentId: true, isActive: true } },
-        categories: { select: { category: { select: { id: true, name: true, slug: true, parentId: true, isActive: true } } } },
-        variants: {
-          where: { isActive: true },
-          orderBy: { createdAt: "asc" },
-          select: {
-            id: true,
-            color: true,
-            pendantType: true,
-            material: true,
-            stock: true,
-            lowThreshold: true,
-            priceOverride: true,
-            isActive: true,
-          },
+        include: {
+          categories: true,
+          variants: true,
+          mainCategory: true,
         },
-      },
       });
+      console.log("RAW ROWS COUNT:", Array.isArray(rows) ? rows.length : 0);
       console.info("[GET /api/public/products] prisma-rows=", Array.isArray(rows) ? rows.length : 0);
 
       const products = (rows ?? []).map((p: any) => {
       const rawCategoryRows = Array.isArray(p?.categories) ? p.categories : [];
       const allCategoryRows = rawCategoryRows
-        .map((x: any) => x?.category)
-        .filter((c: any): c is { id: string; name: string | null; slug: string | null; parentId: string | null; isActive: boolean } => Boolean(c && c.isActive));
-      const mainRaw = p.mainCategory && p.mainCategory.isActive ? p.mainCategory : null;
+        .map((x: any) => x?.category ?? x)
+        .filter((c: any): c is { id: string; name: string | null; slug: string | null; parentId: string | null; isActive?: boolean } => Boolean(c));
+      const mainRaw = p.mainCategory ?? null;
       const subRows = allCategoryRows
-        .filter((c: any) => c && c.id !== p.mainCategoryId && c.parentId === p.mainCategoryId && c.isActive !== false)
+        .filter((c: any) => c && c.id !== p.mainCategoryId && c.parentId === p.mainCategoryId)
         .sort((a: any, b: any) => String(a?.name ?? "").localeCompare(String(b?.name ?? ""), "he"));
       const subRawFirst = subRows[0] ?? null;
       const effectiveMain = mainRaw?.parentId ? allCategoryRows.find((c: any) => c?.id === mainRaw.parentId) ?? mainRaw : mainRaw;
@@ -173,7 +150,7 @@ publicRouter.get("/products", async (_req, res) => {
       const basePrice = Number(p.basePrice ?? 0) || 0;
       const salePrice = Number(p.salePrice ?? 0) || 0;
       const effectivePriceAgorot = salePrice > 0 && salePrice < basePrice ? salePrice : basePrice;
-      const variantsRaw: any[] = Array.isArray(p.variants) ? p.variants : [];
+      const variantsRaw: any[] = Array.isArray(p.variants) ? p.variants.filter((v: any) => v?.isActive !== false) : [];
       const studioColors = mapStudioColors(
         Array.from(
           new Set(
