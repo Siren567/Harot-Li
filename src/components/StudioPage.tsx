@@ -275,16 +275,16 @@ function getProductTotalStock(p: PublicProduct, colors: StudioColorRow[]): numbe
   return Math.max(0, Number(p.stock) || 0);
 }
 
-function resolveImageIndexForColor(product: StudioRuntimeProduct, color: StudioColorRow | null | undefined): number {
+function resolveImageIndexForColor(product: StudioRuntimeProduct, color: StudioColorRow | null | undefined): number | null {
   const images = Array.isArray(product.images) ? product.images : [];
-  if (images.length === 0 || !color?.colorKey) return 0;
+  if (images.length === 0 || !color?.colorKey) return null;
   const hints = COLOR_IMAGE_HINTS[color.colorKey] ?? [];
-  if (hints.length === 0) return 0;
+  if (hints.length === 0) return null;
   const idx = images.findIndex((url) => {
     const normalized = decodeURIComponent(String(url || "")).toLowerCase();
     return hints.some((hint) => normalized.includes(hint));
   });
-  return idx >= 0 ? idx : 0;
+  return idx >= 0 ? idx : null;
 }
 
 const ENGRAVE_MIN_PX = 8;
@@ -527,9 +527,11 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
   useEffect(() => {
     if (!activeProduct || !activeColor) return;
+    const selectedIdx = selectedColorByProduct[activeProduct.id] ?? 0;
     const imageIdx = resolveImageIndexForColor(activeProduct, activeColor);
-    setSelectedGalleryIndex((prev) => (prev === imageIdx ? prev : imageIdx));
-  }, [activeProduct, activeColor]);
+    const nextIdx = imageIdx ?? selectedIdx;
+    setSelectedGalleryIndex((prev) => (prev === nextIdx ? prev : nextIdx));
+  }, [activeProduct, activeColor, selectedColorByProduct]);
 
   useEffect(() => {
     const onDocPointerDown = (event: PointerEvent) => {
@@ -798,9 +800,9 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     const selectedIndex = selectedColorByProduct[product.id] ?? 0;
     const selectedColor = product.colors[selectedIndex] ?? product.colors[0] ?? null;
     const colorImageIndex = resolveImageIndexForColor(product, selectedColor);
+    const effectiveImageIndex = colorImageIndex ?? selectedIndex;
     const previewImage =
-      product.images[colorImageIndex] ??
-      product.images[selectedIndex] ??
+      product.images[effectiveImageIndex] ??
       product.images[0] ??
       product.image ??
       null;
@@ -1128,7 +1130,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   </div>
                 </div>
 
-                <div className={`studio-personalization-tile studio-personalization-tile--gift ${giftWrap ? "is-active" : ""}`}>
+                <div
+                  className={`studio-personalization-tile studio-personalization-tile--gift ${giftWrap ? "is-active" : ""}`}
+                  onClick={() => {
+                    if (!giftWrap) setGiftWrap(true);
+                  }}
+                >
                   <button
                     type="button"
                     className="studio-personalization-btn studio-personalization-btn--gift"
@@ -1144,7 +1151,11 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                       <span className="studio-personalization-value studio-gift-state">{giftWrap ? "פעיל" : "כבוי"}</span>
                     </span>
                   </button>
-                  <div className={`studio-gift-reveal-inline ${giftWrap ? "open" : ""}`} aria-hidden={!giftWrap}>
+                  <div
+                    className={`studio-gift-reveal-inline ${giftWrap ? "open" : ""}`}
+                    aria-hidden={!giftWrap}
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {giftWrap ? (
                       <textarea
                         className="studio-gift-note-input"
