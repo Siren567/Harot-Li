@@ -956,6 +956,87 @@ textarea:focus-visible {
   font-size: .82rem;
 }
 
+.studio-personalization-tile--pendant-type {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.studio-pendant-type-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.studio-pendant-type-option {
+  flex: 1 1 auto;
+  min-width: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  border: 1px solid #e6d7c9;
+  background: #fffaf5;
+  color: #5a4633;
+  font-size: .78rem;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, transform .08s ease;
+}
+.studio-pendant-type-option:hover {
+  border-color: #c9a77a;
+}
+.studio-pendant-type-option.is-selected {
+  border-color: #8b5e3c;
+  background: #fff3e3;
+  box-shadow: 0 0 0 1px rgba(139, 94, 60, .18) inset;
+}
+.studio-pendant-type-glyph {
+  width: 22px;
+  height: 22px;
+  background: currentColor;
+  color: #8b5e3c;
+  opacity: .85;
+  display: inline-block;
+}
+.studio-pendant-type-glyph--circle { border-radius: 50%; }
+.studio-pendant-type-glyph--square { border-radius: 5px; }
+.studio-pendant-type-glyph--rectangle {
+  width: 28px;
+  height: 12px;
+  border-radius: 4px;
+}
+.studio-pendant-type-glyph--heart {
+  width: 22px;
+  height: 20px;
+  background: transparent;
+  position: relative;
+}
+.studio-pendant-type-glyph--heart::before,
+.studio-pendant-type-glyph--heart::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 12px;
+  height: 18px;
+  background: #8b5e3c;
+  border-radius: 12px 12px 0 0;
+  opacity: .85;
+}
+.studio-pendant-type-glyph--heart::before {
+  left: 1px;
+  transform: rotate(-45deg);
+  transform-origin: 50% 100%;
+}
+.studio-pendant-type-glyph--heart::after {
+  right: 1px;
+  transform: rotate(45deg);
+  transform-origin: 50% 100%;
+}
+.studio-pendant-type-label {
+  font-weight: 500;
+}
+
 .studio-three-hint {
   position: absolute;
   left: 50%;

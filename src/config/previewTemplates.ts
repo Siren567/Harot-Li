@@ -5,7 +5,34 @@
  * purely a renderer — all product-specific rules live here.
  */
 
-export type TemplateShape = "disc" | "tag" | "bar" | "heart";
+export type TemplateShape = "disc" | "tag" | "bar" | "heart" | "square";
+
+/**
+ * Canonical pendant-type identifiers used throughout the system (backend + studio + admin).
+ * Hebrew labels map 1:1 to these IDs; this is the single source of truth for the four types.
+ */
+export type PendantTypeId = "heart" | "circle" | "square" | "rectangle";
+
+export const PENDANT_TYPE_IDS: PendantTypeId[] = ["heart", "circle", "square", "rectangle"];
+
+/** Hebrew display label for each pendant type (used in storefront UI and in admin/cart labels). */
+export const PENDANT_TYPE_LABEL_HE: Record<PendantTypeId, string> = {
+  heart: "לב",
+  circle: "עיגול",
+  square: "ריבוע",
+  rectangle: "מלבן ארוך",
+};
+
+/** Reverse lookup: accept Hebrew label, English id, common synonyms — return canonical id or null. */
+export function normalizePendantType(raw: string | null | undefined): PendantTypeId | null {
+  const s = String(raw ?? "").trim().toLowerCase();
+  if (!s) return null;
+  if (s === "heart" || s === "לב") return "heart";
+  if (s === "circle" || s === "round" || s === "disc" || s === "עיגול") return "circle";
+  if (s === "square" || s === "ריבוע") return "square";
+  if (s === "rectangle" || s === "rect" || s === "bar" || s === "tag" || s === "מלבן ארוך" || s.includes("מלבן")) return "rectangle";
+  return null;
+}
 
 export type PreviewTemplate = {
   id: string;
@@ -95,7 +122,38 @@ export const PREVIEW_TEMPLATES: Record<string, PreviewTemplate> = {
     textRotation: 0,
     textAlign: "center",
   },
+  square: {
+    id: "square",
+    shape: "square",
+    width: 1.85,
+    height: 1.85,
+    thickness: 0.14,
+    cornerRadius: 0.22,
+    hasBail: true,
+    safeArea: { x: 0.78, y: 0.78 },
+    minFontSize: 8,
+    maxFontSize: 44,
+    defaultFontSize: 26,
+    textRotation: 0,
+    textAlign: "center",
+  },
 };
+
+/** Map a pendant-type id to its rendering template. Single place to change geometry-per-type. */
+export function getTemplateForPendantType(type: PendantTypeId): PreviewTemplate {
+  switch (type) {
+    case "heart":
+      return PREVIEW_TEMPLATES.heart;
+    case "circle":
+      return PREVIEW_TEMPLATES.disc;
+    case "square":
+      return PREVIEW_TEMPLATES.square;
+    case "rectangle":
+      return PREVIEW_TEMPLATES.bar;
+    default:
+      return PREVIEW_TEMPLATES.disc;
+  }
+}
 
 function normalize(raw: string | null | undefined): string {
   return String(raw ?? "").toLowerCase().trim();

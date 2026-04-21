@@ -7,7 +7,14 @@ import { loadBootstrapOnce, loadPublicProductsOnce } from "../lib/studioDataLoad
 import { studioCategories, studioFonts, studioShippingMethods } from "../constants/studioData";
 import CheckoutForm, { type CheckoutFormData } from "./checkout/CheckoutForm";
 import Pendant3DPreview, { type EngravingLine } from "./Pendant3DPreview";
-import { getTemplateForProduct } from "../config/previewTemplates";
+import {
+  getTemplateForProduct,
+  getTemplateForPendantType,
+  normalizePendantType,
+  PENDANT_TYPE_IDS,
+  PENDANT_TYPE_LABEL_HE,
+  type PendantTypeId,
+} from "../config/previewTemplates";
 
 type StudioPageProps = {
   onBackToLanding: () => void;
@@ -336,6 +343,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productId, setProductId] = useState<string>("");
   const [selectedColorByProduct, setSelectedColorByProduct] = useState<Record<string, number>>({});
+  const [selectedPendantTypeByProduct, setSelectedPendantTypeByProduct] = useState<Record<string, PendantTypeId>>({});
 
   const [engravings, setEngravings] = useState<EngravingItem[]>([
     { id: "engraving-1", text: "לנצח שלך", font: "heebo", size: 28, x: 0, y: 0, angle: 0 },
@@ -542,7 +550,33 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const galleryUrls = activeProduct?.images?.length ? activeProduct.images : activeProduct?.image ? [activeProduct.image] : [];
   /** תמונת הרקע בתוך מודל החריטה — תמיד התמונה הראשית; שאר התמונות נצפות בגלריה למטה ובפופאפ בלבד. */
   const engraveStageImageUrl = galleryUrls[selectedGalleryIndex] ?? galleryUrls[0] ?? activeProduct?.image ?? null;
-  const previewTemplate = useMemo(() => getTemplateForProduct(activeProduct), [activeProduct]);
+  /**
+   * Allowed pendant types for the active product, derived from the distinct pendantType
+   * values across its active variants. Order matches PENDANT_TYPE_IDS for a stable UI.
+   * Empty array = the product has no pendant-type configuration → selector is hidden
+   * and the preview falls back to the category-based template.
+   */
+  const allowedPendantTypes = useMemo<PendantTypeId[]>(() => {
+    if (!activeProduct) return [];
+    const set = new Set<PendantTypeId>();
+    for (const c of activeProduct.colors ?? []) {
+      const id = normalizePendantType(c.pendantType ?? null);
+      if (id) set.add(id);
+    }
+    return PENDANT_TYPE_IDS.filter((id) => set.has(id));
+  }, [activeProduct]);
+
+  const activePendantType = useMemo<PendantTypeId | null>(() => {
+    if (!activeProduct || allowedPendantTypes.length === 0) return null;
+    const stored = selectedPendantTypeByProduct[activeProduct.id];
+    if (stored && allowedPendantTypes.includes(stored)) return stored;
+    return allowedPendantTypes[0];
+  }, [activeProduct, allowedPendantTypes, selectedPendantTypeByProduct]);
+
+  const previewTemplate = useMemo(
+    () => (activePendantType ? getTemplateForPendantType(activePendantType) : getTemplateForProduct(activeProduct)),
+    [activePendantType, activeProduct]
+  );
   const previewLines = useMemo<EngravingLine[]>(
     () =>
       engravings
@@ -560,6 +594,27 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
     setSelectedGalleryIndex(0);
     setShowProductColorPicker(false);
   }, [activeProduct?.id]);
+
+  // Keep the selected pendant type inside the product's allowed set. If the
+  // stored value is now disallowed (or absent), fall back to the first allowed
+  // type so the preview always reflects a valid configuration.
+  useEffect(() => {
+    if (!activeProduct) return;
+    const stored = selectedPendantTypeByProduct[activeProduct.id];
+    if (allowedPendantTypes.length === 0) {
+      if (stored) {
+        setSelectedPendantTypeByProduct((prev) => {
+          const next = { ...prev };
+          delete next[activeProduct.id];
+          return next;
+        });
+      }
+      return;
+    }
+    if (!stored || !allowedPendantTypes.includes(stored)) {
+      setSelectedPendantTypeByProduct((prev) => ({ ...prev, [activeProduct.id]: allowedPendantTypes[0] }));
+    }
+  }, [activeProduct, allowedPendantTypes, selectedPendantTypeByProduct]);
 
   // Clamp stale indices: if a product's color list shrinks (or the stored
   // index is out of range), reset it to 0 so the preview never reads a
@@ -753,7 +808,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                 qty,
                 unitPrice: Math.round((activeColor.price ?? activeProduct.price) * 100),
                 color: activeColor.name,
-                pendantShape: activeColor.pendantType ?? null,
+                pendantShape: activePendantType ? PENDANT_TYPE_LABEL_HE[activePendantType] : activeColor.pendantType ?? null,
                 material: activeColor.material ?? null,
                 engravingText: engravingSummary || null,
                 customerImageUrl: activeProduct.allowCustomerImageUpload ? customerImageDataUrl : null,
@@ -1146,6 +1201,34 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                     </div>
                   ) : null}
                 </div>
+
+                {allowedPendantTypes.length > 0 ? (
+                  <div className="studio-personalization-tile studio-personalization-tile--pendant-type">
+                    <span className="studio-personalization-label">סוג תליון</span>
+                    <div className="studio-pendant-type-options" role="radiogroup" aria-label="סוג תליון">
+                      {allowedPendantTypes.map((type) => {
+                        const selected = activePendantType === type;
+                        return (
+                          <button
+                            key={type}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            className={`studio-pendant-type-option ${selected ? "is-selected" : ""}`}
+                            onClick={() => {
+                              if (!activeProduct) return;
+                              setSelectedPendantTypeByProduct((prev) => ({ ...prev, [activeProduct.id]: type }));
+                            }}
+                            title={PENDANT_TYPE_LABEL_HE[type]}
+                          >
+                            <span className={`studio-pendant-type-glyph studio-pendant-type-glyph--${type}`} aria-hidden />
+                            <span className="studio-pendant-type-label">{PENDANT_TYPE_LABEL_HE[type]}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className={`studio-personalization-tile studio-personalization-tile--size ${activeEngraving ? "is-active" : ""}`}>
                   <div className="studio-personalization-size-head">

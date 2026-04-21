@@ -73,6 +73,7 @@ function buildShape(t: PreviewTemplate): THREE.Shape {
       return buildHeartShape(t.width, t.height);
     case "tag":
     case "bar":
+    case "square":
     default:
       return buildRoundedRectShape(t.width, t.height, t.cornerRadius);
   }

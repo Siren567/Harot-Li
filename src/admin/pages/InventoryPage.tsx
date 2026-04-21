@@ -5,6 +5,10 @@ import { Badge } from "../ui/badge";
 import { useToast } from "../ui/toast";
 import { apiFetch } from "../lib/api";
 import { InputGroup, TextInput } from "../ui/primitives";
+import { PENDANT_TYPE_IDS, PENDANT_TYPE_LABEL_HE } from "../../config/previewTemplates";
+
+const PENDANT_TYPE_HE_OPTIONS = PENDANT_TYPE_IDS.map((id) => PENDANT_TYPE_LABEL_HE[id]);
+const PENDANT_TYPE_HE_SET = new Set<string>(PENDANT_TYPE_HE_OPTIONS);
 import {
   AlertTriangle,
   Boxes,
@@ -474,7 +478,25 @@ function Drawer({
                             <TextInput value={d.color} onChange={(e) => updateDraft(v.id, { color: e.target.value })} />
                           </InputGroup>
                           <InputGroup label="סוג תליון">
-                            <TextInput value={d.pendantType} onChange={(e) => updateDraft(v.id, { pendantType: e.target.value })} />
+                            <select
+                              value={PENDANT_TYPE_HE_SET.has(d.pendantType) ? d.pendantType : ""}
+                              onChange={(e) => updateDraft(v.id, { pendantType: e.target.value })}
+                              style={{
+                                width: "100%",
+                                height: 36,
+                                padding: "0 10px",
+                                border: "1px solid var(--border)",
+                                borderRadius: 8,
+                                background: "var(--input)",
+                                color: "var(--foreground)",
+                                fontSize: 13,
+                              }}
+                            >
+                              <option value="">— ללא —</option>
+                              {PENDANT_TYPE_HE_OPTIONS.map((label) => (
+                                <option key={label} value={label}>{label}</option>
+                              ))}
+                            </select>
                           </InputGroup>
                           <InputGroup label="חומר">
                             <TextInput value={d.material} onChange={(e) => updateDraft(v.id, { material: e.target.value })} />
