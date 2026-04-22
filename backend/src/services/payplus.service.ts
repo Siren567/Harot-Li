@@ -142,7 +142,9 @@ export async function createPaymentLink(params: {
     refURL_success: `${cfg.publicSiteUrl}/checkout/payplus/success?orderId=${encodeURIComponent(order.id)}`,
     refURL_failure: `${cfg.publicSiteUrl}/checkout/payplus/failure?orderId=${encodeURIComponent(order.id)}`,
     refURL_cancel: `${cfg.publicSiteUrl}/checkout/payplus/cancel?orderId=${encodeURIComponent(order.id)}`,
-    refURL_callback: `${cfg.publicSiteUrl}/api/payplus/webhook`,
+    // Vercel mounts backend under /_/backend, so provider callbacks must target
+    // that public backend route (frontend /api is not exposed for external webhooks).
+    refURL_callback: `${cfg.publicSiteUrl}/_/backend/api/payplus/webhook`,
     send_failure_callback: true,
     more_info: order.id,
     customer: {
