@@ -712,9 +712,6 @@ const App = () => {
         <div className="footer-bottom">
           <div className="footer-bottom-meta">
             <p>{footer.copyrightText ?? ""}</p>
-            <a href="/admin/login" className="footer-admin-link">
-              ניהול אתר
-            </a>
             <a href="https://zh-studio.xyz" target="_blank" rel="noreferrer" className="zh-studio-credit">
               Build by S.G Digital
             </a>

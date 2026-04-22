@@ -10,11 +10,13 @@ if (!SECRET) {
   console.warn("[auth] ADMIN_JWT_SECRET not set — admin auth will reject all tokens.");
 }
 
-export type AdminPayload = { sub: string; email: string; role: string };
+const ADMIN_SESSION_VERSION = "2026-04-22";
+
+export type AdminPayload = { sub: string; email: string; role: string; ver?: string };
 
 export function signAdminToken(payload: AdminPayload): string {
   if (!SECRET) throw new Error("ADMIN_JWT_SECRET missing");
-  return jwt.sign(payload, SECRET, { expiresIn: TOKEN_TTL_SECONDS });
+  return jwt.sign({ ...payload, ver: ADMIN_SESSION_VERSION }, SECRET, { expiresIn: TOKEN_TTL_SECONDS });
 }
 
 export function verifyAdminToken(token: string): AdminPayload | null {
@@ -22,6 +24,7 @@ export function verifyAdminToken(token: string): AdminPayload | null {
   try {
     const decoded = jwt.verify(token, SECRET) as AdminPayload;
     if (!decoded?.sub || !decoded?.email) return null;
+    if (decoded.ver !== ADMIN_SESSION_VERSION) return null;
     return decoded;
   } catch {
     return null;
@@ -43,8 +46,8 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
   if (!token) return res.status(401).json({ error: "UNAUTHORIZED" });
   const payload = verifyAdminToken(token);
   if (!payload) return res.status(401).json({ error: "UNAUTHORIZED" });
-  if (payload.sub === "__root__" && payload.email === "root") {
-    (req as any).admin = { id: "__root__", email: "root", role: "OWNER" };
+  if (payload.sub === "__owner__" && payload.email === "avishag") {
+    (req as any).admin = { id: "__owner__", email: "avishag", role: "OWNER" };
     return next();
   }
   const user = await prisma.adminUser.findUnique({ where: { id: payload.sub } });
