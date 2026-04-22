@@ -474,6 +474,7 @@ ordersRouter.post("/", async (req, res) => {
 
       const effectiveShippingFee = freeShipping ? 0 : shippingFee;
       const total = Math.max(0, subtotal + effectiveShippingFee - discountAmount);
+      const isFullyDiscounted = total <= 0;
 
       const orderNumber = await generateUniqueOrderNumber(tx);
 
@@ -503,8 +504,9 @@ ordersRouter.post("/", async (req, res) => {
           deliveryDetails: deliveryDetails as object,
           // Payment flow (PayPlus prep): cash stays pending until handled manually,
           // payplus stays pending until the webhook flips it to paid/failed.
-          paymentMethod,
-          paymentStatus: "pending",
+          paymentMethod: isFullyDiscounted ? "coupon_paid" : paymentMethod,
+          paymentStatus: isFullyDiscounted ? "coupon_paid" : "pending",
+          status: isFullyDiscounted ? "PAID" : "NEW",
         } as any,
       });
 
@@ -541,6 +543,20 @@ ordersRouter.post("/", async (req, res) => {
         });
       }
 
+      // Fully discounted coupon checkout is completed internally and does not
+      // require a payment provider round-trip.
+      if (isFullyDiscounted && appliedCouponId) {
+        await tx.couponRedemption.create({
+          data: {
+            couponId: appliedCouponId,
+            customerId: customer.id,
+            orderId: order.id,
+            discountAmount,
+          },
+        });
+        await tx.coupon.update({ where: { id: appliedCouponId }, data: { usageCount: { increment: 1 } } });
+      }
+
       return { ok: true as const, order };
     }, { timeout: 20000, maxWait: 10000 });
 
@@ -556,8 +572,23 @@ ordersRouter.post("/", async (req, res) => {
       return res.status(status).json({ ok: false, reason, message });
     }
 
-    // Cash orders complete immediately — paymentStatus stays "pending" (cash-on-delivery)
-    // and the admin marks it paid manually through the order status flow.
+    const createdOrder = result.order as any;
+    if (createdOrder.paymentStatus === "coupon_paid") {
+      return res.status(201).json({
+        ok: true,
+        paymentMethod: "coupon_paid",
+        paymentStatus: "coupon_paid",
+        order: {
+          ...createdOrder,
+          paymentMethod: "coupon_paid",
+          paymentStatus: "coupon_paid",
+          status: "PAID",
+        },
+      });
+    }
+
+    // Cash orders complete immediately — paymentStatus stays "pending"
+    // (cash-on-delivery) and the admin marks it paid manually later.
     if (paymentMethod === "cash") {
       return res.status(201).json({
         ok: true,
@@ -566,7 +597,6 @@ ordersRouter.post("/", async (req, res) => {
       });
     }
 
-    const createdOrder = result.order as any;
     return res.status(201).json({
       ok: true,
       paymentMethod: "payplus",

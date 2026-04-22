@@ -15,6 +15,22 @@ const CreatePaymentSchema = z.object({
   orderId: z.string().min(1),
 });
 
+function extractProviderErrorMessage(body: any): string | null {
+  if (!body || typeof body !== "object") return null;
+  const candidates = [
+    body.message,
+    body.error,
+    body.errors?.[0]?.message,
+    body.results?.description,
+    body.results?.message,
+    body.data?.message,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return null;
+}
+
 function verifyWebhook(req: Request, res: Response, next: NextFunction) {
   const raw = (req as any).rawBody as string | undefined;
   const result = verifyPayPlusWebhookSignature(req.headers, raw ?? JSON.stringify(req.body ?? {}));
@@ -49,8 +65,15 @@ payplusRouter.post("/create-payment", async (req, res) => {
     if (!order) return res.status(404).json({ ok: false, error: "ORDER_NOT_FOUND" });
 
     const current = order as any;
-    if ((current.paymentStatus ?? "pending") === "paid") {
+    if ((current.paymentStatus ?? "pending") === "paid" || (current.paymentStatus ?? "pending") === "coupon_paid") {
       return res.status(409).json({ ok: false, error: "ORDER_ALREADY_PAID" });
+    }
+    if (order.total <= 0) {
+      return res.status(400).json({
+        ok: false,
+        error: "NON_POSITIVE_TOTAL",
+        message: "Non-positive totals must be completed internally and cannot be sent to PayPlus.",
+      });
     }
 
     if (current.paymentUrl) {
@@ -61,7 +84,7 @@ payplusRouter.post("/create-payment", async (req, res) => {
       });
     }
 
-    const items = Array.isArray(order.orderItems) && order.orderItems.length > 0
+    const rawItems = Array.isArray(order.orderItems) && order.orderItems.length > 0
       ? order.orderItems.map((it) => ({
           name: it.nameSnapshot || "מוצר",
           unitPriceAgorot: it.unitPrice,
@@ -74,6 +97,14 @@ payplusRouter.post("/create-payment", async (req, res) => {
             qty: 1,
           },
         ];
+    const rawItemsTotal = rawItems.reduce((sum, it) => sum + Math.max(0, Math.round(it.unitPriceAgorot)) * Math.max(1, Math.floor(it.qty)), 0);
+    const hasDiscountGap = rawItemsTotal !== order.total;
+    // PayPlus may reject payloads when item total does not match amount.
+    // Coupon discounts can create exactly that mismatch, so fallback to a
+    // single normalized line item that equals the final payable amount.
+    const items = hasDiscountGap
+      ? [{ name: `Order ${order.orderNumber}`, unitPriceAgorot: order.total, qty: 1 }]
+      : rawItems;
 
     const link = await createPaymentLink({
       order: { id: order.id, orderNumber: order.orderNumber, totalAgorot: order.total },
@@ -110,10 +141,13 @@ payplusRouter.post("/create-payment", async (req, res) => {
       });
     }
     if (code === "PAYPLUS_HTTP_ERROR") {
+      const providerMessage = extractProviderErrorMessage(err?.body);
       return res.status(502).json({
         ok: false,
         error: "PAYPLUS_PROVIDER_ERROR",
-        message: "Payment provider returned an error while creating checkout session.",
+        message:
+          providerMessage ||
+          "Payment provider returned an error while creating checkout session.",
       });
     }
     if (code === "PAYPLUS_REQUEST_FAILED") {
@@ -121,6 +155,13 @@ payplusRouter.post("/create-payment", async (req, res) => {
         ok: false,
         error: "PAYPLUS_UNREACHABLE",
         message: "Payment provider did not respond in time. Please try again.",
+      });
+    }
+    if (code === "PAYPLUS_NON_POSITIVE_TOTAL") {
+      return res.status(400).json({
+        ok: false,
+        error: "NON_POSITIVE_TOTAL",
+        message: "Non-positive totals must be completed internally and cannot be sent to PayPlus.",
       });
     }
     return res.status(500).json({

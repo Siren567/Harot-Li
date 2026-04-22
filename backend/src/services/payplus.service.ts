@@ -120,6 +120,11 @@ export async function createPaymentLink(params: {
 }): Promise<CreatePaymentLinkResult> {
   const cfg = getPayPlusConfig();
   const { order, customer, items } = params;
+  if (!Number.isFinite(order.totalAgorot) || order.totalAgorot <= 0) {
+    const e = new Error("PAYPLUS_NON_POSITIVE_TOTAL");
+    (e as any).code = "PAYPLUS_NON_POSITIVE_TOTAL";
+    throw e;
+  }
 
   const customerName =
     (customer.fullName && customer.fullName.trim()) ||

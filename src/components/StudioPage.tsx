@@ -902,6 +902,12 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         // success screen. The order is persisted with paymentStatus=pending and
         // the webhook finalizes it once PayPlus confirms.
         if (customer.paymentMethod === "payplus") {
+          const serverPaymentStatus = String(data.paymentStatus ?? data.order?.paymentMethod ?? "").toLowerCase();
+          if (serverPaymentStatus === "coupon_paid" || serverPaymentStatus === "paid" || serverPaymentStatus === "free") {
+            setOrderNumber(data.order.orderNumber);
+            setStep(3);
+            return;
+          }
           const orderId = data.order?.id;
           if (!orderId) {
             setCouponMsg("ההזמנה נשמרה אך לא התקבל מזהה תשלום תקין.");
