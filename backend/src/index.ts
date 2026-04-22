@@ -12,6 +12,7 @@ import { publicRouter } from "./routes/public.js";
 import { paymentsRouter } from "./routes/payments.js";
 import { adminAuthRouter } from "./routes/adminAuth.js";
 import { variantsRouter } from "./routes/variants.js";
+import { payplusRouter } from "./routes/payplus.js";
 
 const app = express();
 
@@ -22,7 +23,7 @@ app.use(
     limit: "10mb",
     verify: (req: any, _res, buf) => {
       const url = typeof req.url === "string" ? req.url : "";
-      if (url.includes("/api/payments/") && url.includes("/webhook")) {
+      if ((url.includes("/api/payments/") || url.includes("/api/payplus/")) && url.includes("/webhook")) {
         req.rawBody = buf.toString("utf8");
       }
     },
@@ -53,6 +54,7 @@ app.use("/api/top-sellers", topSellersRouter);
 app.use("/api/analytics", analyticsRouter);
 app.use("/api/public", publicRouter);
 app.use("/api/payments", paymentsRouter);
+app.use("/api/payplus", payplusRouter);
 app.use("/api/admin/auth", adminAuthRouter);
 app.use("/api/variants", variantsRouter);
 

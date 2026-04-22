@@ -6,7 +6,6 @@ import { getAnalyticsForRange } from "../services/analytics.service.js";
 import { getSupabaseAdminClient } from "../supabase/client.js";
 import { requireAdmin } from "../lib/auth.js";
 import { isDatabaseConnectionError, respondDatabaseUnavailable } from "../lib/dbErrors.js";
-import { createPaymentLink } from "../services/payplus.service.js";
 
 export const ordersRouter = Router();
 
@@ -567,80 +566,25 @@ ordersRouter.post("/", async (req, res) => {
       });
     }
 
-    // PayPlus: create the hosted payment page and save paymentUrl/paymentId on
-    // the order. We do NOT mark the order as paid here — the webhook does.
-    try {
-      const createdOrder = result.order as any;
-      const fullOrder = await prisma.order.findUnique({
-        where: { id: createdOrder.id },
-        include: { customer: true },
-      });
-      if (!fullOrder) throw new Error("ORDER_DISAPPEARED_AFTER_CREATE");
-
-      const link = await createPaymentLink({
-        order: { id: fullOrder.id, orderNumber: fullOrder.orderNumber, totalAgorot: fullOrder.total },
-        customer: {
-          fullName: fullOrder.customer?.fullName ?? null,
-          email: fullOrder.customer?.email ?? null,
-          phone: fullOrder.customer?.phone ?? null,
-        },
-        items: items.map((it) => ({ name: it.name, unitPriceAgorot: it.unitPrice, qty: it.qty })),
-      });
-
-      await prisma.order.update({
-        where: { id: fullOrder.id },
-        data: { paymentId: link.paymentRequestUid, paymentUrl: link.paymentUrl } as any,
-      });
-
-      console.log(`[POST /api/orders] payplus link created order=${fullOrder.orderNumber}`);
-
-      return res.status(201).json({
-        ok: true,
+    const createdOrder = result.order as any;
+    return res.status(201).json({
+      ok: true,
+      paymentMethod: "payplus",
+      orderId: createdOrder.id,
+      paymentStatus: "pending",
+      order: {
+        ...createdOrder,
         paymentMethod: "payplus",
-        orderId: fullOrder.id,
         paymentStatus: "pending",
-        paymentUrl: link.paymentUrl,
-        order: {
-          ...createdOrder,
-          paymentMethod: "payplus",
-          paymentStatus: "pending",
-          paymentUrl: link.paymentUrl,
-          paymentId: link.paymentRequestUid,
-        },
-      });
-    } catch (linkErr: any) {
-      console.error("[POST /api/orders] payplus link creation FAILED", {
-        code: linkErr?.code,
-        status: linkErr?.status,
-        message: String(linkErr?.message ?? linkErr).slice(0, 500),
-      });
-      // Mark the order's paymentStatus=failed so the admin sees it didn't start,
-      // but keep the order row so the customer can retry / support can recover.
-      try {
-        await prisma.order.update({
-          where: { id: (result.order as any).id },
-          data: { paymentStatus: "failed" } as any,
-        });
-      } catch {
-        // best-effort; do not mask the original error
-      }
-      const code = String(linkErr?.code || "");
-      const userMessage =
-        code === "PAYPLUS_NOT_CONFIGURED"
-          ? "שירות התשלומים אינו מוגדר כעת. אנא נסו שוב מאוחר יותר."
-          : "לא ניתן היה לאתחל את התשלום. נא לנסות שוב.";
-      return res.status(502).json({
-        ok: false,
-        reason: "PAYMENT_INIT_FAILED",
-        code: code || "PAYMENT_INIT_FAILED",
-        message: userMessage,
-        order: { id: (result.order as any).id, orderNumber: (result.order as any).orderNumber },
-      });
-    }
+      },
+    });
   } catch (e: any) {
     // CHECK constraint stock >= 0 surfaces as transaction failure → never oversells.
     if (String(e?.message || "").includes("variant_stock_nonneg")) {
       return res.status(409).json({ ok: false, reason: "OUT_OF_STOCK" });
+    }
+    if (isDatabaseConnectionError(e)) {
+      return respondDatabaseUnavailable(res, e);
     }
     console.error("[POST /api/orders] FAILED name=", e?.name);
     console.error("[POST /api/orders] FAILED code=", e?.code);

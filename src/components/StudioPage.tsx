@@ -372,12 +372,6 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
   const [orderNumber, setOrderNumber] = useState<string | null>(null);
 
   const [shippingId, setShippingId] = useState("home");
-  const [paymentId, setPaymentId] = useState<"card" | "bit" | "paypal">("card");
-  const checkoutPaymentOptions: Array<{ id: "card" | "bit" | "paypal"; label: string; enabled: boolean; soon?: boolean }> = [
-    { id: "card", label: "כרטיס אשראי", enabled: true },
-    { id: "bit", label: "Bit", enabled: false, soon: true },
-    { id: "paypal", label: "PayPal", enabled: false, soon: true },
-  ];
   const selectedPaymentMethod: "payplus" = "payplus";
 
   const [emojiPickerForId, setEmojiPickerForId] = useState<string | null>(null);
@@ -882,7 +876,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           paymentMethod?: string;
           paymentUrl?: string | null;
           paymentStatus?: string;
-          order?: { orderNumber?: string; paymentUrl?: string | null; paymentMethod?: string };
+          order?: { id?: string; orderNumber?: string; paymentUrl?: string | null; paymentMethod?: string };
           message?: string;
           hint?: string;
         } = {};
@@ -908,13 +902,30 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
         // success screen. The order is persisted with paymentStatus=pending and
         // the webhook finalizes it once PayPlus confirms.
         if (customer.paymentMethod === "payplus") {
-          const paymentUrl = data.paymentUrl ?? data.order?.paymentUrl ?? null;
-          if (!paymentUrl) {
-            setCouponMsg("לא ניתן היה לאתחל את התשלום. נא לנסות שוב.");
+          const orderId = data.order?.id;
+          if (!orderId) {
+            setCouponMsg("ההזמנה נשמרה אך לא התקבל מזהה תשלום תקין.");
+            return;
+          }
+          const payplusRes = await fetch(`${apiBase}/api/payplus/create-payment`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ orderId }),
+          });
+          let payplusData: { ok?: boolean; checkoutUrl?: string; message?: string } = {};
+          try {
+            const text = await payplusRes.text();
+            if (text) payplusData = JSON.parse(text);
+          } catch {
+            payplusData = {};
+          }
+          if (!payplusRes.ok || !payplusData.ok || !payplusData.checkoutUrl) {
+            setCouponMsg(payplusData.message || "לא ניתן היה לאתחל את דף התשלום. נסו שוב בעוד רגע.");
             return;
           }
           setCouponMsg("מעביר אותך לתשלום...");
-          window.location.href = paymentUrl;
+          window.location.href = payplusData.checkoutUrl;
           return;
         }
         setOrderNumber(data.order.orderNumber);
@@ -1582,24 +1593,15 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
                   </button>
                 ))}
               </div>
-              <div className="studio-pay-row">
-                {checkoutPaymentOptions.map((payment) => (
-                  <button
-                    type="button"
-                    key={payment.id}
-                    className={`studio-chip ${paymentId === payment.id ? "active" : ""}`}
-                    onClick={() => {
-                      if (!payment.enabled) return;
-                      setPaymentId(payment.id);
-                    }}
-                    disabled={!payment.enabled}
-                    aria-disabled={!payment.enabled}
-                  >
-                    {payment.label}
-                    {!payment.enabled && payment.soon ? " (בקרוב)" : ""}
-                  </button>
-                ))}
-              </div>
+              <button
+                type="submit"
+                form="studio-checkout-form"
+                className="studio-primary-btn"
+                style={{ marginTop: "10px", width: "100%" }}
+                disabled={submitting || !canPurchase}
+              >
+                {submitting ? "מעבד תשלום..." : "לתשלום מאובטח"}
+              </button>
             </div>
             <aside className="studio-order-summary">
               <h3>סיכום הזמנה</h3>
