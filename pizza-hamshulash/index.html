@@ -1,0 +1,1705 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>האיטלקיה — מהתנור ועד הדלת</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          red: '#D62828',
+          redDark: '#A81E1E',
+          yellow: '#F4C542',
+          yellowDark: '#D9A82E',
+          ink: '#111111',
+          coal: '#1A1A1A',
+          bone: '#FAFAF7',
+          cream: '#FFF8E7',
+        }
+      },
+      fontFamily: { sans: ['Heebo', 'system-ui', 'sans-serif'] },
+      boxShadow: {
+        card: '0 2px 8px rgba(17,17,17,0.06), 0 12px 32px -8px rgba(17,17,17,0.08)',
+        cardHover: '0 4px 16px rgba(17,17,17,0.08), 0 24px 48px -12px rgba(214,40,40,0.18)',
+        cta: '0 8px 24px -6px rgba(214,40,40,0.5)',
+        ring: '0 0 0 3px rgba(214,40,40,0.18)',
+      },
+      keyframes: {
+        float: { '0%,100%': { transform:'translateY(0)' }, '50%': { transform:'translateY(-8px)' } },
+        pulseSoft: { '0%,100%': { opacity:.6 }, '50%': { opacity:1 } },
+        slideUp: { '0%': { transform:'translateY(20px)', opacity:0 }, '100%': { transform:'translateY(0)', opacity:1 } },
+        fadeIn: { '0%': { opacity:0 }, '100%': { opacity:1 } },
+        scaleIn: { '0%': { transform:'scale(.95)', opacity:0 }, '100%': { transform:'scale(1)', opacity:1 } },
+        shimmer: { '0%': { backgroundPosition:'-200% 0' }, '100%': { backgroundPosition:'200% 0' } },
+      },
+      animation: {
+        float: 'float 4s ease-in-out infinite',
+        pulseSoft: 'pulseSoft 2s ease-in-out infinite',
+        slideUp: 'slideUp .4s ease-out',
+        fadeIn: 'fadeIn .3s ease-out',
+        scaleIn: 'scaleIn .25s ease-out',
+        shimmer: 'shimmer 1.6s linear infinite',
+      }
+    }
+  }
+}
+</script>
+<style>
+  html,body { font-family: 'Heebo', system-ui, sans-serif; background:#FAFAF7; color:#111; }
+  ::selection { background:#F4C542; color:#111; }
+  .scrollbar-hide::-webkit-scrollbar { display:none; }
+  .scrollbar-hide { -ms-overflow-style:none; scrollbar-width:none; }
+  .hero-grad {
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(244,197,66,.22), transparent 60%),
+      radial-gradient(900px 500px at 10% 110%, rgba(214,40,40,.18), transparent 60%),
+      linear-gradient(180deg, #111 0%, #1A1A1A 100%);
+  }
+  .dotted-bg {
+    background-image: radial-gradient(rgba(17,17,17,.06) 1px, transparent 1px);
+    background-size: 14px 14px;
+  }
+  .chip { transition: all .18s ease; }
+  .chip:hover { transform: translateY(-1px); }
+  .tab-active { background:#111; color:#fff; }
+  .btn-primary { background:#D62828; color:#fff; }
+  .btn-primary:hover { background:#A81E1E; }
+  .card-hover { transition: transform .25s ease, box-shadow .25s ease; }
+  .card-hover:hover { transform: translateY(-4px); }
+  .skeleton { background: linear-gradient(90deg,#eee 0%,#f8f8f8 50%,#eee 100%); background-size:200% 100%; }
+  [dir=rtl] .lucide { transform: scaleX(1); }
+  details > summary { list-style:none; cursor:pointer; }
+  details > summary::-webkit-details-marker { display:none; }
+  .topping-btn[aria-pressed="true"] { background:#D62828; color:#fff; border-color:#D62828; }
+  .half-toggle[data-active="true"] { background:#111; color:#fff; }
+  input[type=range] { accent-color:#D62828; }
+  .toast-in { animation: scaleIn .2s ease-out; }
+  .nav-link { position:relative; }
+  .nav-link.active::after { content:''; position:absolute; right:0; left:0; bottom:-6px; height:3px; background:#D62828; border-radius:2px; }
+  .hero-premium {
+    background:
+      radial-gradient(1200px 680px at 90% -10%, rgba(191, 146, 77, .16), transparent 62%),
+      radial-gradient(900px 540px at 8% 120%, rgba(106, 24, 32, .28), transparent 68%),
+      linear-gradient(140deg, #101112 0%, #161617 46%, #1C1416 100%);
+  }
+  .hero-kicker {
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.14);
+    color: rgba(249, 243, 232, .95);
+  }
+  .hero-kicker-dot {
+    box-shadow: 0 0 0 0 rgba(201, 161, 91, .45);
+    animation: liveDotPulse 2.6s ease-in-out infinite;
+  }
+  .hero-kicker-text {
+    display: inline-block;
+    min-height: 1.2em;
+    white-space: nowrap;
+    transition: opacity .34s ease, transform .34s ease;
+  }
+  .hero-kicker-main { color: rgba(249, 243, 232, .94); }
+  .hero-kicker-wait { font-weight: 700; }
+  .hero-kicker-wait.good { color: #7EDC9A; }
+  .hero-kicker-wait.high { color: #EF7B7B; }
+  .hero-kicker-text.is-changing {
+    opacity: .08;
+    transform: translateY(-1px);
+  }
+  .hero-title-accent { color: #C9A15B; }
+  .hero-copy { color: rgba(246, 240, 232, .82); }
+  .cta-primary-premium {
+    background: linear-gradient(135deg, #A7262A 0%, #861E22 100%);
+    box-shadow: 0 12px 30px -12px rgba(142, 30, 36, .78);
+  }
+  .cta-primary-premium:hover {
+    background: linear-gradient(135deg, #B62B31 0%, #962126 100%);
+    transform: translateY(-1px);
+  }
+  .cta-secondary-premium {
+    background: rgba(255,255,255,.06);
+    border: 1px solid rgba(255,255,255,.2);
+    color: #F6F0E8;
+  }
+  .cta-secondary-premium:hover {
+    background: rgba(255,255,255,.12);
+    border-color: rgba(255,255,255,.28);
+  }
+  .hero-stat {
+    background: rgba(255,255,255,.04);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 18px;
+  }
+  .hero-stat-value { color: #E8C17A; }
+  .hero-kitchen-stage {
+    position: relative;
+    min-height: 440px;
+    border-radius: 30px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.14);
+    background:
+      radial-gradient(120% 90% at 85% 10%, rgba(216, 156, 80, .28), transparent 62%),
+      radial-gradient(90% 70% at 20% 85%, rgba(146, 44, 52, .3), transparent 66%),
+      linear-gradient(145deg, #181717 0%, #131214 56%, #201618 100%);
+    box-shadow: 0 36px 65px -38px rgba(0,0,0,.9);
+  }
+  .hero-kitchen-stage::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,.08) 0%, rgba(0,0,0,.5) 100%);
+  }
+  .hero-kitchen-spotlight {
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(236,180,96,.35) 0%, rgba(236,180,96,0) 68%);
+    animation: kitchenFloat 7s ease-in-out infinite;
+  }
+  .hero-kitchen-spotlight.one { top: -38px; right: 16%; }
+  .hero-kitchen-spotlight.two { bottom: -64px; left: 6%; animation-delay: -2.4s; }
+  .hero-kitchen-counter {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 36%;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)),
+      linear-gradient(95deg, #2E211D 0%, #402A22 54%, #2D211C 100%);
+    border-top: 1px solid rgba(255,255,255,.1);
+  }
+  .hero-kitchen-oven {
+    position: absolute;
+    right: 12%;
+    top: 14%;
+    width: 46%;
+    height: 42%;
+    border-radius: 24px;
+    border: 1px solid rgba(255,255,255,.16);
+    background: linear-gradient(140deg, rgba(40,30,28,.8), rgba(23,20,22,.9));
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04), 0 24px 40px -32px rgba(0,0,0,.95);
+  }
+  .hero-kitchen-oven::after {
+    content: "";
+    position: absolute;
+    width: 52%;
+    height: 56%;
+    right: 24%;
+    top: 20%;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(238, 138, 69, .82) 0%, rgba(169, 58, 42, .32) 58%, rgba(0,0,0,0) 72%);
+    filter: blur(1px);
+    animation: ovenGlow 4.4s ease-in-out infinite;
+  }
+  .hero-kitchen-plate {
+    position: absolute;
+    left: 9%;
+    bottom: 14%;
+    width: 44%;
+    height: 34%;
+    border-radius: 24px;
+    border: 1px solid rgba(255,255,255,.14);
+    background: linear-gradient(150deg, rgba(249,243,232,.12), rgba(249,243,232,.03));
+    backdrop-filter: blur(2px);
+    box-shadow: 0 22px 36px -28px rgba(0,0,0,.95);
+  }
+  .hero-kitchen-chip {
+    position: absolute;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #F4E8D5;
+    border: 1px solid rgba(255,255,255,.16);
+    background: rgba(12,13,14,.62);
+    backdrop-filter: blur(4px);
+  }
+  .hero-kitchen-chip.top { left: 6%; top: 8%; }
+  .hero-kitchen-chip.bottom { right: 6%; bottom: 8%; }
+  .header-premium {
+    background: rgba(255,255,255,.95);
+    border-bottom: 1px solid rgba(17,17,17,.08);
+    box-shadow: 0 8px 30px -24px rgba(0,0,0,.32);
+  }
+  .header-address {
+    background: #F8F4ED;
+    border: 1px solid rgba(17,17,17,.1);
+  }
+  .header-cart {
+    background: linear-gradient(135deg, #BF3237 0%, #A0252A 100%);
+  }
+  .header-cart:hover { background: linear-gradient(135deg, #CC3A40 0%, #AB2A30 100%); }
+  .header-cart-badge {
+    background: #DAB26C;
+    color: #1A1A1A;
+  }
+  .footer-premium {
+    background:
+      radial-gradient(900px 340px at 82% -30%, rgba(188, 145, 76, .14), transparent 68%),
+      linear-gradient(180deg, #111214 0%, #0B0C0D 100%);
+    border-top: 1px solid rgba(255,255,255,.08);
+  }
+  .footer-title { color: #F7EFDF; letter-spacing: .01em; }
+  .footer-link { color: rgba(255,255,255,.72); transition: color .2s ease; }
+  .footer-link:hover { color: #E3BB75; }
+  .footer-social {
+    width: 38px;
+    height: 38px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: rgba(255,255,255,.08);
+    border: 1px solid rgba(255,255,255,.14);
+    transition: all .2s ease;
+  }
+  .footer-social:hover {
+    background: rgba(227, 187, 117, .22);
+    border-color: rgba(227, 187, 117, .5);
+    transform: translateY(-1px);
+  }
+  @keyframes liveDotPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(201, 161, 91, .45); opacity: .95; }
+    50% { box-shadow: 0 0 0 6px rgba(201, 161, 91, 0); opacity: 1; }
+  }
+  @keyframes kitchenFloat {
+    0%,100% { transform: translateY(0px); opacity: .8; }
+    50% { transform: translateY(-9px); opacity: 1; }
+  }
+  @keyframes ovenGlow {
+    0%,100% { opacity: .75; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.06); }
+  }
+  @media (max-width: 768px) {
+    .hide-mobile { display:none; }
+    .hero-kitchen-stage { min-height: 340px; }
+    .hero-kitchen-oven { width: 54%; height: 40%; right: 8%; top: 16%; }
+    .hero-kitchen-plate { width: 58%; left: 5%; bottom: 12%; }
+    .hero-kicker-text { white-space: normal; }
+  }
+</style>
+</head>
+<body class="antialiased">
+
+<!-- ========================= TOP BANNER ========================= -->
+<div class="bg-brand-ink text-white text-xs md:text-sm">
+  <div class="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-2 md:gap-3">
+      <span class="opacity-90 hide-mobile">משלוחים חינם בהזמנה מעל 79 ש״ח</span>
+    </div>
+    <div class="flex items-center gap-4">
+      <span class="hide-mobile opacity-80">פתוח עכשיו · יסגר ב2:00</span>
+      <a href="tel:*1234" class="inline-flex flex-row-reverse items-center gap-1.5 font-semibold hover:text-brand-yellow">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.72 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0 1 22 16.92z"/></svg>
+        *1234
+      </a>
+      <span class="opacity-90 font-semibold">בס״ד</span>
+    </div>
+  </div>
+</div>
+
+<!-- ========================= NAVBAR ========================= -->
+<header id="navbar" class="sticky top-0 z-40 backdrop-blur header-premium">
+  <div class="max-w-7xl mx-auto px-4 h-16 md:h-20 flex items-center justify-between gap-3 md:gap-4">
+    <!-- Logo -->
+    <a href="#" onclick="showView('home')" class="flex items-center gap-3 group">
+      <div class="relative w-10 h-10 md:w-12 md:h-12">
+        <!-- Italian kitchen logo -->
+        <svg viewBox="0 0 48 48" class="w-full h-full">
+          <defs>
+            <linearGradient id="lg1" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#B53338"/>
+              <stop offset="100%" stop-color="#7F1F25"/>
+            </linearGradient>
+          </defs>
+          <circle cx="24" cy="24" r="20" fill="url(#lg1)"/>
+          <circle cx="24" cy="24" r="14" fill="none" stroke="#E8C17A" stroke-width="2.4"/>
+          <path d="M18 16v16M16 19h4M16 24h4M16 29h4" stroke="#FFF4DE" stroke-width="1.7" stroke-linecap="round"/>
+          <path d="M27 16c3 0 5 2.5 5 5.2 0 2.7-2 5.1-5 5.1h-1.8" stroke="#FFF4DE" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          <path d="M25.2 26.3 30.5 32" stroke="#E8C17A" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="leading-tight">
+        <div class="text-xl md:text-2xl font-black tracking-tight">האיטלקיה</div>
+        <div class="text-[10px] md:text-xs text-brand-red font-semibold -mt-0.5">מהתנור ועד הדלת</div>
+      </div>
+    </a>
+    <!-- Links -->
+    <nav class="hidden md:flex items-center gap-7 font-semibold text-[15px]">
+      <a onclick="showView('home')" class="nav-link cursor-pointer hover:text-brand-red" data-nav="home">בית</a>
+      <a onclick="showView('menu')" class="nav-link cursor-pointer hover:text-brand-red" data-nav="menu">תפריט</a>
+      <a onclick="showView('track')" class="nav-link cursor-pointer hover:text-brand-red" data-nav="track">מעקב הזמנה</a>
+      <a onclick="showView('admin')" class="nav-link cursor-pointer hover:text-brand-red" data-nav="admin">ניהול</a>
+    </nav>
+    <!-- Actions -->
+    <div class="flex items-center gap-2 md:gap-3">
+      <div class="hidden lg:flex items-center gap-2.5 rounded-full px-4 py-2 text-sm header-address">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span class="font-medium">תל אביב, דיזנגוף 99</span>
+        <button class="text-brand-red font-bold text-xs">שינוי</button>
+      </div>
+      <button onclick="openCart()" class="relative inline-flex items-center gap-2 text-white rounded-full px-3 md:px-5 py-2.5 font-bold shadow-cta transition header-cart">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>
+        <span class="hidden sm:inline">העגלה</span>
+        <span id="cart-count-badge" class="absolute -top-1 -left-1 min-w-[20px] h-5 px-1 rounded-full text-xs font-black grid place-items-center header-cart-badge">0</span>
+      </button>
+      <button onclick="toggleMobileMenu()" class="md:hidden p-2 rounded-lg border border-black/10">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+    </div>
+  </div>
+  <!-- Mobile menu -->
+  <div id="mobileMenu" class="hidden md:hidden border-t border-black/5 bg-white">
+    <div class="px-4 py-3 flex flex-col gap-1 font-semibold">
+      <a onclick="showView('home');toggleMobileMenu()" class="py-2">בית</a>
+      <a onclick="showView('menu');toggleMobileMenu()" class="py-2">תפריט</a>
+      <a onclick="showView('track');toggleMobileMenu()" class="py-2">מעקב הזמנה</a>
+      <a onclick="showView('admin');toggleMobileMenu()" class="py-2">ניהול</a>
+    </div>
+  </div>
+</header>
+
+<!-- ========================= MAIN CONTAINER ========================= -->
+<main id="app">
+
+<!-- =============================================================
+     VIEW: HOME
+============================================================= -->
+<section data-view="home">
+
+  <!-- HERO -->
+  <div class="relative overflow-hidden hero-premium text-white">
+    <div class="max-w-7xl mx-auto px-4 py-12 md:py-24 grid md:grid-cols-2 gap-8 md:gap-14 items-center">
+      <div class="relative z-10">
+        <div class="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm mb-6 hero-kicker animate-fadeIn" aria-live="polite">
+          <span class="w-2 h-2 rounded-full bg-[#C9A15B] hero-kicker-dot"></span>
+          <span id="hero-live-status" class="hero-kicker-text">
+            <span id="hero-live-main" class="hero-kicker-main">12 הזמנות בהכנה · </span>
+            <span id="hero-live-wait" class="hero-kicker-wait good">זמן משלוח 24 דק׳</span>
+          </span>
+        </div>
+        <h1 class="text-4xl md:text-6xl font-black leading-[1.05] tracking-tight animate-slideUp">
+          מטבח איטלקי אמיתי.
+          <span class="block hero-title-accent">חם, מדויק ובדרך אליך.</span>
+        </h1>
+        <p class="mt-5 text-lg leading-relaxed max-w-xl hero-copy">פיצות נאפוליטניות, פסטות טריות, סלטים איטלקיים וקינוחים קלאסיים. חומרי גלם איכותיים, אפייה מדויקת ומשלוח מהיר עד הדלת.</p>
+        <div class="mt-8 flex flex-wrap gap-3.5">
+          <button onclick="showView('menu')" class="rounded-full px-7 py-3.5 font-bold text-lg inline-flex items-center gap-2 transition cta-secondary-premium">
+            צפייה בתפריט
+          </button>
+          <button onclick="showView('menu')" class="rounded-full px-7 py-3.5 font-bold text-lg inline-flex items-center gap-2 transition cta-primary-premium">
+            הזמנה עכשיו
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          </button>
+        </div>
+        <div class="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-3.5 max-w-2xl">
+          <div class="hero-stat p-4">
+            <div class="flex items-center gap-2.5 mb-2">
+              <span class="inline-grid place-items-center w-8 h-8 rounded-full bg-white/10 text-[#E8C17A]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              </span>
+              <div class="text-2xl font-black hero-stat-value">29 דק׳</div>
+            </div>
+            <div class="text-sm text-white/75">זמן משלוח ממוצע</div>
+          </div>
+          <div class="hero-stat p-4">
+            <div class="flex items-center gap-2.5 mb-2">
+              <span class="inline-grid place-items-center w-8 h-8 rounded-full bg-white/10 text-[#E8C17A]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.9 6 6.6 1-4.8 4.7 1.2 6.8L12 17.5 6.1 20.5l1.2-6.8L2.5 9l6.6-1z"/></svg>
+              </span>
+              <div class="text-2xl font-black hero-stat-value">4.8</div>
+            </div>
+            <div class="text-sm text-white/75">דירוג לקוחות אמיתי</div>
+          </div>
+          <div class="hero-stat p-4">
+            <div class="flex items-center gap-2.5 mb-2">
+              <span class="inline-grid place-items-center w-8 h-8 rounded-full bg-white/10 text-[#E8C17A]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11h18"/><path d="M6 11V7a6 6 0 1 1 12 0v4"/><path d="M6 11v6a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-6"/></svg>
+              </span>
+              <div class="text-2xl font-black hero-stat-value">38+</div>
+            </div>
+            <div class="text-sm text-white/75">פריסה רחבה ושירות מהיר</div>
+          </div>
+        </div>
+      </div>
+      <div class="relative mx-auto w-full max-w-[620px]">
+        <div class="hero-kitchen-stage">
+          <div class="hero-kitchen-spotlight one"></div>
+          <div class="hero-kitchen-spotlight two"></div>
+          <div class="hero-kitchen-oven"></div>
+          <div class="hero-kitchen-counter"></div>
+          <div class="hero-kitchen-plate"></div>
+          <div class="hero-kitchen-chip top">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11h18"/><path d="M6 11V7a6 6 0 1 1 12 0v4"/></svg>
+            מטבח פתוח · אפייה רציפה
+          </div>
+          <div class="hero-kitchen-chip bottom">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M7 7h10"/><path d="M7 12h10"/></svg>
+            פיצה · פסטה · קינוחים
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const liveStatusEl = document.getElementById('hero-live-status');
+      const liveMainEl = document.getElementById('hero-live-main');
+      const liveWaitEl = document.getElementById('hero-live-wait');
+      if (!liveStatusEl || !liveMainEl || !liveWaitEl) return;
+
+      const liveStatusItems = [
+        { label: 'הזמנות בהכנה', count: 12, waitTime: 24 },
+        { label: 'משלוחים בדרך', count: 8, waitTime: 31 },
+        { label: 'שליחים פעילים', count: 5, waitTime: 27 },
+        { label: 'פיצות הוכנו היום', count: 143, waitTime: 22 }
+      ];
+
+      let currentIndex = 0;
+      const formatMain = (item) => `${item.count} ${item.label} · `;
+      const formatWait = (item) => `זמן משלוח ${item.waitTime} דק׳`;
+      const formatCombined = (item) => `${formatMain(item)}${formatWait(item)}`;
+
+      const maxMessageLength = liveStatusItems.reduce((max, item) => {
+        return Math.max(max, formatCombined(item).length);
+      }, 0);
+      liveStatusEl.style.minWidth = maxMessageLength + 'ch';
+
+      const renderStatus = (item) => {
+        liveMainEl.textContent = formatMain(item);
+        liveWaitEl.textContent = formatWait(item);
+        liveWaitEl.classList.toggle('high', item.waitTime > 30);
+        liveWaitEl.classList.toggle('good', item.waitTime <= 30);
+      };
+
+      renderStatus(liveStatusItems[currentIndex]);
+
+      const swapMessage = () => {
+        liveStatusEl.classList.add('is-changing');
+        setTimeout(() => {
+          currentIndex = (currentIndex + 1) % liveStatusItems.length;
+          renderStatus(liveStatusItems[currentIndex]);
+          liveStatusEl.classList.remove('is-changing');
+        }, 180);
+      };
+
+      setInterval(swapMessage, 3600);
+    })();
+  </script>
+
+  <!-- CATEGORY SHORTCUTS -->
+  <div class="max-w-7xl mx-auto px-4 -mt-8 relative z-10">
+    <div class="bg-white rounded-3xl shadow-card p-4 md:p-6 grid grid-cols-3 md:grid-cols-6 gap-3 md:gap-4">
+      <!-- items -->
+    </div>
+  </div>
+  <script>
+    (()=>{
+      const miniIcon = (name) => {
+        const icons = {
+          pizza: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-brand-red"><path d="m2 3 20 8-8 2-2 8z"/><circle cx="14.5" cy="9.5" r="1.2"/><circle cx="11.2" cy="11.4" r="1"/></svg>',
+          spark: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-brand-red"><path d="m12 2 2.5 6.5L21 9l-4.8 4.5 1.3 6.5L12 17l-5.5 3 1.3-6.5L3 9l6.5-.5z"/></svg>',
+          bolt: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-brand-red"><path d="m13 2-9 11h6l-1 9 9-11h-6z"/></svg>',
+          bread: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-brand-red"><path d="M4 14a8 8 0 0 1 16 0v3a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z"/><path d="M9 10v2M15 10v2"/></svg>',
+          cup: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-brand-red"><path d="M8 3h8l-1 17H9z"/><path d="M8 7h8"/></svg>',
+          dessert: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-brand-red"><path d="M4 11h16l-2 9H6z"/><path d="M9 11V7a3 3 0 1 1 6 0v4"/></svg>'
+        };
+        return icons[name] || icons.pizza;
+      };
+      const cats=[
+        {k:'classic',n:'קלאסיות',icon:'pizza'},
+        {k:'special',n:'מיוחדות',icon:'spark'},
+        {k:'deals',n:'מבצעים',icon:'bolt'},
+        {k:'sides',n:'תוספות',icon:'bread'},
+        {k:'drinks',n:'שתייה',icon:'cup'},
+        {k:'desserts',n:'קינוחים',icon:'dessert'},
+      ];
+      const wrap=document.querySelector('[data-view="home"] .grid.grid-cols-3.md\\:grid-cols-6');
+      wrap.innerHTML=cats.map(c=>`
+        <button onclick="showView('menu','${c.k}')" class="chip group flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-brand-bone border border-transparent hover:border-black/5">
+          <div class="w-14 h-14 md:w-16 md:h-16 rounded-full bg-brand-cream grid place-items-center group-hover:bg-brand-yellow/40 transition">${miniIcon(c.icon)}</div>
+          <div class="text-sm md:text-base font-bold">${c.n}</div>
+        </button>`).join('');
+    })();
+  </script>
+
+  <!-- FEATURED DEALS -->
+  <section class="max-w-7xl mx-auto px-4 py-14 md:py-20">
+    <div class="flex items-end justify-between mb-6 md:mb-8">
+      <div>
+        <div class="text-brand-red font-bold text-sm mb-1">מבצעים חמים</div>
+        <h2 class="text-2xl md:text-4xl font-black">השבוע באיטלקיה</h2>
+      </div>
+      <button onclick="showView('menu','deals')" class="text-brand-red font-bold hover:underline hidden md:inline">כל המבצעים →</button>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4 md:gap-6">
+      <article class="relative overflow-hidden rounded-3xl bg-gradient-to-bl from-brand-red to-brand-redDark text-white p-6 md:p-8 card-hover cursor-pointer" onclick="showView('menu','deals')">
+        <div class="absolute -left-8 -bottom-8 opacity-20 leading-none"><svg width="130" height="130" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="m2 3 20 8-8 2-2 8z"/><circle cx="14.5" cy="9.5" r="1.2"/><circle cx="11.2" cy="11.4" r="1"/></svg></div>
+        <div class="relative">
+          <div class="inline-block bg-brand-yellow text-brand-ink text-xs font-black px-2 py-1 rounded">החיסכון הכי גדול</div>
+          <h3 class="mt-3 text-2xl md:text-3xl font-black">משפחתית ענקית + שתייה</h3>
+          <p class="mt-2 text-white/80">פיצה משפחתית ענקית עם עד 3 תוספות + 1.5 ל׳ שתייה</p>
+          <div class="mt-5 flex items-end gap-2">
+            <div class="text-4xl font-black">₪89<span class="text-base">.90</span></div>
+            <div class="line-through text-white/60 mb-1">₪129</div>
+          </div>
+          <button class="mt-5 bg-white text-brand-ink rounded-full px-5 py-2.5 font-bold hover:bg-brand-yellow transition">הוסף להזמנה</button>
+        </div>
+      </article>
+      <article class="relative overflow-hidden rounded-3xl bg-brand-ink text-white p-6 md:p-8 card-hover cursor-pointer" onclick="showView('menu','deals')">
+        <div class="absolute -left-6 -bottom-6 opacity-10 leading-none"><svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3c2 3 3 4 3 7a3 3 0 1 1-6 0c0-2 1-4 3-7z"/><path d="M6 13a6 6 0 1 0 12 0"/></svg></div>
+        <div class="relative">
+          <div class="inline-block bg-brand-red text-white text-xs font-black px-2 py-1 rounded">2 ב-1</div>
+          <h3 class="mt-3 text-2xl md:text-3xl font-black">שתי פיצות L</h3>
+          <p class="mt-2 text-white/70">שתי פיצות גדולות עם שלוש תוספות לבחירה</p>
+          <div class="mt-5 flex items-end gap-2">
+            <div class="text-4xl font-black text-brand-yellow">₪99</div>
+            <div class="line-through text-white/50 mb-1">₪148</div>
+          </div>
+          <button class="mt-5 bg-brand-red hover:bg-brand-redDark rounded-full px-5 py-2.5 font-bold transition">הוסף להזמנה</button>
+        </div>
+      </article>
+      <article class="relative overflow-hidden rounded-3xl bg-brand-yellow text-brand-ink p-6 md:p-8 card-hover cursor-pointer" onclick="showView('menu','deals')">
+        <div class="absolute -left-6 -bottom-6 opacity-20 leading-none"><svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m2 9 10-5 10 5-10 5z"/><path d="M6 11v4c0 1.5 3 3 6 3s6-1.5 6-3v-4"/></svg></div>
+        <div class="relative">
+          <div class="inline-block bg-brand-ink text-white text-xs font-black px-2 py-1 rounded">סטודנטים</div>
+          <h3 class="mt-3 text-2xl md:text-3xl font-black">ארוחת סטודנט</h3>
+          <p class="mt-2 text-black/70">פיצה אישית + שתייה + קינוח יום יומי</p>
+          <div class="mt-5 flex items-end gap-2">
+            <div class="text-4xl font-black">₪39<span class="text-base">.90</span></div>
+          </div>
+          <button class="mt-5 bg-brand-ink text-white rounded-full px-5 py-2.5 font-bold hover:bg-black transition">הוסף להזמנה</button>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- POPULAR PIZZAS -->
+  <section class="bg-white border-y border-black/5">
+    <div class="max-w-7xl mx-auto px-4 py-14 md:py-20">
+      <div class="flex items-end justify-between mb-6 md:mb-8">
+        <div>
+          <div class="text-brand-red font-bold text-sm mb-1">הכי נמכרות</div>
+          <h2 class="text-2xl md:text-4xl font-black">פיצות שכולם מזמינים</h2>
+        </div>
+        <button onclick="showView('menu')" class="text-brand-red font-bold hover:underline hidden md:inline">כל התפריט →</button>
+      </div>
+      <div id="home-popular" class="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6"></div>
+    </div>
+  </section>
+
+  <!-- WHY CHOOSE US -->
+  <section class="max-w-7xl mx-auto px-4 py-14 md:py-20">
+    <div class="text-center mb-10">
+      <div class="text-brand-red font-bold text-sm mb-1">למה האיטלקיה?</div>
+      <h2 class="text-2xl md:text-4xl font-black">מטבח איטלקי עם סטנדרט אחר</h2>
+    </div>
+    <div class="grid md:grid-cols-4 gap-4 md:gap-6">
+      <div class="rounded-3xl bg-brand-bone p-6 border border-black/5 card-hover">
+        <div class="w-12 h-12 rounded-2xl bg-brand-red text-white grid place-items-center mb-4">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <h3 class="font-black text-lg">29 דקות בממוצע</h3>
+        <p class="text-black/60 mt-1 text-sm">מרגע שלחצת "הזמנה" ועד הדלת.</p>
+      </div>
+      <div class="rounded-3xl bg-brand-bone p-6 border border-black/5 card-hover">
+        <div class="w-12 h-12 rounded-2xl bg-brand-yellow text-brand-ink grid place-items-center mb-4">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
+        </div>
+        <h3 class="font-black text-lg">חומרי גלם מובחרים</h3>
+        <p class="text-black/60 mt-1 text-sm">מוצרלה טרייה, עגבניות סן מרצאנו וקמח איטלקי.</p>
+      </div>
+      <div class="rounded-3xl bg-brand-bone p-6 border border-black/5 card-hover">
+        <div class="w-12 h-12 rounded-2xl bg-brand-ink text-white grid place-items-center mb-4">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <h3 class="font-black text-lg">משלוחים בכל הארץ</h3>
+        <p class="text-black/60 mt-1 text-sm">38 סניפים, מעקב חי ונהגים צמודים לאזור.</p>
+      </div>
+      <div class="rounded-3xl bg-brand-bone p-6 border border-black/5 card-hover">
+        <div class="w-12 h-12 rounded-2xl bg-brand-red text-white grid place-items-center mb-4">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        </div>
+        <h3 class="font-black text-lg">מועדון האיטלקיה</h3>
+        <p class="text-black/60 mt-1 text-sm">נקודות על כל הזמנה, הטבה קולינרית במתנה ליום הולדת.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- BEST SELLERS -->
+  <section class="bg-brand-ink text-white">
+    <div class="max-w-7xl mx-auto px-4 py-14 md:py-20">
+      <div class="flex items-end justify-between mb-8 md:mb-10">
+        <div>
+          <div class="text-brand-yellow font-bold text-sm mb-1">בחירות הלקוחות</div>
+          <h2 class="text-2xl md:text-4xl font-black">הנמכרים ביותר השבוע</h2>
+        </div>
+        <button onclick="showView('menu')" class="hidden md:inline text-brand-yellow font-bold hover:underline">לכל התפריט →</button>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <article class="bg-white/5 border border-white/10 rounded-3xl overflow-hidden backdrop-blur-sm">
+          <img src="https://images.unsplash.com/photo-1541745537411-b8046dc6d66c?auto=format&fit=crop&w=900&q=80" alt="פיצה כמהין" class="w-full h-40 object-cover"/>
+          <div class="p-5">
+            <h3 class="font-black text-xl">פיצה כמהין</h3>
+            <p class="text-white/75 text-sm mt-1">קרם כמהין, מוצרלה פרסקה, פרמזן ובזיליקום טרי לאיזון מושלם.</p>
+            <div class="mt-4 flex items-center justify-between">
+              <div class="text-2xl font-black text-brand-yellow">₪72</div>
+              <button onclick="showView('menu')" class="bg-brand-red hover:bg-brand-redDark rounded-full px-4 py-2 text-sm font-bold transition">הוסף לעגלה</button>
+            </div>
+          </div>
+        </article>
+        <article class="bg-white/5 border border-white/10 rounded-3xl overflow-hidden backdrop-blur-sm">
+          <img src="https://images.unsplash.com/photo-1621996346565-e3dbc646d9a9?auto=format&fit=crop&w=900&q=80" alt="פסטה רוזה" class="w-full h-40 object-cover"/>
+          <div class="p-5">
+            <h3 class="font-black text-xl">פסטה רוזה</h3>
+            <p class="text-white/75 text-sm mt-1">פנה אל דנטה ברוטב רוזה עשיר עם שמנת, עגבניות ועשבי תיבול.</p>
+            <div class="mt-4 flex items-center justify-between">
+              <div class="text-2xl font-black text-brand-yellow">₪64</div>
+              <button onclick="showView('menu')" class="bg-brand-red hover:bg-brand-redDark rounded-full px-4 py-2 text-sm font-bold transition">הוסף לעגלה</button>
+            </div>
+          </div>
+        </article>
+        <article class="bg-white/5 border border-white/10 rounded-3xl overflow-hidden backdrop-blur-sm">
+          <img src="https://images.unsplash.com/photo-1619531038896-5f4b31f4f28b?auto=format&fit=crop&w=900&q=80" alt="פוקאצ'ה שום" class="w-full h-40 object-cover"/>
+          <div class="p-5">
+            <h3 class="font-black text-xl">פוקאצ'ה שום</h3>
+            <p class="text-white/75 text-sm mt-1">בצק אוורירי עם חמאת שום, שמן זית, רוזמרין ומלח ים עדין.</p>
+            <div class="mt-4 flex items-center justify-between">
+              <div class="text-2xl font-black text-brand-yellow">₪34</div>
+              <button onclick="showView('menu')" class="bg-brand-red hover:bg-brand-redDark rounded-full px-4 py-2 text-sm font-bold transition">הוסף לעגלה</button>
+            </div>
+          </div>
+        </article>
+        <article class="bg-white/5 border border-white/10 rounded-3xl overflow-hidden backdrop-blur-sm">
+          <img src="https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?auto=format&fit=crop&w=900&q=80" alt="טירמיסו" class="w-full h-40 object-cover"/>
+          <div class="p-5">
+            <h3 class="font-black text-xl">טירמיסו</h3>
+            <p class="text-white/75 text-sm mt-1">שכבות מסקרפונה, בישקוטי וקקאו מריר בגימור איטלקי קלאסי.</p>
+            <div class="mt-4 flex items-center justify-between">
+              <div class="text-2xl font-black text-brand-yellow">₪39</div>
+              <button onclick="showView('menu')" class="bg-brand-red hover:bg-brand-redDark rounded-full px-4 py-2 text-sm font-bold transition">הוסף לעגלה</button>
+            </div>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+</section>
+
+<!-- =============================================================
+     VIEW: MENU
+============================================================= -->
+<section data-view="menu" class="hidden">
+  <div class="bg-brand-ink text-white">
+    <div class="max-w-7xl mx-auto px-4 py-10 md:py-14">
+      <h1 class="text-3xl md:text-5xl font-black">התפריט שלנו</h1>
+      <p class="mt-2 text-white/70">בחרו קטגוריה והוסיפו לעגלה — המשלוח יוצא מוכן תוך דקות.</p>
+      <div class="mt-6 flex items-center gap-2 bg-white/5 border border-white/10 rounded-full p-1.5 max-w-md">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-3"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="menu-search" oninput="renderMenu()" class="bg-transparent outline-none placeholder-white/50 w-full text-sm py-1.5" placeholder="חפשו פיצה, תוספת או שתייה..." />
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-4 py-6">
+    <!-- Category tabs -->
+    <div id="menu-tabs" class="flex gap-2 overflow-x-auto scrollbar-hide pb-2 sticky top-16 md:top-20 bg-brand-bone z-20 -mx-4 px-4 py-3"></div>
+
+    <div class="grid lg:grid-cols-[1fr_340px] gap-6 mt-4">
+      <!-- Product list -->
+      <div>
+        <div id="menu-grid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5"></div>
+        <div id="menu-empty" class="hidden text-center py-20 text-black/50">
+          <div class="mb-3 inline-grid place-items-center w-14 h-14 rounded-full bg-brand-bone mx-auto"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div>
+          <div class="font-bold text-lg">לא מצאנו מה שחיפשתם</div>
+          <div class="text-sm">נסו מילת חיפוש אחרת או בחרו קטגוריה אחרת.</div>
+        </div>
+      </div>
+      <!-- Sticky cart summary -->
+      <aside class="hidden lg:block">
+        <div class="sticky top-28 bg-white rounded-3xl shadow-card p-5 border border-black/5">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-black text-lg">העגלה שלי</h3>
+            <span id="side-cart-count" class="text-xs bg-brand-bone px-2 py-1 rounded-full font-bold">0 פריטים</span>
+          </div>
+          <div id="side-cart-items" class="space-y-3 max-h-[340px] overflow-y-auto pr-1"></div>
+          <div id="side-cart-empty" class="text-center py-10 text-black/50">
+            <div class="mb-2 inline-grid place-items-center w-12 h-12 rounded-full bg-brand-bone mx-auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg></div>
+            <div class="font-semibold">העגלה ריקה</div>
+            <div class="text-xs">הוסיפו פריטים מהתפריט</div>
+          </div>
+          <div id="side-cart-footer" class="hidden mt-4 pt-4 border-t border-black/10">
+            <div class="flex justify-between text-sm mb-1"><span class="text-black/60">סכום ביניים</span><span id="side-sub" class="font-bold">₪0</span></div>
+            <div class="flex justify-between text-sm mb-3"><span class="text-black/60">משלוח</span><span id="side-del" class="font-bold">₪15</span></div>
+            <div class="flex justify-between text-base mb-4"><span class="font-black">סה"כ</span><span id="side-total" class="font-black text-brand-red">₪0</span></div>
+            <button onclick="showView('cart')" class="w-full bg-brand-red hover:bg-brand-redDark text-white rounded-full py-3 font-bold shadow-cta transition">למעבר לעגלה</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================
+     VIEW: CART
+============================================================= -->
+<section data-view="cart" class="hidden">
+  <div class="max-w-5xl mx-auto px-4 py-8 md:py-12">
+    <button onclick="showView('menu')" class="text-sm text-black/60 hover:text-brand-red inline-flex items-center gap-1 mb-4">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      המשך קנייה
+    </button>
+    <h1 class="text-3xl md:text-4xl font-black mb-6">העגלה שלי</h1>
+
+    <!-- Delivery toggle -->
+    <div class="bg-white border border-black/10 rounded-2xl p-1.5 inline-flex mb-6">
+      <button onclick="setMode('delivery')" id="mode-delivery" class="px-5 py-2.5 rounded-xl font-bold tab-active">משלוח</button>
+      <button onclick="setMode('pickup')" id="mode-pickup" class="px-5 py-2.5 rounded-xl font-bold text-black/60">איסוף עצמי</button>
+    </div>
+
+    <div class="grid md:grid-cols-[1fr_360px] gap-6">
+      <!-- Items -->
+      <div id="cart-items" class="space-y-3"></div>
+      <div id="cart-empty" class="hidden bg-white rounded-3xl border border-black/5 p-12 text-center">
+        <div class="mb-3 inline-grid place-items-center w-16 h-16 rounded-full bg-brand-bone mx-auto"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2 3 20 8-8 2-2 8z"/><circle cx="14.5" cy="9.5" r="1.2"/><circle cx="11.2" cy="11.4" r="1"/></svg></div>
+        <div class="text-xl font-black mb-1">העגלה שלך ריקה</div>
+        <div class="text-black/60 mb-5">בואו נמצא לכם פיצה מושלמת</div>
+        <button onclick="showView('menu')" class="bg-brand-red hover:bg-brand-redDark text-white rounded-full px-6 py-3 font-bold shadow-cta transition">לתפריט</button>
+      </div>
+
+      <!-- Summary -->
+      <aside>
+        <div class="bg-white rounded-3xl shadow-card p-5 border border-black/5 sticky top-28">
+          <h3 class="font-black text-lg mb-4">סיכום ההזמנה</h3>
+          <div class="mb-4">
+            <label class="text-sm font-semibold block mb-1.5">קוד קופון</label>
+            <div class="flex gap-2">
+              <input id="coupon-input" class="flex-1 bg-brand-bone border border-black/10 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-brand-red" placeholder="לדוגמה: PIZZA20"/>
+              <button onclick="applyCoupon()" class="bg-brand-ink text-white rounded-xl px-4 font-bold hover:bg-black transition">החל</button>
+            </div>
+            <div id="coupon-msg" class="text-xs mt-1.5"></div>
+          </div>
+          <div class="space-y-2 text-sm pb-4 border-b border-black/10">
+            <div class="flex justify-between"><span class="text-black/60">סכום ביניים</span><span id="sum-sub" class="font-bold">₪0</span></div>
+            <div class="flex justify-between"><span class="text-black/60" id="sum-del-label">משלוח</span><span id="sum-del" class="font-bold">₪15</span></div>
+            <div id="sum-disc-row" class="hidden flex justify-between"><span class="text-black/60">הנחה</span><span id="sum-disc" class="font-bold text-brand-red"></span></div>
+          </div>
+          <div class="flex justify-between pt-4 mb-4">
+            <span class="font-black text-lg">סה"כ לתשלום</span>
+            <span id="sum-total" class="font-black text-2xl text-brand-red">₪0</span>
+          </div>
+          <div class="bg-brand-cream border border-brand-yellow/50 rounded-xl p-3 mb-4 flex items-center gap-3">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D9A82E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <div class="text-sm"><span class="font-bold">זמן משלוח משוער:</span> 25-35 דקות</div>
+          </div>
+          <button onclick="showView('checkout')" id="cart-checkout" class="w-full bg-brand-red hover:bg-brand-redDark text-white rounded-full py-3.5 font-bold text-lg shadow-cta transition">המשך לתשלום</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================
+     VIEW: CHECKOUT
+============================================================= -->
+<section data-view="checkout" class="hidden">
+  <div class="max-w-5xl mx-auto px-4 py-8 md:py-12">
+    <button onclick="showView('cart')" class="text-sm text-black/60 hover:text-brand-red inline-flex items-center gap-1 mb-4">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      חזרה לעגלה
+    </button>
+    <h1 class="text-3xl md:text-4xl font-black mb-2">השלמת הזמנה</h1>
+    <p class="text-black/60 mb-6">רק כמה פרטים ואתם על הדרך לארוחה חמה</p>
+
+    <form id="checkout-form" onsubmit="submitOrder(event)" class="grid md:grid-cols-[1fr_360px] gap-6">
+      <div class="space-y-5">
+        <!-- Customer -->
+        <div class="bg-white rounded-3xl shadow-card p-5 md:p-6 border border-black/5">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="w-7 h-7 rounded-full bg-brand-red text-white text-sm font-black grid place-items-center">1</span>
+            <h3 class="font-black text-lg">פרטי הלקוח</h3>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <label class="block"><span class="text-sm font-semibold">שם מלא</span>
+              <input required class="mt-1 w-full bg-brand-bone border border-black/10 rounded-xl px-3 py-2.5 outline-none focus:border-brand-red" placeholder="ישראל ישראלי"/>
+            </label>
+            <label class="block"><span class="text-sm font-semibold">טלפון</span>
+              <input required type="tel" pattern="[0-9\-]{9,}" class="mt-1 w-full bg-brand-bone border border-black/10 rounded-xl px-3 py-2.5 outline-none focus:border-brand-red" placeholder="050-1234567"/>
+            </label>
+            <label class="block sm:col-span-2"><span class="text-sm font-semibold">אימייל <span class="text-black/40 text-xs">(לקבלת חשבונית)</span></span>
+              <input type="email" class="mt-1 w-full bg-brand-bone border border-black/10 rounded-xl px-3 py-2.5 outline-none focus:border-brand-red" placeholder="name@email.com"/>
+            </label>
+          </div>
+        </div>
+
+        <!-- Address -->
+        <div class="bg-white rounded-3xl shadow-card p-5 md:p-6 border border-black/5">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="w-7 h-7 rounded-full bg-brand-red text-white text-sm font-black grid place-items-center">2</span>
+            <h3 class="font-black text-lg">כתובת למשלוח</h3>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <label class="block"><span class="text-sm font-semibold">עיר</span>
+              <input required class="mt-1 w-full bg-brand-bone border border-black/10 rounded-xl px-3 py-2.5 outline-none focus:border-brand-red" placeholder="תל אביב"/>
+            </label>
+            <label class="block"><span class="text-sm font-semibold">רחוב</span>
+              <input required class="mt-1 w-full bg-brand-bone border border-black/10 rounded-xl px-3 py-2.5 outline-none focus:border-brand-red" placeholder="דיזנגוף"/>
+            </label>
+            <label class="block"><span class="text-sm font-semibold">מס׳ בית</span>
+              <input required class="mt-1 w-full bg-brand-bone border border-black/10 rounded-xl px-3 py-2.5 outline-none focus:border-brand-red" placeholder="99"/>
+            </label>
+            <label class="block"><span class="text-sm font-semibold">דירה / קומה / קוד</span>
+              <input class="mt-1 w-full bg-brand-bone border border-black/10 rounded-xl px-3 py-2.5 outline-none focus:border-brand-red" placeholder="לא חובה"/>
+            </label>
+            <label class="block sm:col-span-2"><span class="text-sm font-semibold">הנחיות למשלוח</span>
+              <textarea rows="2" class="mt-1 w-full bg-brand-bone border border-black/10 rounded-xl px-3 py-2.5 outline-none focus:border-brand-red resize-none" placeholder="להשאיר בדלת, להתקשר בהגעה..."></textarea>
+            </label>
+          </div>
+        </div>
+
+        <!-- Payment -->
+        <div class="bg-white rounded-3xl shadow-card p-5 md:p-6 border border-black/5">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="w-7 h-7 rounded-full bg-brand-red text-white text-sm font-black grid place-items-center">3</span>
+            <h3 class="font-black text-lg">תשלום</h3>
+          </div>
+          <div class="grid grid-cols-3 gap-3 mb-4">
+            <label class="relative cursor-pointer">
+              <input type="radio" name="pay" value="card" checked class="peer sr-only"/>
+              <div class="border-2 border-black/10 peer-checked:border-brand-red peer-checked:bg-brand-cream rounded-2xl p-3 text-center transition">
+                <div class="text-2xl">💳</div><div class="text-xs font-bold mt-1">אשראי</div>
+              </div>
+            </label>
+            <label class="relative cursor-pointer">
+              <input type="radio" name="pay" value="bit" class="peer sr-only"/>
+              <div class="border-2 border-black/10 peer-checked:border-brand-red peer-checked:bg-brand-cream rounded-2xl p-3 text-center transition">
+                <div class="text-2xl">📱</div><div class="text-xs font-bold mt-1">Bit</div>
+              </div>
+            </label>
+            <label class="relative cursor-pointer">
+              <input type="radio" name="pay" value="cash" class="peer sr-only"/>
+              <div class="border-2 border-black/10 peer-checked:border-brand-red peer-checked:bg-brand-cream rounded-2xl p-3 text-center transition">
+                <div class="text-2xl">💵</div><div class="text-xs font-bold mt-1">מזומן</div>
+              </div>
+            </label>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-4">
+            <label class="block sm:col-span-2"><span class="text-sm font-semibold">מספר כרטיס</span>
+              <input class="mt-1 w-full bg-brand-bone border border-black/10 rounded-xl px-3 py-2.5 outline-none focus:border-brand-red font-mono" placeholder="•••• •••• •••• ••••"/>
+            </label>
+            <label class="block"><span class="text-sm font-semibold">תוקף</span>
+              <input class="mt-1 w-full bg-brand-bone border border-black/10 rounded-xl px-3 py-2.5 outline-none focus:border-brand-red" placeholder="MM/YY"/>
+            </label>
+            <label class="block"><span class="text-sm font-semibold">CVV</span>
+              <input class="mt-1 w-full bg-brand-bone border border-black/10 rounded-xl px-3 py-2.5 outline-none focus:border-brand-red" placeholder="•••"/>
+            </label>
+          </div>
+          <div class="mt-4 flex items-center gap-2 text-xs text-black/50">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            תשלום מאובטח SSL · אנחנו לא שומרים פרטי אשראי
+          </div>
+        </div>
+      </div>
+
+      <!-- Order summary -->
+      <aside>
+        <div class="bg-white rounded-3xl shadow-card p-5 border border-black/5 sticky top-28">
+          <h3 class="font-black text-lg mb-4">סיכום ההזמנה</h3>
+          <div id="checkout-items" class="space-y-2 text-sm max-h-56 overflow-y-auto pr-1 mb-4 pb-4 border-b border-black/10"></div>
+          <div class="space-y-1.5 text-sm pb-4 border-b border-black/10">
+            <div class="flex justify-between"><span class="text-black/60">סכום ביניים</span><span id="co-sub" class="font-bold">₪0</span></div>
+            <div class="flex justify-between"><span class="text-black/60">משלוח</span><span id="co-del" class="font-bold">₪15</span></div>
+          </div>
+          <div class="flex justify-between pt-4 mb-4">
+            <span class="font-black">סה"כ</span>
+            <span id="co-total" class="font-black text-2xl text-brand-red">₪0</span>
+          </div>
+          <button type="submit" class="w-full bg-brand-red hover:bg-brand-redDark text-white rounded-full py-3.5 font-bold text-lg shadow-cta transition inline-flex items-center justify-center gap-2">
+            <span id="co-btn-label">אישור ותשלום</span>
+            <svg id="co-spinner" class="hidden animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="9" opacity=".3"/><path d="M21 12a9 9 0 0 0-9-9"/></svg>
+          </button>
+          <div class="mt-3 text-center text-xs text-black/50">לחיצה על "אישור" מאשרת את תנאי השירות ומדיניות הפרטיות.</div>
+        </div>
+      </aside>
+    </form>
+  </div>
+</section>
+
+<!-- =============================================================
+     VIEW: SUCCESS / TRACK
+============================================================= -->
+<section data-view="track" class="hidden">
+  <div class="max-w-3xl mx-auto px-4 py-10 md:py-16">
+    <div class="text-center mb-8 animate-scaleIn">
+      <div class="inline-flex w-20 h-20 rounded-full bg-brand-red text-white items-center justify-center shadow-cta mb-4">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <h1 class="text-3xl md:text-4xl font-black">ההזמנה התקבלה!</h1>
+      <p class="text-black/60 mt-2">התנור כבר עובד — פיצה טריה בדרך אליכם.</p>
+    </div>
+
+    <div class="bg-white rounded-3xl shadow-card border border-black/5 p-6 md:p-8 mb-5">
+      <div class="flex flex-wrap justify-between items-center gap-4 pb-5 border-b border-black/10">
+        <div>
+          <div class="text-xs text-black/50">מספר הזמנה</div>
+          <div id="track-order-id" class="font-black text-2xl">#MT-00000</div>
+        </div>
+        <div>
+          <div class="text-xs text-black/50">זמן הגעה משוער</div>
+          <div id="track-eta" class="font-black text-2xl text-brand-red">29 דקות</div>
+        </div>
+        <div>
+          <div class="text-xs text-black/50">סה"כ שולם</div>
+          <div id="track-total" class="font-black text-2xl">₪0</div>
+        </div>
+      </div>
+
+      <!-- Timeline -->
+      <div class="mt-6">
+        <h3 class="font-black mb-4">סטטוס ההזמנה</h3>
+        <ol id="track-timeline" class="space-y-4"></ol>
+      </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-3">
+      <button onclick="showView('menu')" class="flex-1 bg-brand-ink text-white rounded-full py-3.5 font-bold hover:bg-black transition">חזרה לתפריט</button>
+      <button onclick="reorder()" class="flex-1 bg-brand-red hover:bg-brand-redDark text-white rounded-full py-3.5 font-bold shadow-cta transition">הזמנה חוזרת</button>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================
+     VIEW: ADMIN
+============================================================= -->
+<section data-view="admin" class="hidden">
+  <div class="max-w-7xl mx-auto px-4 py-8 md:py-12">
+    <div class="flex flex-wrap justify-between items-end gap-3 mb-6">
+      <div>
+        <div class="text-brand-red font-bold text-sm">אזור ניהול</div>
+        <h1 class="text-3xl md:text-4xl font-black">לוח בקרה</h1>
+      </div>
+      <div class="flex gap-2">
+        <button class="bg-white border border-black/10 rounded-full px-4 py-2 text-sm font-bold hover:bg-brand-bone">היום</button>
+        <button class="bg-brand-ink text-white rounded-full px-4 py-2 text-sm font-bold">שבוע</button>
+        <button class="bg-white border border-black/10 rounded-full px-4 py-2 text-sm font-bold hover:bg-brand-bone">חודש</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-2xl shadow-card p-5 border border-black/5">
+        <div class="text-xs text-black/50 font-semibold">הזמנות היום</div>
+        <div class="text-3xl font-black mt-1">184</div>
+        <div class="text-xs text-emerald-600 font-bold mt-1">▲ 12% מאתמול</div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-card p-5 border border-black/5">
+        <div class="text-xs text-black/50 font-semibold">הכנסות השבוע</div>
+        <div class="text-3xl font-black mt-1">₪42,380</div>
+        <div class="text-xs text-emerald-600 font-bold mt-1">▲ 8%</div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-card p-5 border border-black/5">
+        <div class="text-xs text-black/50 font-semibold">זמן משלוח ממוצע</div>
+        <div class="text-3xl font-black mt-1">27<span class="text-lg">׳</span></div>
+        <div class="text-xs text-brand-red font-bold mt-1">▼ 2׳ מהיעד</div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-card p-5 border border-black/5">
+        <div class="text-xs text-black/50 font-semibold">דירוג ממוצע</div>
+        <div class="text-3xl font-black mt-1">4.8 <span class="text-brand-yellow">★</span></div>
+        <div class="text-xs text-black/50 font-bold mt-1">על 12.4K ביקורות</div>
+      </div>
+    </div>
+
+    <div class="grid lg:grid-cols-2 gap-4 md:gap-6">
+      <!-- Orders queue -->
+      <div class="bg-white rounded-3xl shadow-card p-5 border border-black/5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-black text-lg">ניהול הזמנות</h3>
+          <span class="text-xs bg-brand-red text-white px-2 py-1 rounded-full font-bold">3 חדשות</span>
+        </div>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between p-3 rounded-2xl border border-black/10 hover:border-brand-red transition">
+            <div><div class="font-bold">#MT-29481 <span class="bg-brand-yellow text-brand-ink text-[10px] font-black px-1.5 py-0.5 rounded mr-2">הוכן</span></div><div class="text-xs text-black/60 mt-0.5">3 פריטים · ₪126 · דיזנגוף 99</div></div>
+            <button class="bg-brand-red text-white rounded-full px-3 py-1.5 text-xs font-bold hover:bg-brand-redDark">שלח נהג</button>
+          </div>
+          <div class="flex items-center justify-between p-3 rounded-2xl border border-black/10 hover:border-brand-red transition">
+            <div><div class="font-bold">#MT-29480 <span class="bg-emerald-100 text-emerald-700 text-[10px] font-black px-1.5 py-0.5 rounded mr-2">בתנור</span></div><div class="text-xs text-black/60 mt-0.5">2 פריטים · ₪79 · הרצל 14</div></div>
+            <button class="bg-brand-ink text-white rounded-full px-3 py-1.5 text-xs font-bold">פרטים</button>
+          </div>
+          <div class="flex items-center justify-between p-3 rounded-2xl border border-black/10 hover:border-brand-red transition">
+            <div><div class="font-bold">#MT-29479 <span class="bg-blue-100 text-blue-700 text-[10px] font-black px-1.5 py-0.5 rounded mr-2">בדרך</span></div><div class="text-xs text-black/60 mt-0.5">1 פריט · ₪49 · שינקין 22</div></div>
+            <button class="bg-brand-ink text-white rounded-full px-3 py-1.5 text-xs font-bold">פרטים</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Products -->
+      <div class="bg-white rounded-3xl shadow-card p-5 border border-black/5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-black text-lg">ניהול מוצרים</h3>
+          <button class="bg-brand-red hover:bg-brand-redDark text-white rounded-full px-3 py-1.5 text-xs font-bold">+ חדש</button>
+        </div>
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between items-center p-2.5 rounded-xl hover:bg-brand-bone"><span class="font-semibold">פיצה מרגריטה</span><span class="text-black/50">₪49.90</span></div>
+          <div class="flex justify-between items-center p-2.5 rounded-xl hover:bg-brand-bone"><span class="font-semibold">פיצה פפרוני</span><span class="text-black/50">₪54.90</span></div>
+          <div class="flex justify-between items-center p-2.5 rounded-xl hover:bg-brand-bone"><span class="font-semibold">פיצה ארבע גבינות</span><span class="text-black/50">₪64.90</span></div>
+          <div class="flex justify-between items-center p-2.5 rounded-xl hover:bg-brand-bone"><span class="font-semibold">פיצה בופאלו</span><span class="text-black/50">₪59.90</span></div>
+          <div class="flex justify-between items-center p-2.5 rounded-xl hover:bg-brand-bone"><span class="font-semibold">לחם שום</span><span class="text-black/50">₪19.90</span></div>
+        </div>
+      </div>
+
+      <!-- Coupons -->
+      <div class="bg-white rounded-3xl shadow-card p-5 border border-black/5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-black text-lg">קופונים</h3>
+          <button class="bg-brand-red hover:bg-brand-redDark text-white rounded-full px-3 py-1.5 text-xs font-bold">+ חדש</button>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div class="rounded-2xl border-2 border-dashed border-brand-red/40 p-3">
+            <div class="font-mono font-black text-brand-red">PIZZA20</div>
+            <div class="text-xs text-black/60">20% הנחה · בתוקף עד 31.12</div>
+          </div>
+          <div class="rounded-2xl border-2 border-dashed border-brand-yellow p-3">
+            <div class="font-mono font-black">WELCOME</div>
+            <div class="text-xs text-black/60">₪15 הנחה להזמנה ראשונה</div>
+          </div>
+          <div class="rounded-2xl border-2 border-dashed border-black/10 p-3">
+            <div class="font-mono font-black">STUDENT</div>
+            <div class="text-xs text-black/60">15% לסטודנטים · לא פעיל</div>
+          </div>
+          <div class="rounded-2xl border-2 border-dashed border-emerald-400/60 p-3">
+            <div class="font-mono font-black text-emerald-700">FAMILY50</div>
+            <div class="text-xs text-black/60">₪50 הנחה במשפחתיות</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Hours -->
+      <div class="bg-white rounded-3xl shadow-card p-5 border border-black/5">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-black text-lg">שעות פעילות</h3>
+          <button class="text-brand-red text-sm font-bold">עריכה</button>
+        </div>
+        <div class="text-sm space-y-1.5">
+          <div class="flex justify-between py-1.5 border-b border-black/5"><span>ראשון-חמישי</span><span class="font-semibold">10:00 - 23:30</span></div>
+          <div class="flex justify-between py-1.5 border-b border-black/5"><span>שישי</span><span class="font-semibold">10:00 - 15:00</span></div>
+          <div class="flex justify-between py-1.5 border-b border-black/5"><span>שבת</span><span class="font-semibold text-black/40">סגור</span></div>
+          <div class="flex justify-between py-1.5"><span>מוצ"ש</span><span class="font-semibold">19:00 - 00:30</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ========================= FOOTER ========================= -->
+<footer class="footer-premium text-white mt-10">
+  <div class="max-w-7xl mx-auto px-4 py-12 md:py-14 grid sm:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-10">
+    <div>
+      <div class="flex items-center gap-2.5 mb-4">
+        <div class="w-10 h-10">
+          <svg viewBox="0 0 48 48" class="w-full h-full"><circle cx="24" cy="24" r="20" fill="#A42A30"/><circle cx="24" cy="24" r="14" fill="none" stroke="#E3BB75" stroke-width="2.3"/><path d="M18 16v16M16 19h4M16 24h4M16 29h4" stroke="#FFF4DE" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </div>
+        <div>
+          <div class="font-black text-2xl footer-title">האיטלקיה</div>
+          <div class="text-xs text-[#E3BB75] font-semibold">מהתנור ועד הדלת</div>
+        </div>
+      </div>
+      <p class="text-white/70 text-sm leading-relaxed max-w-md">מטבח איטלקי כשר למהדרין</p>
+      <div class="mt-4 flex items-center gap-2.5">
+        <a href="https://www.tiktok.com" target="_blank" rel="noopener noreferrer" class="footer-social" aria-label="TikTok">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8.5a6.5 6.5 0 0 1-3.7-1.2V14a6 6 0 1 1-6-6c.2 0 .5 0 .7.1v3a3 3 0 1 0 2.3 2.9V2h3a3.8 3.8 0 0 0 3.7 3.5z"/></svg>
+        </a>
+        <a href="https://www.facebook.com" target="_blank" rel="noopener noreferrer" class="footer-social" aria-label="Facebook">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 21v-7.2H16l.4-2.8h-2.9V9.2c0-.8.2-1.4 1.5-1.4H16V5.3c-.2 0-1.1-.1-2.1-.1-2.1 0-3.5 1.3-3.5 3.6V11H8v2.8h2.3V21z"/></svg>
+        </a>
+        <a href="https://www.instagram.com" target="_blank" rel="noopener noreferrer" class="footer-social" aria-label="Instagram">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1"/></svg>
+        </a>
+      </div>
+    </div>
+
+    <div>
+      <h4 class="font-black mb-3 footer-title">קישורים</h4>
+      <ul class="space-y-2.5 text-sm">
+        <li><a class="footer-link cursor-pointer" onclick="showView('menu')">תפריט</a></li>
+        <li><a class="footer-link cursor-pointer" onclick="showView('track')">מעקב הזמנה</a></li>
+        <li><a class="footer-link cursor-pointer">דרושים</a></li>
+        <li><a class="footer-link cursor-pointer">תקנון</a></li>
+        <li><a class="footer-link cursor-pointer">פרטיות</a></li>
+      </ul>
+    </div>
+
+    <div>
+      <h4 class="font-black mb-3 footer-title">יצירת קשר</h4>
+      <ul class="space-y-2.5 text-sm text-white/72">
+        <li><a href="tel:*1234" class="footer-link font-semibold">*1234</a></li>
+        <li><a href="mailto:service@italkiya.co.il" class="footer-link">service@italkiya.co.il</a></li>
+      </ul>
+    </div>
+
+    <div>
+      <h4 class="font-black mb-3 footer-title">שעות פעילות</h4>
+      <ul class="space-y-2.5 text-sm text-white/72">
+        <li class="flex justify-between gap-4"><span>ראשון–חמישי:</span><span class="font-semibold text-white/90">12:00–02:00</span></li>
+        <li class="flex justify-between gap-4"><span>שישי:</span><span class="font-semibold text-white/90">11:00–14:30</span></li>
+        <li class="flex justify-between gap-4"><span>מוצ״ש:</span><span class="font-semibold text-white/90">שעה אחרי יציאת שבת</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t border-white/10">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap justify-between gap-3 text-xs text-white/50">
+      <div>© 2026 האיטלקיה. כל הזכויות שמורות.</div>
+      <div class="flex gap-4"><span>תקנון</span><span>פרטיות</span><span>נגישות</span></div>
+    </div>
+  </div>
+</footer>
+
+<!-- ========================= PRODUCT MODAL ========================= -->
+<div id="modal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeModal()"></div>
+  <div class="absolute inset-x-0 bottom-0 md:inset-0 md:grid md:place-items-center">
+    <div class="bg-white w-full md:max-w-3xl md:rounded-3xl rounded-t-3xl shadow-2xl max-h-[92vh] overflow-hidden flex flex-col animate-slideUp">
+      <div class="relative">
+        <div id="modal-hero" class="h-48 md:h-56 bg-gradient-to-bl from-brand-yellow to-brand-red grid place-items-center"></div>
+        <button onclick="closeModal()" class="absolute top-3 left-3 w-10 h-10 rounded-full bg-white shadow-lg grid place-items-center hover:bg-brand-bone">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="p-5 md:p-7 overflow-y-auto">
+        <h2 id="modal-title" class="text-2xl md:text-3xl font-black"></h2>
+        <p id="modal-desc" class="text-black/60 mt-1"></p>
+
+        <!-- Size -->
+        <div class="mt-5">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-black">גודל</h4>
+            <span class="text-xs text-black/50">בחירה אחת</span>
+          </div>
+          <div id="opt-sizes" class="grid grid-cols-3 gap-2"></div>
+        </div>
+        <!-- Crust -->
+        <div class="mt-5">
+          <h4 class="font-black mb-2">סוג בצק</h4>
+          <div id="opt-crusts" class="grid grid-cols-2 gap-2"></div>
+        </div>
+        <!-- Half-half -->
+        <div class="mt-5 bg-brand-bone rounded-2xl p-4 flex items-center justify-between">
+          <div>
+            <div class="font-black">פיצה חצי-חצי</div>
+            <div class="text-xs text-black/60">שני טעמים על אותה פיצה (+₪5)</div>
+          </div>
+          <button id="half-toggle" data-active="false" onclick="toggleHalf()" class="half-toggle border border-black/15 rounded-full px-4 py-2 font-bold text-sm transition">הפעל</button>
+        </div>
+        <div id="half-picker" class="hidden mt-3">
+          <div class="text-sm font-semibold mb-2">בחרו את הטעם השני:</div>
+          <div id="half-options" class="flex gap-2 overflow-x-auto scrollbar-hide pb-1"></div>
+        </div>
+        <!-- Toppings -->
+        <div class="mt-5">
+          <div class="flex items-center justify-between mb-2">
+            <h4 class="font-black">תוספות</h4>
+            <span class="text-xs text-black/50">₪4 לתוספת</span>
+          </div>
+          <div id="opt-toppings" class="grid grid-cols-2 md:grid-cols-3 gap-2"></div>
+        </div>
+        <!-- Notes -->
+        <div class="mt-5">
+          <h4 class="font-black mb-2">הערות למטבח</h4>
+          <textarea id="opt-notes" rows="2" class="w-full bg-brand-bone border border-black/10 rounded-xl px-3 py-2.5 outline-none focus:border-brand-red resize-none" placeholder="לדוגמה: ללא זיתים, בצק דק..."></textarea>
+        </div>
+      </div>
+      <!-- Footer bar -->
+      <div class="border-t border-black/10 p-4 md:p-5 flex items-center gap-3 bg-white">
+        <div class="flex items-center gap-2 bg-brand-bone rounded-full p-1">
+          <button onclick="changeQty(-1)" class="w-9 h-9 rounded-full bg-white shadow-sm grid place-items-center hover:bg-brand-red hover:text-white font-black text-lg">−</button>
+          <span id="opt-qty" class="font-black w-6 text-center">1</span>
+          <button onclick="changeQty(1)" class="w-9 h-9 rounded-full bg-white shadow-sm grid place-items-center hover:bg-brand-red hover:text-white font-black text-lg">+</button>
+        </div>
+        <button onclick="addConfiguredToCart()" class="flex-1 bg-brand-red hover:bg-brand-redDark text-white rounded-full py-3.5 font-bold shadow-cta transition flex items-center justify-between px-5">
+          <span>הוספה לעגלה</span>
+          <span id="opt-price">₪0</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========================= SIDE CART (MOBILE) ========================= -->
+<div id="cart-drawer" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/50" onclick="closeCart()"></div>
+  <div class="absolute inset-y-0 left-0 w-full sm:w-[400px] bg-white shadow-2xl flex flex-col animate-slideUp">
+    <div class="p-4 flex items-center justify-between border-b border-black/10">
+      <h3 class="font-black text-lg">העגלה שלי</h3>
+      <button onclick="closeCart()" class="w-9 h-9 rounded-full hover:bg-brand-bone grid place-items-center">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="drawer-items" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+    <div id="drawer-empty" class="flex-1 grid place-items-center text-center text-black/50 p-8">
+      <div>
+        <div class="mb-2 inline-grid place-items-center w-14 h-14 rounded-full bg-brand-bone mx-auto"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg></div>
+        <div class="font-bold">העגלה ריקה</div>
+        <div class="text-sm">הוסיפו פריטים מהתפריט</div>
+      </div>
+    </div>
+    <div class="p-4 border-t border-black/10">
+      <div class="flex justify-between mb-3"><span class="font-black">סה"כ</span><span id="drawer-total" class="font-black text-brand-red text-xl">₪0</span></div>
+      <button onclick="closeCart();showView('cart')" class="w-full bg-brand-red hover:bg-brand-redDark text-white rounded-full py-3 font-bold shadow-cta">למעבר לעגלה</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================= TOAST ========================= -->
+<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] hidden">
+  <div class="toast-in bg-brand-ink text-white rounded-full px-5 py-3 shadow-2xl font-semibold flex items-center gap-2">
+    <span class="w-6 h-6 rounded-full bg-brand-red grid place-items-center">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    </span>
+    <span id="toast-msg"></span>
+  </div>
+</div>
+
+<!-- ========================= APP SCRIPT ========================= -->
+<script>
+// ===== DATA =====
+function iconSVG(name, size=20, cls=''){
+  const s = String(size);
+  const c = cls ? ` class="${cls}"` : '';
+  const icons = {
+    pizza: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2 3 20 8-8 2-2 8z"/><circle cx="14.5" cy="9.5" r="1.2"/><circle cx="11.2" cy="11.4" r="1"/></svg>`,
+    spark: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 2 2.5 6.5L21 9l-4.8 4.5 1.3 6.5L12 17l-5.5 3 1.3-6.5L3 9l6.5-.5z"/></svg>`,
+    bolt: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 2-9 11h6l-1 9 9-11h-6z"/></svg>`,
+    bread: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14a8 8 0 0 1 16 0v3a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z"/><path d="M9 10v2M15 10v2"/></svg>`,
+    cup: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3h8l-1 17H9z"/><path d="M8 7h8"/></svg>`,
+    dessert: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11h16l-2 9H6z"/><path d="M9 11V7a3 3 0 1 1 6 0v4"/></svg>`,
+    pepper: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c2 0 3 1 3 3"/><path d="M10 6c4 0 7 3 7 7a6 6 0 1 1-12 0c0-4 3-7 5-7z"/></svg>`,
+    mushroom: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12a7 7 0 0 1 14 0z"/><path d="M9 12v5a3 3 0 0 0 6 0v-5"/></svg>`,
+    olive: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="6.5" ry="4.5"/><circle cx="12" cy="12" r="1.2"/></svg>`,
+    cheese: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 10 21 6v9L3 19z"/><circle cx="10" cy="12" r="1"/><circle cx="15" cy="14" r="1.2"/></svg>`,
+    flame: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3c2 3 3 4 3 7a3 3 0 1 1-6 0c0-2 1-4 3-7z"/><path d="M6 13a6 6 0 1 0 12 0"/></svg>`,
+    leaf: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19c8 0 14-6 14-14-8 0-14 6-14 14z"/><path d="M5 19c2-4 6-8 10-10"/></svg>`,
+    cap: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m2 9 10-5 10 5-10 5z"/><path d="M6 11v4c0 1.5 3 3 6 3s6-1.5 6-3v-4"/></svg>`,
+    wing: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14c1-4 5-7 9-7 4 0 7 3 7 7-2 3-5 4-8 4-3 0-6-1-8-4z"/></svg>`,
+    bottle: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3h4v3l1 2v12H9V8l1-2z"/></svg>`,
+    water: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3s6 6 6 10a6 6 0 1 1-12 0c0-4 6-10 6-10z"/></svg>`,
+    chocolate: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 4v16M16 4v16"/></svg>`,
+    box: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8 12 3l9 5-9 5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>`,
+    scooter: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="17" r="2"/><circle cx="18" cy="17" r="2"/><path d="M8 17h5l3-6h4"/></svg>`,
+    check: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>`,
+    inbox: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18v14H3z"/><path d="M3 13h5l2 3h4l2-3h5"/></svg>`,
+    search: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`,
+    cart: `<svg${c} width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.7 13.4a2 2 0 0 0 2 1.6h9.7a2 2 0 0 0 2-1.6L23 6H6"/></svg>`
+  };
+  return icons[name] || icons.pizza;
+}
+const CATEGORIES = [
+  { key:'all',      name:'הכל' },
+  { key:'classic',  name:'פיצות קלאסיות' },
+  { key:'special',  name:'מיוחדות' },
+  { key:'deals',    name:'מבצעים' },
+  { key:'sides',    name:'תוספות' },
+  { key:'drinks',   name:'שתייה' },
+  { key:'desserts', name:'קינוחים' },
+];
+
+const TOPPINGS = ['זיתים שחורים','פטריות','בצל סגול','פלפל ירוק','עגבניות','תירס','פפרוני','בולגרית','טונה','אננס','בייקון','בזיליקום טרי','ביצה','חריף'];
+const SIZES = [
+  { key:'S', label:'אישית (26 ס״מ)', delta:-8 },
+  { key:'M', label:'בינונית (32 ס״מ)', delta:0 },
+  { key:'L', label:'משפחתית (40 ס״מ)', delta:14 },
+];
+const CRUSTS = [
+  { key:'classic', label:'קלאסי', delta:0 },
+  { key:'thin',    label:'דק ופריך', delta:0 },
+  { key:'thick',   label:'עבה ושמרים', delta:3 },
+  { key:'glutenfree', label:'ללא גלוטן', delta:9 },
+];
+
+const PRODUCTS = [
+  { id:1,  cat:'classic', name:'מרגריטה קלאסית', desc:'רוטב עגבניות, מוצרלה טרייה ובזיליקום', price:49.9, badge:'פופולרי', icon:'pizza', pop:true },
+  { id:2,  cat:'classic', name:'פפרוני', desc:'נתחי פפרוני חריפים ומוצרלה מזהיבה', price:54.9, badge:'חם', icon:'pepper', pop:true },
+  { id:3,  cat:'classic', name:'פטריות ובצל', desc:'פטריות סוטה, בצל מטוגן ואורגנו', price:52.9, icon:'mushroom' },
+  { id:4,  cat:'classic', name:'זיתים ופלפלים', desc:'זיתי קלמטה, פלפל אדום וירוק ובצל', price:52.9, icon:'olive' },
+  { id:5,  cat:'special', name:'ארבע גבינות', desc:'מוצרלה, פרמזן, גורגונזולה וריקוטה', price:64.9, badge:'מומלץ', icon:'cheese', pop:true },
+  { id:6,  cat:'special', name:'בופאלו חריף', desc:'רוטב בופאלו, עוף צלוי וצ׳דר', price:59.9, icon:'flame' },
+  { id:7,  cat:'special', name:'דיאבולה', desc:'סלמי חריף, פלפל חלפיניו וצ׳ילי', price:58.9, icon:'flame' },
+  { id:8,  cat:'special', name:'טוסקנה', desc:'עגבניות מיובשות, בזיליקום ופרמזן', price:61.9, icon:'leaf', pop:true },
+  { id:9,  cat:'deals',   name:'זוג משפחתיות', desc:'שתי פיצות L + שלוש תוספות', price:99, badge:'חיסכון ₪49', icon:'pizza', pop:true },
+  { id:10, cat:'deals',   name:'ארוחת סטודנט', desc:'פיצה אישית + שתייה + קינוח', price:39.9, badge:'-25%', icon:'cap' },
+  { id:11, cat:'sides',   name:'לחם שום ואבוקדו', desc:'לחם ביתי, שמן זית ואבוקדו', price:19.9, icon:'bread' },
+  { id:12, cat:'sides',   name:'כנפיים BBQ', desc:'כנפיים מפורקות ברוטב BBQ', price:34.9, icon:'wing' },
+  { id:13, cat:'sides',   name:'אצבעות מוצרלה', desc:'6 אצבעות חמות ברוטב מרינרה', price:24.9, icon:'cheese' },
+  { id:14, cat:'drinks',  name:'קוקה קולה 1.5 ל׳', desc:'בקבוק משפחתי קר', price:14, icon:'bottle' },
+  { id:15, cat:'drinks',  name:'ספרייט 1.5 ל׳', desc:'טעם לימון-ליים קריר', price:14, icon:'bottle' },
+  { id:16, cat:'drinks',  name:'מים מינרלים', desc:'בקבוק 500 מ״ל', price:7, icon:'water' },
+  { id:17, cat:'desserts',name:'לאבה שוקולד', desc:'עוגה חמה עם לב שוקולד זורם', price:22.9, icon:'chocolate' },
+  { id:18, cat:'desserts',name:'טירמיסו', desc:'קפה, מסקרפונה וקקאו', price:26.9, icon:'dessert' },
+];
+
+// ===== STATE =====
+const state = {
+  view: 'home',
+  menuCat: 'all',
+  cart: [],
+  mode: 'delivery',
+  discount: 0,
+  config: null,
+};
+
+// ===== VIEW ROUTER =====
+function showView(v, cat){
+  state.view = v;
+  document.querySelectorAll('[data-view]').forEach(el => el.classList.toggle('hidden', el.dataset.view!==v));
+  document.querySelectorAll('[data-nav]').forEach(el => el.classList.toggle('active', el.dataset.nav===v));
+  if (v==='menu'){ if(cat) state.menuCat=cat; renderMenuTabs(); renderMenu(); }
+  if (v==='cart'){ renderCart(); }
+  if (v==='checkout'){ renderCheckoutSummary(); }
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function toggleMobileMenu(){
+  document.getElementById('mobileMenu').classList.toggle('hidden');
+}
+
+// ===== MENU =====
+function renderMenuTabs(){
+  const wrap = document.getElementById('menu-tabs');
+  wrap.innerHTML = CATEGORIES.map(c=>`
+    <button onclick="state.menuCat='${c.key}';renderMenuTabs();renderMenu()"
+      class="shrink-0 px-5 py-2.5 rounded-full font-bold text-sm border transition ${state.menuCat===c.key?'bg-brand-red text-white border-brand-red':'bg-white border-black/10 hover:border-brand-red hover:text-brand-red'}">
+      ${c.name}
+    </button>`).join('');
+}
+
+function renderMenu(){
+  const grid = document.getElementById('menu-grid');
+  const empty = document.getElementById('menu-empty');
+  const q = (document.getElementById('menu-search')?.value||'').trim();
+  let list = PRODUCTS.filter(p => state.menuCat==='all' || p.cat===state.menuCat);
+  if (q) list = list.filter(p => p.name.includes(q) || p.desc.includes(q));
+  empty.classList.toggle('hidden', list.length>0);
+  grid.innerHTML = list.map(p => cardHTML(p)).join('');
+  renderSideCart();
+}
+
+function cardHTML(p){
+  return `
+    <article class="bg-white rounded-3xl border border-black/5 shadow-card card-hover overflow-hidden flex flex-col">
+      <div class="relative h-40 bg-gradient-to-bl from-brand-cream to-brand-yellow/50 grid place-items-center text-brand-red">
+        ${iconSVG(p.icon, 62)}
+        ${p.badge?`<div class="absolute top-3 right-3 bg-brand-red text-white text-xs font-black px-2.5 py-1 rounded-full shadow-md">${p.badge}</div>`:''}
+      </div>
+      <div class="p-4 flex-1 flex flex-col">
+        <h3 class="font-black text-lg leading-tight">${p.name}</h3>
+        <p class="text-sm text-black/60 mt-1 line-clamp-2 flex-1">${p.desc}</p>
+        <div class="mt-3 flex items-center justify-between">
+          <div><span class="text-xs text-black/40">החל מ-</span><div class="font-black text-xl text-brand-red">₪${p.price.toFixed(2).replace(/\.00$/,'')}</div></div>
+          <button onclick="openProduct(${p.id})" class="bg-brand-ink hover:bg-brand-red text-white rounded-full px-4 py-2 font-bold text-sm transition inline-flex items-center gap-1">
+            הוסף
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+      </div>
+    </article>`;
+}
+
+// ===== POPULAR ON HOME =====
+(function renderPopular(){
+  document.getElementById('home-popular').innerHTML = PRODUCTS.filter(p=>p.pop).slice(0,4).map(cardHTML).join('');
+})();
+
+// ===== PRODUCT MODAL =====
+function openProduct(id){
+  const p = PRODUCTS.find(x=>x.id===id);
+  if (!p) return;
+  state.config = {
+    product: p, size:'M', crust:'classic', toppings:[], half:false, halfPair:null, qty:1, notes:''
+  };
+  document.getElementById('modal-title').textContent = p.name;
+  document.getElementById('modal-desc').textContent = p.desc;
+  document.getElementById('modal-hero').innerHTML = iconSVG(p.icon, 108, 'text-white');
+  document.getElementById('opt-notes').value = '';
+  document.getElementById('opt-qty').textContent = '1';
+  document.getElementById('half-toggle').dataset.active = 'false';
+  document.getElementById('half-toggle').textContent = 'הפעל';
+  document.getElementById('half-picker').classList.add('hidden');
+
+  // Only pizzas get full customization
+  const isPizza = ['classic','special','deals'].includes(p.cat);
+  document.getElementById('opt-sizes').innerHTML = SIZES.map(s=>`
+    <button onclick="setOpt('size','${s.key}')" aria-pressed="${state.config.size===s.key}"
+      class="topping-btn border-2 rounded-xl py-2.5 text-sm font-bold text-center transition ${state.config.size===s.key?'border-brand-red bg-brand-red text-white':'border-black/10 hover:border-brand-red'}">
+      <div>${s.key}</div><div class="text-[10px] opacity-70 font-medium">${s.label}</div>
+    </button>`).join('');
+  document.getElementById('opt-crusts').innerHTML = CRUSTS.map(c=>`
+    <button onclick="setOpt('crust','${c.key}')"
+      class="border-2 rounded-xl py-2.5 text-sm font-bold transition ${state.config.crust===c.key?'border-brand-red bg-brand-red text-white':'border-black/10 hover:border-brand-red'}">
+      ${c.label}${c.delta?` (+₪${c.delta})`:''}
+    </button>`).join('');
+  document.getElementById('opt-toppings').innerHTML = TOPPINGS.map(t=>`
+    <button onclick="toggleTopping('${t}')" aria-pressed="false" class="topping-btn border border-black/10 rounded-xl py-2 px-3 text-sm font-semibold hover:border-brand-red transition">${t}</button>`).join('');
+  document.getElementById('half-options').innerHTML = PRODUCTS.filter(x=>['classic','special'].includes(x.cat)).map(x=>`
+    <button onclick="setHalfPair(${x.id})" class="shrink-0 border border-black/10 rounded-xl px-3 py-2 text-sm font-semibold hover:border-brand-red inline-flex items-center gap-2">${iconSVG(x.icon,16)} ${x.name}</button>`).join('');
+
+  if (!isPizza){
+    // Hide pizza-specific options for sides/drinks
+    ['opt-sizes','opt-crusts','opt-toppings'].forEach(id=>document.getElementById(id).parentElement.classList.add('hidden'));
+    document.querySelector('#half-toggle').closest('.bg-brand-bone').classList.add('hidden');
+  } else {
+    ['opt-sizes','opt-crusts','opt-toppings'].forEach(id=>document.getElementById(id).parentElement.classList.remove('hidden'));
+    document.querySelector('#half-toggle').closest('.bg-brand-bone').classList.remove('hidden');
+  }
+
+  updateConfigPrice();
+  document.getElementById('modal').classList.remove('hidden');
+  document.body.style.overflow='hidden';
+}
+function closeModal(){
+  document.getElementById('modal').classList.add('hidden');
+  document.body.style.overflow='';
+}
+function setOpt(key,val){ state.config[key]=val; openProduct(state.config.product.id); /* re-render */
+  // preserve toppings/qty
+}
+function toggleTopping(t){
+  const c = state.config;
+  const i = c.toppings.indexOf(t);
+  if (i>-1) c.toppings.splice(i,1); else c.toppings.push(t);
+  document.querySelectorAll('#opt-toppings .topping-btn').forEach(btn=>{
+    const on = c.toppings.includes(btn.textContent);
+    btn.setAttribute('aria-pressed', on);
+  });
+  updateConfigPrice();
+}
+function changeQty(d){
+  const c = state.config; c.qty = Math.max(1, c.qty+d);
+  document.getElementById('opt-qty').textContent = c.qty;
+  updateConfigPrice();
+}
+function toggleHalf(){
+  const c = state.config; c.half = !c.half;
+  const btn = document.getElementById('half-toggle');
+  btn.dataset.active = c.half; btn.textContent = c.half?'פעיל':'הפעל';
+  document.getElementById('half-picker').classList.toggle('hidden', !c.half);
+  updateConfigPrice();
+}
+function setHalfPair(id){
+  state.config.halfPair = PRODUCTS.find(p=>p.id===id);
+  document.querySelectorAll('#half-options button').forEach(b=>b.classList.remove('border-brand-red','bg-brand-cream'));
+  event.currentTarget.classList.add('border-brand-red','bg-brand-cream');
+  updateConfigPrice();
+}
+function configPrice(){
+  const c = state.config; if (!c) return 0;
+  const size = SIZES.find(s=>s.key===c.size);
+  const crust = CRUSTS.find(cr=>cr.key===c.crust);
+  let base = c.product.price + (size?.delta||0) + (crust?.delta||0);
+  base += c.toppings.length * 4;
+  if (c.half) base += 5;
+  return base * c.qty;
+}
+function updateConfigPrice(){
+  document.getElementById('opt-price').textContent = '₪' + configPrice().toFixed(2).replace(/\.00$/,'');
+}
+function addConfiguredToCart(){
+  const c = state.config; if (!c) return;
+  const item = {
+    uid: Date.now()+Math.random(),
+    productId: c.product.id,
+    name: c.product.name,
+    icon: c.product.icon,
+    size: c.size, crust: c.crust, toppings:[...c.toppings],
+    half: c.half, halfPair: c.halfPair?.name||null,
+    qty: c.qty, notes: c.notes,
+    price: configPrice()/c.qty
+  };
+  state.cart.push(item);
+  closeModal();
+  updateCartUI();
+  toast('נוסף לעגלה — ' + item.name);
+}
+
+// ===== CART =====
+function openCart(){ document.getElementById('cart-drawer').classList.remove('hidden'); renderDrawer(); document.body.style.overflow='hidden'; }
+function closeCart(){ document.getElementById('cart-drawer').classList.add('hidden'); document.body.style.overflow=''; }
+function cartSub(){ return state.cart.reduce((s,i)=>s+i.price*i.qty,0); }
+function deliveryFee(){ return state.cart.length===0 ? 0 : (state.mode==='pickup'?0:15); }
+function cartTotal(){ return Math.max(0, cartSub() + deliveryFee() - state.discount); }
+
+function itemLineHTML(it, compact){
+  const extras = [];
+  extras.push(SIZES.find(s=>s.key===it.size)?.label?.split(' ')[0] || '');
+  if (it.toppings.length) extras.push('+' + it.toppings.slice(0,2).join(', ') + (it.toppings.length>2?`+${it.toppings.length-2}`:''));
+  if (it.half && it.halfPair) extras.push('חצי ' + it.halfPair);
+  return `
+    <div class="flex gap-3 items-start ${compact?'':'bg-white rounded-2xl border border-black/5 p-3'}">
+      <div class="w-12 h-12 rounded-xl bg-brand-cream grid place-items-center text-brand-red shrink-0">${iconSVG(it.icon || 'pizza', 20)}</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex justify-between gap-2">
+          <div class="font-bold truncate">${it.name}</div>
+          <div class="font-black text-brand-red whitespace-nowrap">₪${(it.price*it.qty).toFixed(2).replace(/\.00$/,'')}</div>
+        </div>
+        <div class="text-xs text-black/50 truncate">${extras.filter(Boolean).join(' · ')||''}</div>
+        <div class="mt-2 flex items-center gap-2">
+          <div class="flex items-center bg-brand-bone rounded-full">
+            <button onclick="qty('${it.uid}',-1)" class="w-7 h-7 rounded-full hover:bg-brand-red hover:text-white font-black">−</button>
+            <span class="w-6 text-center text-sm font-bold">${it.qty}</span>
+            <button onclick="qty('${it.uid}',1)" class="w-7 h-7 rounded-full hover:bg-brand-red hover:text-white font-black">+</button>
+          </div>
+          <button onclick="removeItem('${it.uid}')" class="text-xs text-black/50 hover:text-brand-red">הסרה</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderDrawer(){
+  const items = document.getElementById('drawer-items');
+  const empty = document.getElementById('drawer-empty');
+  if (!state.cart.length){ items.classList.add('hidden'); empty.classList.remove('hidden'); }
+  else { items.classList.remove('hidden'); empty.classList.add('hidden'); items.innerHTML = state.cart.map(i=>itemLineHTML(i,false)).join(''); }
+  document.getElementById('drawer-total').textContent = '₪' + cartTotal().toFixed(2).replace(/\.00$/,'');
+}
+function renderSideCart(){
+  const wrap = document.getElementById('side-cart-items');
+  const empty = document.getElementById('side-cart-empty');
+  const footer = document.getElementById('side-cart-footer');
+  const count = document.getElementById('side-cart-count');
+  if (!wrap) return;
+  count.textContent = state.cart.length + ' פריטים';
+  if (!state.cart.length){ wrap.innerHTML=''; empty.classList.remove('hidden'); footer.classList.add('hidden'); return; }
+  empty.classList.add('hidden'); footer.classList.remove('hidden');
+  wrap.innerHTML = state.cart.map(i=>itemLineHTML(i,true)).join('');
+  document.getElementById('side-sub').textContent = '₪' + cartSub().toFixed(2).replace(/\.00$/,'');
+  document.getElementById('side-del').textContent = state.mode==='pickup'?'חינם':'₪15';
+  document.getElementById('side-total').textContent = '₪' + cartTotal().toFixed(2).replace(/\.00$/,'');
+}
+
+function renderCart(){
+  const wrap = document.getElementById('cart-items');
+  const empty = document.getElementById('cart-empty');
+  const checkout = document.getElementById('cart-checkout');
+  if (!state.cart.length){ wrap.innerHTML=''; empty.classList.remove('hidden'); checkout.disabled=true; checkout.classList.add('opacity-50','cursor-not-allowed'); }
+  else { empty.classList.add('hidden'); wrap.innerHTML = state.cart.map(i=>itemLineHTML(i,false)).join(''); checkout.disabled=false; checkout.classList.remove('opacity-50','cursor-not-allowed'); }
+  document.getElementById('sum-sub').textContent = '₪' + cartSub().toFixed(2).replace(/\.00$/,'');
+  document.getElementById('sum-del').textContent = state.mode==='pickup'?'חינם':'₪15';
+  document.getElementById('sum-del-label').textContent = state.mode==='pickup'?'איסוף עצמי':'משלוח';
+  if (state.discount>0){ document.getElementById('sum-disc-row').classList.remove('hidden'); document.getElementById('sum-disc').textContent = '-₪' + state.discount.toFixed(2).replace(/\.00$/,''); }
+  else document.getElementById('sum-disc-row').classList.add('hidden');
+  document.getElementById('sum-total').textContent = '₪' + cartTotal().toFixed(2).replace(/\.00$/,'');
+}
+
+function setMode(m){
+  state.mode = m;
+  document.getElementById('mode-delivery').classList.toggle('tab-active', m==='delivery');
+  document.getElementById('mode-delivery').classList.toggle('text-black/60', m!=='delivery');
+  document.getElementById('mode-pickup').classList.toggle('tab-active', m==='pickup');
+  document.getElementById('mode-pickup').classList.toggle('text-black/60', m!=='pickup');
+  renderCart();
+}
+
+function qty(uid,d){
+  const it = state.cart.find(x=>x.uid==uid); if (!it) return;
+  it.qty = Math.max(1, it.qty+d);
+  updateCartUI();
+}
+function removeItem(uid){
+  state.cart = state.cart.filter(x=>x.uid!=uid);
+  updateCartUI();
+}
+function updateCartUI(){
+  document.getElementById('cart-count-badge').textContent = state.cart.reduce((s,i)=>s+i.qty,0);
+  renderDrawer(); renderSideCart();
+  if (state.view==='cart') renderCart();
+}
+
+function applyCoupon(){
+  const v = document.getElementById('coupon-input').value.trim().toUpperCase();
+  const msg = document.getElementById('coupon-msg');
+  const codes = { 'PIZZA20': {t:'percent',v:20}, 'WELCOME': {t:'flat',v:15}, 'FAMILY50': {t:'flat',v:50} };
+  if (!codes[v]){ msg.textContent='הקופון לא תקף'; msg.className='text-xs mt-1.5 text-brand-red font-semibold'; state.discount=0; renderCart(); return; }
+  const c = codes[v];
+  state.discount = c.t==='percent' ? cartSub()*c.v/100 : c.v;
+  msg.textContent = 'הקופון הופעל! חסכתם ₪' + state.discount.toFixed(0);
+  msg.className = 'text-xs mt-1.5 text-emerald-600 font-bold';
+  renderCart();
+}
+
+// ===== CHECKOUT =====
+function renderCheckoutSummary(){
+  document.getElementById('checkout-items').innerHTML = state.cart.map(i=>`
+    <div class="flex justify-between gap-2">
+      <div class="truncate"><span class="font-bold">${i.qty}×</span> ${i.name}</div>
+      <div class="font-bold whitespace-nowrap">₪${(i.price*i.qty).toFixed(2).replace(/\.00$/,'')}</div>
+    </div>`).join('');
+  document.getElementById('co-sub').textContent = '₪' + cartSub().toFixed(2).replace(/\.00$/,'');
+  document.getElementById('co-del').textContent = state.mode==='pickup'?'חינם':'₪15';
+  document.getElementById('co-total').textContent = '₪' + cartTotal().toFixed(2).replace(/\.00$/,'');
+}
+
+function submitOrder(e){
+  e.preventDefault();
+  const btn = document.getElementById('co-btn-label');
+  const sp = document.getElementById('co-spinner');
+  btn.textContent = 'מעבד תשלום...'; sp.classList.remove('hidden');
+  setTimeout(()=>{
+    const id = 'MT-' + Math.floor(10000+Math.random()*90000);
+    document.getElementById('track-order-id').textContent = '#'+id;
+    document.getElementById('track-total').textContent = '₪' + cartTotal().toFixed(2).replace(/\.00$/,'');
+    document.getElementById('track-eta').textContent = (24 + Math.floor(Math.random()*10)) + ' דקות';
+    renderTimeline();
+    showView('track');
+    btn.textContent = 'אישור ותשלום'; sp.classList.add('hidden');
+    // keep cart for reorder but a real app would clear: state.cart=[]; updateCartUI();
+  }, 1400);
+}
+
+function renderTimeline(){
+  const steps = [
+    { k:'received', t:'ההזמנה התקבלה', i:'inbox', done:true },
+    { k:'oven',     t:'בתנור האבן',     i:'flame', active:true },
+    { k:'ready',    t:'מוכנה למשלוח',   i:'box', done:false },
+    { k:'delivery', t:'בדרך אליכם',     i:'scooter', done:false },
+    { k:'delivered',t:'נמסר — בתיאבון!',i:'check', done:false },
+  ];
+  document.getElementById('track-timeline').innerHTML = steps.map((s,i)=>`
+    <li class="flex items-center gap-4">
+      <div class="w-11 h-11 rounded-full grid place-items-center ${s.done?'bg-brand-red text-white':s.active?'bg-brand-yellow animate-pulseSoft text-brand-ink':'bg-brand-bone text-black/30'}">${iconSVG(s.i,18)}</div>
+      <div class="flex-1">
+        <div class="font-bold ${s.done||s.active?'':'text-black/40'}">${s.t}</div>
+        ${s.active?'<div class="text-xs text-brand-red font-semibold">בתהליך עכשיו...</div>':s.done?'<div class="text-xs text-black/50">הושלם</div>':''}
+      </div>
+      ${i<steps.length-1?`<div class="w-px h-6 bg-black/10 absolute"></div>`:''}
+    </li>`).join('');
+}
+
+function reorder(){ showView('cart'); }
+
+// ===== TOAST =====
+let toastT;
+function toast(msg){
+  const t = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(toastT);
+  toastT = setTimeout(()=>t.classList.add('hidden'), 2200);
+}
+
+// ===== INIT =====
+showView('home');
+updateCartUI();
+renderTimeline();
+</script>
+
+</body>
+</html>
