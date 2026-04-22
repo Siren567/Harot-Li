@@ -675,7 +675,7 @@ export function ProductEditorPage() {
               title="מוצרים"
               subtitle="ניהול מוצרים אמיתי המחובר ל־Backend החדש."
               actions={
-                <div style={{ direction: "ltr", marginInlineStart: "auto" }}>
+                <div style={{ direction: "ltr", marginInlineEnd: "auto" }}>
                   <PrimaryButton
                     type="button"
                     onClick={() => {

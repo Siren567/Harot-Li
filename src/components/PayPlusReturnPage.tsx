@@ -44,17 +44,58 @@ function useQueryParam(name: string) {
  */
 export default function PayPlusReturnPage({ kind }: { kind: Kind }) {
   const orderId = useQueryParam("orderId");
+  const returnId = useQueryParam("returnId");
+  const pageRequestUid = useQueryParam("page_request_uid");
+  const transactionUid = useQueryParam("transaction_uid");
   const [status, setStatus] = useState<OrderStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resolvedOrderId, setResolvedOrderId] = useState<string | null>(orderId);
 
   useEffect(() => {
-    if (!orderId) return;
+    setResolvedOrderId(orderId);
+  }, [orderId]);
+
+  useEffect(() => {
+    if (orderId) return;
+    const paymentIdRaw = returnId || pageRequestUid || transactionUid;
+    if (!paymentIdRaw) return;
+    const paymentId = paymentIdRaw;
+    let cancelled = false;
+    const apiBase = getApiBase();
+    (async () => {
+      try {
+        const res = await fetch(
+          `${apiBase}/api/orders/payment-status/by-reference?paymentId=${encodeURIComponent(paymentId)}`
+        );
+        if (!res.ok) throw new Error("NOT_OK");
+        const data = await res.json();
+        if (!cancelled && data?.orderId) {
+          setResolvedOrderId(String(data.orderId));
+          setStatus({
+            orderNumber: String(data.orderNumber ?? ""),
+            paymentMethod: String(data.paymentMethod ?? "payplus"),
+            paymentStatus: String(data.paymentStatus ?? "pending"),
+            total: Number(data.total ?? 0),
+          });
+        }
+      } catch {
+        if (!cancelled) setError("לא ניתן לזהות הזמנה מהחזרה מהתשלום");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId, pageRequestUid, returnId, transactionUid]);
+
+  useEffect(() => {
+    if (!resolvedOrderId) return;
+    const currentOrderId = resolvedOrderId;
     let cancelled = false;
     const apiBase = getApiBase();
 
     async function fetchOnce() {
       try {
-        const res = await fetch(`${apiBase}/api/orders/${encodeURIComponent(orderId!)}/payment-status`);
+        const res = await fetch(`${apiBase}/api/orders/${encodeURIComponent(currentOrderId)}/payment-status`);
         if (!res.ok) throw new Error("NOT_OK");
         const data = await res.json();
         if (!cancelled) setStatus(data);
@@ -72,7 +113,7 @@ export default function PayPlusReturnPage({ kind }: { kind: Kind }) {
       window.clearInterval(interval);
       window.clearTimeout(stop);
     };
-  }, [orderId]);
+  }, [resolvedOrderId]);
 
   const copy = COPY[kind];
 
@@ -103,16 +144,16 @@ export default function PayPlusReturnPage({ kind }: { kind: Kind }) {
         <h1 style={{ color: copy.tone, margin: 0, fontSize: "1.5rem" }}>{copy.title}</h1>
         <p style={{ marginTop: "0.75rem", lineHeight: 1.6, color: "#333" }}>{copy.body}</p>
 
-        {orderId ? (
+        {resolvedOrderId ? (
           <div style={{ marginTop: "1.25rem", fontSize: "0.95rem", color: "#555" }}>
             <div>
-              <strong>מזהה הזמנה:</strong> {status?.orderNumber ?? orderId}
+              <strong>מספר הזמנה:</strong> {status?.orderNumber ?? resolvedOrderId}
             </div>
             {status ? (
               <>
                 <div style={{ marginTop: "0.35rem" }}>
                   <strong>סטטוס תשלום:</strong>{" "}
-                  {status.paymentStatus === "paid"
+                  {status.paymentStatus === "paid" || status.paymentStatus === "coupon_paid"
                     ? "שולם"
                     : status.paymentStatus === "failed"
                       ? "נכשל"

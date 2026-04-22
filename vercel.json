@@ -11,6 +11,14 @@
     {
       "source": "/studio/:path*",
       "destination": "/index.html"
+    },
+    {
+      "source": "/checkout/payplus/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/checkout/:path*",
+      "destination": "/index.html"
     }
   ],
   "headers": [

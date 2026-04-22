@@ -630,6 +630,28 @@ ordersRouter.post("/", async (req, res) => {
  * Exposes only non-sensitive fields so it is safe without auth — the caller
  * already knows the orderId (PayPlus redirected them there).
  */
+ordersRouter.get("/payment-status/by-reference", async (req, res) => {
+  const rawPaymentId = typeof req.query.paymentId === "string" ? req.query.paymentId : "";
+  const paymentId = rawPaymentId.trim();
+  if (!paymentId) return res.status(400).json({ error: "PAYMENT_ID_REQUIRED" });
+  try {
+    const order = await prisma.order.findFirst({ where: { paymentId } });
+    if (!order) return res.status(404).json({ error: "NOT_FOUND" });
+    const o = order as any;
+    return res.json({
+      ok: true,
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      paymentMethod: o.paymentMethod ?? "cash",
+      paymentStatus: o.paymentStatus ?? "pending",
+      total: order.total,
+    });
+  } catch (e) {
+    if (isDatabaseConnectionError(e)) return respondDatabaseUnavailable(res, e);
+    return res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
 ordersRouter.get("/:id/payment-status", async (req, res) => {
   try {
     const order = await prisma.order.findUnique({ where: { id: req.params.id } });

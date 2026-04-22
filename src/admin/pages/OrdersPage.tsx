@@ -626,6 +626,10 @@ export function OrdersPage() {
   const [datePreset, setDatePreset] = useState<"all" | "today" | "7d" | "30d">("30d");
   const [selected, setSelected] = useState<Order | null>(null);
   const [notePopoverOrderId, setNotePopoverOrderId] = useState<string | null>(null);
+  const [noteEditorOrder, setNoteEditorOrder] = useState<Order | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteEditorError, setNoteEditorError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!initialUrlState.orderId || orders.length === 0) return;
@@ -692,19 +696,31 @@ export function OrdersPage() {
 
   async function handleAddNote(order: Order) {
     const current = String(order.notes ?? "").trim();
-    const next = window.prompt("הוסף/ערוך הערה להזמנה", current);
-    if (next === null) return;
+    setNoteEditorOrder(order);
+    setNoteDraft(current);
+    setNoteEditorError(null);
+  }
+
+  async function handleSaveNote() {
+    if (!noteEditorOrder) return;
+    const next = noteDraft;
+    setNoteSaving(true);
+    setNoteEditorError(null);
     try {
-      const out = await apiFetch<{ ok?: boolean; note?: string }>(`/api/orders/${order.id}/note`, {
+      const out = await apiFetch<{ ok?: boolean; note?: string }>(`/api/orders/${noteEditorOrder.id}/note`, {
         method: "PATCH",
         body: JSON.stringify({ note: next }),
       });
       const saved = String(out?.note ?? next).trim();
-      setOrders((prev) => prev.map((x) => (x.id === order.id ? { ...x, notes: saved } : x)));
-      setSelected((cur) => (cur && cur.id === order.id ? { ...cur, notes: saved } : cur));
-      if (!saved) setNotePopoverOrderId((cur) => (cur === order.id ? null : cur));
+      setOrders((prev) => prev.map((x) => (x.id === noteEditorOrder.id ? { ...x, notes: saved } : x)));
+      setSelected((cur) => (cur && cur.id === noteEditorOrder.id ? { ...cur, notes: saved } : cur));
+      if (!saved) setNotePopoverOrderId((cur) => (cur === noteEditorOrder.id ? null : cur));
+      setNoteEditorOrder(null);
+      setNoteDraft("");
     } catch {
-      window.alert("לא ניתן לשמור הערה כרגע");
+      setNoteEditorError("לא ניתן לשמור הערה כרגע");
+    } finally {
+      setNoteSaving(false);
     }
   }
 
@@ -1284,6 +1300,128 @@ export function OrdersPage() {
           setSelected((cur) => (cur && cur.id === id ? { ...cur, rawStatus: next } : cur));
         }}
       />
+      {noteEditorOrder && (
+        <>
+          <div
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 360 }}
+            onClick={() => {
+              if (noteSaving) return;
+              setNoteEditorOrder(null);
+              setNoteEditorError(null);
+            }}
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            style={{
+              position: "fixed",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              width: "min(560px, calc(100vw - 32px))",
+              borderRadius: "14px",
+              border: "1px solid var(--border)",
+              background: "var(--card)",
+              boxShadow: "0 24px 64px rgba(0,0,0,0.35)",
+              zIndex: 370,
+              padding: "16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
+              <div>
+                <div style={{ fontSize: "16px", fontWeight: 800, color: "var(--foreground)" }}>עריכת הערה להזמנה</div>
+                <div style={{ fontSize: "12px", color: "var(--muted-foreground)", marginTop: "2px" }}>
+                  {noteEditorOrder.orderNumber}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (noteSaving) return;
+                  setNoteEditorOrder(null);
+                  setNoteEditorError(null);
+                }}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--muted-foreground)",
+                  cursor: noteSaving ? "default" : "pointer",
+                  opacity: noteSaving ? 0.55 : 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <textarea
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              disabled={noteSaving}
+              rows={5}
+              placeholder="הוסף/ערוך הערה להזמנה"
+              style={{
+                width: "100%",
+                resize: "vertical",
+                borderRadius: "10px",
+                border: "1px solid var(--border)",
+                background: "var(--input)",
+                color: "var(--foreground)",
+                padding: "10px 12px",
+                fontSize: "13px",
+                lineHeight: 1.45,
+                fontFamily: "inherit",
+              }}
+            />
+            {noteEditorError && <div style={{ fontSize: "12px", color: "var(--destructive)" }}>{noteEditorError}</div>}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (noteSaving) return;
+                  setNoteEditorOrder(null);
+                  setNoteEditorError(null);
+                }}
+                style={{
+                  background: "var(--input)",
+                  border: "1px solid var(--border)",
+                  color: "var(--foreground-secondary)",
+                  borderRadius: "10px",
+                  padding: "8px 12px",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  cursor: noteSaving ? "default" : "pointer",
+                  opacity: noteSaving ? 0.65 : 1,
+                }}
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveNote}
+                disabled={noteSaving}
+                style={{
+                  background: "rgba(201,169,110,0.16)",
+                  border: "1px solid rgba(201,169,110,0.35)",
+                  color: "var(--primary)",
+                  borderRadius: "10px",
+                  padding: "8px 12px",
+                  fontSize: "12px",
+                  fontWeight: 800,
+                  cursor: noteSaving ? "default" : "pointer",
+                  opacity: noteSaving ? 0.75 : 1,
+                }}
+              >
+                {noteSaving ? "שומר…" : "שמירה"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
       <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
     </div>
   );
