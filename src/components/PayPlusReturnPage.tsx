@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import SiteLegalFooter from "./SiteLegalFooter";
 
 type Kind = "success" | "failure" | "cancel";
 
@@ -118,29 +119,28 @@ export default function PayPlusReturnPage({ kind }: { kind: Kind }) {
   const copy = COPY[kind];
 
   return (
-    <main
-      dir="rtl"
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "2rem 1rem",
-        background: "#f7f7f7",
-        fontFamily: "inherit",
-      }}
-    >
-      <section
+    <div dir="rtl" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: "#f7f7f7" }}>
+      <main
         style={{
-          maxWidth: 520,
-          width: "100%",
-          background: "#fff",
-          borderRadius: 16,
-          padding: "2rem 1.75rem",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
-          textAlign: "right",
+          flex: "1 0 auto",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "2rem 1rem",
+          fontFamily: "inherit",
         }}
       >
+        <section
+          style={{
+            maxWidth: 520,
+            width: "100%",
+            background: "#fff",
+            borderRadius: 16,
+            padding: "2rem 1.75rem",
+            boxShadow: "0 10px 30px rgba(0,0,0,0.08)",
+            textAlign: "right",
+          }}
+        >
         <h1 style={{ color: copy.tone, margin: 0, fontSize: "1.5rem" }}>{copy.title}</h1>
         <p style={{ marginTop: "0.75rem", lineHeight: 1.6, color: "#333" }}>{copy.body}</p>
 
@@ -205,7 +205,9 @@ export default function PayPlusReturnPage({ kind }: { kind: Kind }) {
             </a>
           ) : null}
         </div>
-      </section>
-    </main>
+        </section>
+      </main>
+      <SiteLegalFooter />
+    </div>
   );
 }

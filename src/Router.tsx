@@ -5,6 +5,7 @@ import App from "./App";
 import { AdminApp } from "./admin/AdminApp";
 import StudioPage from "./components/StudioPage";
 import PayPlusReturnPage from "./components/PayPlusReturnPage";
+import AccessibilityWidget from "./components/AccessibilityWidget";
 
 type Route =
   | { kind: "admin" }
@@ -37,14 +38,39 @@ export default function Router() {
     case "admin":
       return <AdminApp />;
     case "studio":
-      return <StudioPage onBackToLanding={() => window.location.assign("/")} />;
+      return (
+        <>
+          <StudioPage onBackToLanding={() => window.location.assign("/")} />
+          <AccessibilityWidget />
+        </>
+      );
     case "payplus-success":
-      return <PayPlusReturnPage kind="success" />;
+      return (
+        <>
+          <PayPlusReturnPage kind="success" />
+          <AccessibilityWidget />
+        </>
+      );
     case "payplus-failure":
-      return <PayPlusReturnPage kind="failure" />;
+      return (
+        <>
+          <PayPlusReturnPage kind="failure" />
+          <AccessibilityWidget />
+        </>
+      );
     case "payplus-cancel":
-      return <PayPlusReturnPage kind="cancel" />;
+      return (
+        <>
+          <PayPlusReturnPage kind="cancel" />
+          <AccessibilityWidget />
+        </>
+      );
     default:
-      return <App />;
+      return (
+        <>
+          <App />
+          <AccessibilityWidget />
+        </>
+      );
   }
 }

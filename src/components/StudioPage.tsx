@@ -7,6 +7,7 @@ import { loadBootstrapOnce, loadPublicProductsOnce } from "../lib/studioDataLoad
 import { studioCategories, studioFonts, studioShippingMethods } from "../constants/studioData";
 import CheckoutForm, { type CheckoutFormData } from "./checkout/CheckoutForm";
 import Pendant3DPreview, { type EngravingLine } from "./Pendant3DPreview";
+import SiteLegalFooter from "./SiteLegalFooter";
 import {
   getTemplateForProduct,
   getTemplateForPendantType,
@@ -1811,6 +1812,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
           חזרה לדף הבית
         </button>
       </footer>
+      <SiteLegalFooter />
     </div>
   );
 };

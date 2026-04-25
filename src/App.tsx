@@ -5,7 +5,7 @@ import { getApiBaseUrl } from "./lib/apiBase";
 import { BrandWordmark } from "./lib/brand";
 import { loadBootstrapOnce } from "./lib/studioDataLoader";
 
-type ModalType = "terms" | "privacy" | "usage" | "contact" | "orderStatus" | null;
+type ModalType = "terms" | "privacy" | "usage" | "contact" | "orderStatus" | "cancelRequest" | null;
 
 type PublicOrderStatus = "NEW" | "PAID" | "FULFILLED" | "SHIPPED" | "COMPLETED" | "CANCELLED" | "REFUNDED";
 
@@ -40,6 +40,7 @@ const App = () => {
     createdAt: string;
     totalAgorot: number;
   } | null>(null);
+  const [cancelRequestSent, setCancelRequestSent] = useState(false);
   const modalRef = useRef<HTMLDivElement | null>(null);
   const [bootstrap, setBootstrap] = useState<any>(null);
   const [bootstrapReady, setBootstrapReady] = useState(false);
@@ -131,6 +132,7 @@ const App = () => {
   const closeModal = () => {
     setOpenModal(null);
     setContactSent(false);
+    setCancelRequestSent(false);
     setOrderLookupInput("");
     setOrderLookupLoading(false);
     setOrderLookupError(null);
@@ -340,7 +342,7 @@ const App = () => {
   };
 
   const legalContent =
-    openModal && openModal !== "contact" && openModal !== "orderStatus"
+    openModal && openModal !== "contact" && openModal !== "orderStatus" && openModal !== "cancelRequest"
       ? {
           title: legalBySlug[openModal]?.title ?? legalDefaults[openModal].title,
           html:
@@ -359,6 +361,8 @@ const App = () => {
           ? "modal-title-usage"
           : openModal === "orderStatus"
             ? "modal-title-order-status"
+          : openModal === "cancelRequest"
+            ? "modal-title-cancel-request"
             : "modal-title-contact";
 
   const modalHeading =
@@ -366,6 +370,8 @@ const App = () => {
       ? "צור קשר"
       : openModal === "orderStatus"
         ? "בדיקת סטטוס הזמנה"
+        : openModal === "cancelRequest"
+          ? "טופס בקשה לביטול"
         : legalContent?.title ?? "מידע";
 
   return (
@@ -716,19 +722,28 @@ const App = () => {
               Build by S.G Digital
             </a>
           </div>
-          <a
-            href={footer.statusLinkHref ?? "#"}
-            className="footer-status-link"
-            onClick={(event) => {
-              const href = String(footer.statusLinkHref ?? "").trim();
-              if (!href || href === "#") {
-                event.preventDefault();
-                setOpenModal("orderStatus");
-              }
-            }}
-          >
-            {footer.statusLinkText ?? ""}
-          </a>
+          <div className="footer-actions">
+            <a
+              href={footer.statusLinkHref ?? "#"}
+              className="footer-status-link"
+              onClick={(event) => {
+                const href = String(footer.statusLinkHref ?? "").trim();
+                if (!href || href === "#") {
+                  event.preventDefault();
+                  setOpenModal("orderStatus");
+                }
+              }}
+            >
+              {footer.statusLinkText ?? ""}
+            </a>
+            <button
+              type="button"
+              className="footer-status-link footer-status-link-secondary"
+              onClick={() => setOpenModal("cancelRequest")}
+            >
+              טופס בקשה לביטול
+            </button>
+          </div>
         </div>
       </footer>
 
@@ -852,6 +867,49 @@ const App = () => {
                       <h3>הפנייה נשלחה</h3>
                       <p>
                         הודעתך התקבלה אצלנו. נחזור אליך תוך <strong>שני ימי עסקים</strong>.
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : null}
+              {openModal === "cancelRequest" ? (
+                <>
+                  {!cancelRequestSent ? (
+                    <form
+                      className="contact-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        setCancelRequestSent(true);
+                      }}
+                    >
+                      <label>
+                        מספר הזמנה
+                        <input type="text" required placeholder="לדוגמה: HG-2026-12345" autoComplete="off" />
+                      </label>
+                      <label>
+                        שם מלא
+                        <input type="text" required placeholder="לדוגמה: יעל כהן" />
+                      </label>
+                      <label>
+                        טלפון
+                        <input type="tel" required placeholder="לדוגמה: 050-0000000" />
+                      </label>
+                      <label>
+                        פירוט סיבת הביטול
+                        <textarea required placeholder="נא לפרט את הסיבה לבקשת הביטול" />
+                      </label>
+                      <button type="submit" className="contact-form-submit">
+                        שליחת בקשה
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="contact-success">
+                      <div className="contact-success-icon" aria-hidden="true">
+                        ✓
+                      </div>
+                      <h3>בקשת הביטול נשלחה</h3>
+                      <p>
+                        קיבלנו את הבקשה שלך ונחזור אליך בהקדם עם סטטוס טיפול.
                       </p>
                     </div>
                   )}
