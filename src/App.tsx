@@ -4,6 +4,12 @@ import { benefits, examples, steps } from "./constants/mockData";
 import { getApiBaseUrl } from "./lib/apiBase";
 import { BrandWordmark } from "./lib/brand";
 import { loadBootstrapOnce } from "./lib/studioDataLoader";
+import { BUSINESS_DETAILS, LEGAL_DEFAULTS } from "./constants/publicLegalDocuments";
+import {
+  SUPPORT_WHATSAPP_PHONE_DIGITS,
+  formatCancelDealRequestMessage,
+  openSupportWhatsAppWithText,
+} from "./lib/supportWhatsApp";
 
 type ModalType = "terms" | "privacy" | "usage" | "contact" | "orderStatus" | "cancelRequest" | null;
 
@@ -144,6 +150,20 @@ const App = () => {
     setContactSent(true);
   };
 
+  const onCancelRequestSubmit: React.FormEventHandler<HTMLFormElement> = (event) => {
+    event.preventDefault();
+    const fd = new FormData(event.currentTarget);
+    const orderNumber = String(fd.get("cancel_order") ?? "").trim();
+    const fullName = String(fd.get("cancel_name") ?? "").trim();
+    const phone = String(fd.get("cancel_phone") ?? "").trim();
+    const details = String(fd.get("cancel_details") ?? "").trim();
+    if (!orderNumber || !fullName || !phone || !details) return;
+    openSupportWhatsAppWithText(
+      formatCancelDealRequestMessage({ orderNumber, fullName, phone, details }),
+    );
+    setCancelRequestSent(true);
+  };
+
   const onOrderStatusSubmit: React.FormEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault();
     const raw = orderLookupInput.trim().replace(/^#+/, "");
@@ -273,73 +293,7 @@ const App = () => {
   ).slice(0, Number(topSellerSection.limit ?? 3));
   const showTopSellersSection = topSellerSection.isVisible !== false && (!bootstrapReady || topSellersData.length > 0);
 
-  const legalDefaults: Record<"terms" | "privacy" | "usage", { title: string; html: string }> = {
-    terms: {
-      title: "תקנון",
-      html: `<p><strong>מבוא:</strong> התקנון נכתב בלשון זכר מטעמי נוחות וחל על שני המינים. שימוש באתר ו/או רכישת מוצר מהווה הסכמה מלאה לתקנון זה.</p>
-<h3>1. כללי</h3>
-<p>האתר משמש כחנות אינטרנטית לרכישת מוצרים. בעלי האתר רשאים לעדכן את תנאי התקנון מעת לעת, לפי שיקול דעתם הבלעדי וללא הודעה מוקדמת. השינויים יחולו על הזמנות חדשות בלבד.</p>
-<p>אם אינך מסכים לתנאי התקנון, הינך מתבקש להימנע משימוש באתר ומביצוע הזמנות.</p>
-<h3>2. הזמנה ורכישה</h3>
-<p>המחיר המופיע לצד כל מוצר הוא המחיר הקובע במועד אישור ההזמנה. ייתכנו שינויים במחירים, במלאי ובזמינות ללא הודעה מוקדמת.</p>
-<p>הזמנה נחשבת מאושרת לאחר אישור עסקה מחברת האשראי וקבלת אישור הזמנה בדוא"ל. במקרה של חוסר מלאי או אי יכולת אספקה תוצע חלופה או ביטול עסקה וזיכוי מלא.</p>
-<p>ייתכנו הבדלים בין תמונות/מפרטים באתר לבין המוצר בפועל. התמונות מיועדות להמחשה בלבד.</p>
-<h3>3. משלוחים ואספקה</h3>
-<p>זמני שילוח משוערים: עד 7 ימי עסקים ממועד שליחת המוצר, ובכל מקרה עד 35 ימי עסקים ממועד שליחה, בכפוף לגורמים חיצוניים (חברות שילוח, דואר, עומסים וכד').</p>
-<p>ייתכן פיצול משלוחים בהזמנה הכוללת יותר ממוצר אחד. משלוחים זמינים לכתובות בישראל בלבד.</p>
-<h3>4. ביטולים והחזרות</h3>
-<p>ניתן לבטל עסקה בהתאם לחוק הגנת הצרכן בתוך 14 יום ממועד קבלת המוצר/פרטי העסקה (לפי המאוחר), בכפוף לדמי ביטול של 5% או 100 ש"ח (לפי הנמוך), ובתוספת עמלות סליקה אם יחולו.</p>
-<p>במוצר פגום/לא תואם יש לפנות לשירות לקוחות בצירוף תיעוד. מוצרים בהתאמה אישית עשויים שלא להיות ניתנים להחזרה, בכפוף להוראות הדין.</p>
-<h3>5. הגבלת אחריות</h3>
-<p>החברה אינה אחראית לעיכובים או כשלים שנגרמו מכוח עליון, תקלות ספקים חיצוניים, תקלות תקשורת, תקלות סליקה או כל גורם שאינו בשליטתה הסבירה.</p>
-<p>האחריות למוצרים תחול בהתאם לדין ולמדיניות היצרן/הספק. אין בתקנון זה כדי לגרוע מזכויות צרכניות קוגנטיות.</p>
-<h3>6. סמכות שיפוט ודין חל</h3>
-<p>הדין החל הוא דין מדינת ישראל בלבד, וסמכות השיפוט הייחודית נתונה לבתי המשפט המוסמכים בתל אביב.</p>`,
-    },
-    privacy: {
-      title: "מדיניות פרטיות",
-      html: `<p>אנו מכבדים את פרטיות המשתמשים ומתחייבים לנקוט באמצעים סבירים לשמירה על המידע הנמסר לנו.</p>
-<h3>1. איזה מידע נאסף</h3>
-<p>בעת ביצוע הזמנה נאספים פרטים הנדרשים לצורך השלמת העסקה והשילוח בלבד, לרבות: שם מלא, כתובת, טלפון, דוא"ל, פרטי משלוח ופרטי חיוב.</p>
-<p>פרטי כרטיס אשראי אינם נשמרים בשרתי העסק.</p>
-<h3>2. מטרות השימוש</h3>
-<p>המידע ישמש לצורך:</p>
-<ul>
-  <li>ביצוע הזמנות ואספקת מוצרים</li>
-  <li>שירות לקוחות ומענה לפניות</li>
-  <li>שליחת עדכוני סטטוס הזמנה, חשבוניות ומשלוחים</li>
-  <li>שליחת דיוור שיווקי, בכפוף לדין ולהסכמת המשתמש</li>
-</ul>
-<h3>3. צדדים שלישיים</h3>
-<p>המידע יועבר רק לגורמים נדרשים לצורך אספקת השירות (כגון חברות שילוח וספקים), ובהיקף הדרוש בלבד.</p>
-<h3>4. אבטחת מידע</h3>
-<p>החברה עושה שימוש באמצעי אבטחה מקובלים, אך אינה יכולה להבטיח חסינות מוחלטת מפני חדירה בלתי מורשית.</p>
-<h3>5. עוגיות (Cookies)</h3>
-<p>האתר עשוי להשתמש בעוגיות לצורכי תפעול, אבטחה, זיהוי ושיפור חוויית שימוש. ניתן לנהל או לחסום עוגיות דרך הגדרות הדפדפן.</p>
-<h3>6. דיוור והסרה מרשימות</h3>
-<p>ניתן להסיר את עצמך מדיוור שיווקי באמצעות קישור הסרה בכל הודעה. הודעות תפעוליות הקשורות להזמנה ומשלוח יישלחו גם ללא הרשמה לדיוור שיווקי.</p>`,
-    },
-    usage: {
-      title: "תנאי שימוש",
-      html: `<p>מסמך זה מגדיר את תנאי השימוש באתר ובשירותים המוצעים בו.</p>
-<h3>1. כשירות לשימוש באתר</h3>
-<p>השימוש באתר מותר לבני 18 ומעלה, בעלי כשרות משפטית, תושבי ישראל, ובעלי אמצעי תשלום תקף שהונפק בישראל.</p>
-<h3>2. חשבון משתמש ואבטחת גישה</h3>
-<p>המשתמש אחראי לשמירת סודיות פרטי הגישה שלו ולא יעשה שימוש בפרטי גישה של אחרים. אסור לפתוח חשבון עבור צד שלישי ללא הסכמתו המפורשת.</p>
-<h3>3. שימוש מותר ואסור</h3>
-<ul>
-  <li>אין להעתיק, לשכפל, להפיץ, לפרסם או לעשות שימוש מסחרי בתכני האתר ללא אישור מראש.</li>
-  <li>אין לבצע פעולות הפוגעות באתר, במערכותיו או במשתמשים אחרים.</li>
-  <li>אין להעלות תוכן בלתי חוקי, מטעה, פוגעני או מפר זכויות.</li>
-</ul>
-<h3>4. קניין רוחני</h3>
-<p>כל הזכויות בתכני האתר, לרבות טקסטים, עיצוב, תמונות, לוגו, סימני מסחר, אלגוריתמים ומערכות, שמורות לבעלי האתר או למורשים מטעמם.</p>
-<h3>5. תקלות ושיבושים</h3>
-<p>ייתכנו תקלות זמניות, הפרעות או שיבושים עקב גורמים טכניים או צדדים שלישיים. החברה תפעל באופן סביר לתיקון תקלות אך אינה מתחייבת לזמינות רציפה מלאה.</p>
-<h3>6. ניהול תוכן ומשתמשים</h3>
-<p>החברה רשאית להסיר תוכן, להגביל או לחסום משתמשים בכל עת, לפי שיקול דעתה, כאשר נמצא שימוש החורג מתנאים אלה או מהוראות הדין.</p>`,
-    },
-  };
+  const legalDefaults = LEGAL_DEFAULTS;
 
   const legalContent =
     openModal && openModal !== "contact" && openModal !== "orderStatus" && openModal !== "cancelRequest"
@@ -371,7 +325,7 @@ const App = () => {
       : openModal === "orderStatus"
         ? "בדיקת סטטוס הזמנה"
         : openModal === "cancelRequest"
-          ? "טופס בקשה לביטול"
+          ? "בקשה לביטול עסקה"
         : legalContent?.title ?? "מידע";
 
   return (
@@ -741,14 +695,14 @@ const App = () => {
               className="footer-status-link footer-status-link-secondary"
               onClick={() => setOpenModal("cancelRequest")}
             >
-              טופס בקשה לביטול
+              בקשה לביטול עסקה
             </button>
           </div>
         </div>
       </footer>
 
       <a
-        href="https://wa.me/972559433968"
+        href={`https://wa.me/${SUPPORT_WHATSAPP_PHONE_DIGITS}`}
         target="_blank"
         rel="noreferrer"
         className="site-whatsapp-fab"
@@ -870,33 +824,43 @@ const App = () => {
                       </p>
                     </div>
                   )}
+                  <div className="legal-business-card" aria-label="פרטי העסק">
+                    <h4>פרטי העסק</h4>
+                    <p>עוסק מורשה: {BUSINESS_DETAILS.businessId}</p>
+                    <p>שם: {BUSINESS_DETAILS.ownerName}</p>
+                    <p>טלפון: {BUSINESS_DETAILS.phone}</p>
+                  </div>
                 </>
               ) : null}
               {openModal === "cancelRequest" ? (
                 <>
                   {!cancelRequestSent ? (
-                    <form
-                      className="contact-form"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        setCancelRequestSent(true);
-                      }}
-                    >
+                    <form className="contact-form" onSubmit={onCancelRequestSubmit}>
                       <label>
                         מספר הזמנה
-                        <input type="text" required placeholder="לדוגמה: HG-2026-12345" autoComplete="off" />
+                        <input
+                          name="cancel_order"
+                          type="text"
+                          required
+                          placeholder="לדוגמה: HG-2026-12345"
+                          autoComplete="off"
+                        />
                       </label>
                       <label>
                         שם מלא
-                        <input type="text" required placeholder="לדוגמה: יעל כהן" />
+                        <input name="cancel_name" type="text" required placeholder="לדוגמה: יעל כהן" />
                       </label>
                       <label>
                         טלפון
-                        <input type="tel" required placeholder="לדוגמה: 050-0000000" />
+                        <input name="cancel_phone" type="tel" required placeholder="לדוגמה: 050-0000000" />
                       </label>
                       <label>
                         פירוט סיבת הביטול
-                        <textarea required placeholder="נא לפרט את הסיבה לבקשת הביטול" />
+                        <textarea
+                          name="cancel_details"
+                          required
+                          placeholder="נא לפרט את הסיבה לבקשה לביטול עסקה"
+                        />
                       </label>
                       <button type="submit" className="contact-form-submit">
                         שליחת בקשה
@@ -907,9 +871,10 @@ const App = () => {
                       <div className="contact-success-icon" aria-hidden="true">
                         ✓
                       </div>
-                      <h3>בקשת הביטול נשלחה</h3>
+                      <h3>בקשה לביטול עסקה נשלחה</h3>
                       <p>
-                        קיבלנו את הבקשה שלך ונחזור אליך בהקדם עם סטטוס טיפול.
+                        נפתח וואטסאפ עם פרטי הבקשה — שלחו את ההודעה כדי להעביר אותה לתמיכה. נחזור אליך בהקדם עם סטטוס
+                        טיפול.
                       </p>
                     </div>
                   )}

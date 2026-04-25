@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { BrandWordmark } from "../lib/brand";
 import { getApiBaseUrl } from "../lib/apiBase";
+import { BUSINESS_DETAILS, LEGAL_DEFAULTS } from "../constants/publicLegalDocuments";
+import { formatCancelDealRequestMessage, openSupportWhatsAppWithText } from "../lib/supportWhatsApp";
 
 type ModalType = "terms" | "privacy" | "usage" | "contact" | "orderStatus" | "cancelRequest" | null;
 type PublicOrderStatus = "NEW" | "PAID" | "FULFILLED" | "SHIPPED" | "COMPLETED" | "CANCELLED" | "REFUNDED";
@@ -19,20 +21,7 @@ function formatOrderShekels(agorot: number) {
   return `₪${(Number(agorot || 0) / 100).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
-const LEGAL_CONTENT: Record<"terms" | "privacy" | "usage", { title: string; html: string }> = {
-  terms: {
-    title: "תקנון",
-    html: "<p>השימוש באתר כפוף לתקנון ולהוראות הדין. ניתן לבטל עסקה לפי חוק הגנת הצרכן ובכפוף לחריגים למוצרים בהתאמה אישית.</p>",
-  },
-  privacy: {
-    title: "מדיניות פרטיות",
-    html: "<p>המידע נאסף לצורך השלמת הזמנה, משלוח ושירות בלבד. פרטי אשראי אינם נשמרים אצלנו.</p>",
-  },
-  usage: {
-    title: "תנאי שימוש",
-    html: "<p>אין לעשות שימוש פוגעני או מסחרי בתכני האתר ללא אישור. ייתכנו שיבושים טכניים מעת לעת.</p>",
-  },
-};
+const LEGAL_CONTENT = LEGAL_DEFAULTS;
 
 export default function SiteLegalFooter() {
   const [openModal, setOpenModal] = useState<ModalType>(null);
@@ -77,6 +66,20 @@ export default function SiteLegalFooter() {
     setOrderLookupResult(null);
   }
 
+  function onCancelRequestSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const fd = new FormData(event.currentTarget);
+    const orderNumber = String(fd.get("cancel_order") ?? "").trim();
+    const fullName = String(fd.get("cancel_name") ?? "").trim();
+    const phone = String(fd.get("cancel_phone") ?? "").trim();
+    const details = String(fd.get("cancel_details") ?? "").trim();
+    if (!orderNumber || !fullName || !phone || !details) return;
+    openSupportWhatsAppWithText(
+      formatCancelDealRequestMessage({ orderNumber, fullName, phone, details }),
+    );
+    setCancelRequestSent(true);
+  }
+
   async function onOrderStatusSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const raw = orderLookupInput.trim().replace(/^#+/, "");
@@ -118,7 +121,7 @@ export default function SiteLegalFooter() {
       : openModal === "orderStatus"
         ? "בדיקת סטטוס הזמנה"
         : openModal === "cancelRequest"
-          ? "טופס בקשה לביטול"
+          ? "בקשה לביטול עסקה"
           : openModal
             ? LEGAL_CONTENT[openModal].title
             : "";
@@ -154,7 +157,7 @@ export default function SiteLegalFooter() {
               בדיקת סטטוס הזמנה
             </button>
             <button type="button" className="footer-status-link footer-status-link-secondary" onClick={() => setOpenModal("cancelRequest")}>
-              טופס בקשה לביטול
+              בקשה לביטול עסקה
             </button>
           </div>
         </div>
@@ -197,31 +200,70 @@ export default function SiteLegalFooter() {
                   <div className="contact-success">
                     <div className="contact-success-icon" aria-hidden="true">✓</div>
                     <h3>הפנייה נשלחה</h3>
-                    <p>נחזור אליך בהקדם.</p>
+                    <p>
+                      הודעתך התקבלה אצלנו. נחזור אליך תוך <strong>שני ימי עסקים</strong>.
+                    </p>
                   </div>
                 ) : (
                   <form className="contact-form" onSubmit={(e) => { e.preventDefault(); setContactSent(true); }}>
-                    <label>שם מלא<input type="text" required /></label>
-                    <label>טלפון<input type="tel" required /></label>
-                    <label>הודעה<textarea required /></label>
+                    <label>
+                      שם מלא
+                      <input type="text" required placeholder="לדוגמה: יעל כהן" />
+                    </label>
+                    <label>
+                      מספר הזמנה <span className="field-hint">(אופציונלי)</span>
+                      <input type="text" placeholder="לדוגמה: HG-2026-12345" />
+                    </label>
+                    <label>
+                      טלפון
+                      <input type="tel" required placeholder="לדוגמה: 050-0000000" />
+                    </label>
+                    <label>
+                      הודעה
+                      <textarea required placeholder="כיצד נוכל לעזור?" />
+                    </label>
                     <button type="submit" className="contact-form-submit">שלח</button>
                   </form>
                 )
+              ) : null}
+              {openModal === "contact" ? (
+                <div className="legal-business-card" aria-label="פרטי העסק">
+                  <h4>פרטי העסק</h4>
+                  <p>עוסק מורשה: {BUSINESS_DETAILS.businessId}</p>
+                  <p>שם: {BUSINESS_DETAILS.ownerName}</p>
+                  <p>טלפון: {BUSINESS_DETAILS.phone}</p>
+                </div>
               ) : null}
               {openModal === "cancelRequest" ? (
                 cancelRequestSent ? (
                   <div className="contact-success">
                     <div className="contact-success-icon" aria-hidden="true">✓</div>
-                    <h3>בקשת הביטול נשלחה</h3>
-                    <p>הבקשה התקבלה ותטופל בהקדם.</p>
+                    <h3>בקשה לביטול עסקה נשלחה</h3>
+                    <p>
+                      נפתח וואטסאפ עם פרטי הבקשה — שלחו את ההודעה כדי להעביר אותה לתמיכה. הבקשה תטופל בהקדם.
+                    </p>
                   </div>
                 ) : (
-                  <form className="contact-form" onSubmit={(e) => { e.preventDefault(); setCancelRequestSent(true); }}>
-                    <label>מספר הזמנה<input type="text" required /></label>
-                    <label>שם מלא<input type="text" required /></label>
-                    <label>טלפון<input type="tel" required /></label>
-                    <label>פירוט<textarea required /></label>
-                    <button type="submit" className="contact-form-submit">שליחת בקשה</button>
+                  <form className="contact-form" onSubmit={onCancelRequestSubmit}>
+                    <label>
+                      מספר הזמנה
+                      <input name="cancel_order" type="text" required placeholder="לדוגמה: HG-2026-12345" />
+                    </label>
+                    <label>
+                      שם מלא
+                      <input name="cancel_name" type="text" required placeholder="לדוגמה: יעל כהן" />
+                    </label>
+                    <label>
+                      טלפון
+                      <input name="cancel_phone" type="tel" required placeholder="לדוגמה: 050-0000000" />
+                    </label>
+                    <label>
+                      פירוט סיבת הביטול
+                      <textarea name="cancel_details" required placeholder="נא לפרט את הסיבה לבקשה לביטול עסקה" />
+                    </label>
+                    <button type="submit" className="contact-form-submit">
+                      שליחת בקשה
+                    </button>
                   </form>
                 )
               ) : null}

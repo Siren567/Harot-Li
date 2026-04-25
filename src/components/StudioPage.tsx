@@ -3,6 +3,7 @@ import { ChevronDown, Eye, Gift, Plus, Smile, Trash2 } from "lucide-react";
 import EmojiPicker, { type EmojiClickData } from "emoji-picker-react";
 import type { StudioSubcategory } from "../constants/studioData";
 import { getApiBaseUrl } from "../lib/apiBase";
+import { SUPPORT_WHATSAPP_PHONE_DIGITS } from "../lib/supportWhatsApp";
 import { loadBootstrapOnce, loadPublicProductsOnce } from "../lib/studioDataLoader";
 import { studioCategories, studioFonts, studioShippingMethods } from "../constants/studioData";
 import CheckoutForm, { type CheckoutFormData } from "./checkout/CheckoutForm";
@@ -1800,7 +1801,7 @@ const StudioPage = ({ onBackToLanding }: StudioPageProps) => {
 
       <footer className="studio-nav-footer">
         <a
-          href="https://wa.me/972559433968"
+          href={`https://wa.me/${SUPPORT_WHATSAPP_PHONE_DIGITS}`}
           target="_blank"
           rel="noreferrer"
           className="studio-whatsapp-btn"

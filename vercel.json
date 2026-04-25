@@ -19,6 +19,14 @@
     {
       "source": "/checkout/:path*",
       "destination": "/index.html"
+    },
+    {
+      "source": "/legal",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/legal/:path*",
+      "destination": "/index.html"
     }
   ],
   "headers": [
